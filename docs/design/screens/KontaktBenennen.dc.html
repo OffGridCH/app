@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Handshake abgeschlossen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#9DB4FF}a:hover{color:#C2D0FF}
+input::placeholder{color:#8A91A0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0F1115; color: #EEF0F5; font-family: 'Schibsted Grotesk', 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 56px 24px 0 24px">
+    <div style="position: relative; width: 96px; height: 96px">
+      <div aria-hidden="true" style="width: 96px; height: 96px; border-radius: 50%; background: #1A1D24; border: 1px solid #2C313B; box-sizing: border-box; display: flex; align-items: center; justify-content: center">
+        <div style="display: grid; grid-template-columns: repeat(5, 9px); grid-auto-rows: 9px; gap: 2px">
+          <sc-for list="{{kNew}}" as="c" hint-placeholder-count="25"><div style="{{c.s}}"></div></sc-for>
+        </div>
+      </div>
+      <div aria-hidden="true" style="position: absolute; right: -2px; bottom: -2px; width: 32px; height: 32px; border-radius: 50%; background: #7FD6A4; border: 3px solid #0F1115; box-sizing: border-box; display: flex; align-items: center; justify-content: center; color: #0B1020">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center">
+      <h1 style="margin: 0; font-size: 24px; font-weight: 750; letter-spacing: -0.02em">Schlüssel ausgetauscht</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 1.5; color: #C5CAD6; max-width: 300px; text-wrap: pretty">Vergleicht das Muster auf beiden Handys. Sieht es gleich aus, hat alles geklappt.</p>
+    </div>
+  </div>
+
+  <form style="margin: 32px 16px 0 16px; border-radius: 20px; background: #1A1D24; border: 1px solid #2C313B; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="dn" style="font-size: 13px; color: #C5CAD6">Anzeigename</label>
+      <input id="dn" type="text" value="Anna" style="height: 46px; box-sizing: border-box; border-radius: 14px; border: 1px solid #2C313B; background: #0F1115; color: #EEF0F5; padding: 0 14px; font-family: inherit; font-size: 16px; outline: none">
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="fn" style="font-size: 13px; color: #C5CAD6">Vorname <span style="color: #959CAB">(optional)</span></label>
+        <input id="fn" type="text" placeholder="Vorname" style="height: 46px; box-sizing: border-box; border-radius: 14px; border: 1px solid #2C313B; background: #0F1115; color: #EEF0F5; padding: 0 14px; font-family: inherit; font-size: 16px; outline: none; min-width: 0">
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="ln" style="font-size: 13px; color: #C5CAD6">Nachname <span style="color: #959CAB">(optional)</span></label>
+        <input id="ln" type="text" placeholder="Nachname" style="height: 46px; box-sizing: border-box; border-radius: 14px; border: 1px solid #2C313B; background: #0F1115; color: #EEF0F5; padding: 0 14px; font-family: inherit; font-size: 16px; outline: none; min-width: 0">
+      </div>
+    </div>
+  </form>
+
+  <div style="flex-grow: 1"></div>
+
+  <div style="padding: 0 16px 26px 16px; display: flex; flex-direction: column; gap: 10px">
+    <a href="Main.dc.html" style="height: 54px; border-radius: 18px; background: #9DB4FF; color: #0B1020; text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700">Speichern und schreiben</a>
+    <a href="Handshake.dc.html" style="height: 48px; border-radius: 16px; border: 1px solid #2C313B; box-sizing: border-box; color: #EEF0F5; text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600">Muster stimmt nicht überein</a>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  keyPattern(seed) {
+    var s = seed, g = [];
+    function r() { s = (s * 9301 + 49297) % 233280; return s / 233280; }
+    for (var y = 0; y < 5; y++) {
+      var row = [r() > 0.45, r() > 0.45, r() > 0.45];
+      for (var x = 0; x < 5; x++) {
+        var on = row[x < 3 ? x : 4 - x];
+        g.push({ s: on ? 'background:#C5CAD6;border-radius:2px' : 'background:transparent' });
+      }
+    }
+    return g;
+  }
+  renderVals() {
+    return { kNew: this.keyPattern(11) };
+  }
+}
+</script>
+</body>
+</html>

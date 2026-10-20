@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Kontakt hinzufügen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#9DB4FF}a:hover{color:#C2D0FF}
+@keyframes og-pulse{0%{box-shadow:0 0 0 0 rgba(157,180,255,.55)}100%{box-shadow:0 0 0 10px rgba(157,180,255,0)}}
+.og-live{animation:og-pulse 1.6s ease-out infinite}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0F1115; color: #EEF0F5; font-family: 'Schibsted Grotesk', 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <header style="display: flex; align-items: center; gap: 6px; padding: 14px 12px 8px 6px">
+    <a href="Kontakte.dc.html" aria-label="Zurück zu den Kontakten" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #EEF0F5; border-radius: 14px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+    </a>
+    <h1 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em">Kontakt hinzufügen</h1>
+  </header>
+
+  <div role="tablist" aria-label="Art des Hinzufügens" style="margin: 8px 16px 0 16px; padding: 4px; border-radius: 16px; background: #1A1D24; border: 1px solid #2C313B; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px">
+    <button type="button" role="tab" aria-selected="{{mineSel}}" onClick="{{showMine}}" style="{{mineTab}}">Mein Code</button>
+    <button type="button" role="tab" aria-selected="{{scanSel}}" onClick="{{showScan}}" style="{{scanTab}}">Code scannen</button>
+  </div>
+
+  <sc-if value="{{isMine}}" hint-placeholder-val="{{ true }}">
+    <div style="display: flex; flex-direction: column; align-items: center; padding: 28px 24px 0 24px; gap: 18px">
+      <div style="padding: 22px; border-radius: 28px; background: #EEF0F5">
+        <div role="img" aria-label="QR-Code mit deinem Schlüssel" style="display: grid; grid-template-columns: repeat(25, 9px); grid-auto-rows: 9px">
+          <sc-for list="{{cells}}" as="c" hint-placeholder-count="625">
+            <div style="{{c.s}}"></div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="text-align: center; font-size: 16px; line-height: 1.45; color: #C5CAD6; max-width: 290px">Lass dein Gegenüber diesen Code mit der OffGrid-App scannen.</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isScan}}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; align-items: center; padding: 28px 24px 0 24px; gap: 18px">
+      <div style="width: 298px; height: 298px; border-radius: 28px; background: #0F1115; border: 1px solid #2C313B; position: relative; display: flex; align-items: center; justify-content: center">
+        <div style="position: absolute; left: 34px; top: 34px; width: 46px; height: 46px; border-left: 4px solid #9DB4FF; border-top: 4px solid #9DB4FF; border-radius: 14px 0 0 0"></div>
+        <div style="position: absolute; right: 34px; top: 34px; width: 46px; height: 46px; border-right: 4px solid #9DB4FF; border-top: 4px solid #9DB4FF; border-radius: 0 14px 0 0"></div>
+        <div style="position: absolute; left: 34px; bottom: 34px; width: 46px; height: 46px; border-left: 4px solid #9DB4FF; border-bottom: 4px solid #9DB4FF; border-radius: 0 0 0 14px"></div>
+        <div style="position: absolute; right: 34px; bottom: 34px; width: 46px; height: 46px; border-right: 4px solid #9DB4FF; border-bottom: 4px solid #9DB4FF; border-radius: 0 0 14px 0"></div>
+        <div style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #959CAB; letter-spacing: 0.1em">KAMERA STARTEN</div>
+      </div>
+      <div style="text-align: center; font-size: 16px; line-height: 1.45; color: #C5CAD6; max-width: 290px">Halte die Kamera auf den Code, den dein Gegenüber anzeigt.</div>
+    </div>
+  </sc-if>
+
+  <ol style="list-style: none; margin: 26px 16px 0 16px; padding: 6px 16px; border-radius: 20px; background: #15181E; border: 1px solid #262A33; display: flex; flex-direction: column">
+    <li style="display: flex; align-items: center; gap: 14px; min-height: 52px; border-bottom: 1px solid #262A33">
+      <div style="width: 26px; height: 26px; border-radius: 9px; background: #9DB4FF; color: #0B1020; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+      </div>
+      <div style="flex-grow: 1; font-size: 15px">Code bereit</div>
+      <div style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #959CAB">erledigt</div>
+    </li>
+    <li style="display: flex; align-items: center; gap: 14px; min-height: 52px; border-bottom: 1px solid #262A33">
+      <div style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+        <div class="og-live" style="width: 12px; height: 12px; border-radius: 50%; background: #9DB4FF"></div>
+      </div>
+      <div style="flex-grow: 1; font-size: 15px; font-weight: 600">Gegenüber scannt</div>
+      <div style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #9DB4FF">wartet …</div>
+    </li>
+    <li style="display: flex; align-items: center; gap: 14px; min-height: 52px">
+      <div style="width: 26px; height: 26px; border-radius: 9px; border: 1.5px solid #3D4350; box-sizing: border-box; flex-shrink: 0"></div>
+      <div style="flex-grow: 1; font-size: 15px; color: #959CAB">Antwort per Funk empfangen</div>
+    </li>
+  </ol>
+
+  <div style="flex-grow: 1"></div>
+  <p style="margin: 0; padding: 0 28px 28px 28px; font-size: 13px; line-height: 1.45; color: #959CAB; text-align: center">Der Code enthält deinen Schlüssel. Zeig ihn nur Personen, mit denen du schreiben willst.</p>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: 'mine' };
+  }
+  buildCells() {
+    if (this._cells) return this._cells;
+    var n = 25, out = [], seed = 7;
+    function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+    function finder(r, c) {
+      var origins = [[0, 0], [0, n - 7], [n - 7, 0]];
+      for (var i = 0; i < origins.length; i++) {
+        var dr = r - origins[i][0], dc = c - origins[i][1];
+        if (dr >= -1 && dr <= 7 && dc >= -1 && dc <= 7) {
+          if (dr < 0 || dr > 6 || dc < 0 || dc > 6) return 0;
+          if (dr === 0 || dr === 6 || dc === 0 || dc === 6) return 1;
+          if (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4) return 1;
+          return 0;
+        }
+      }
+      return -1;
+    }
+    for (var r = 0; r < n; r++) {
+      for (var c = 0; c < n; c++) {
+        var f = finder(r, c);
+        var on = f === -1 ? rnd() > 0.52 : f === 1;
+        out.push({ s: on ? 'background:#0F1115;border-radius:2px' : 'background:transparent' });
+      }
+    }
+    this._cells = out;
+    return out;
+  }
+  renderVals() {
+    var t = this.state.tab;
+    var base = 'height:44px;border:none;border-radius:12px;font-family:inherit;font-size:15px;cursor:pointer;';
+    var on = base + 'background:#EEF0F5;color:#0F1115;font-weight:700';
+    var off = base + 'background:transparent;color:#C5CAD6;font-weight:500';
+    return {
+      cells: this.buildCells(),
+      isMine: t === 'mine',
+      isScan: t === 'scan',
+      mineSel: t === 'mine' ? 'true' : 'false',
+      scanSel: t === 'scan' ? 'true' : 'false',
+      mineTab: t === 'mine' ? on : off,
+      scanTab: t === 'scan' ? on : off,
+      showMine: () => this.setState({ tab: 'mine' }),
+      showScan: () => this.setState({ tab: 'scan' })
+    };
+  }
+}
+</script>
+</body>
+</html>
