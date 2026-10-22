@@ -17,7 +17,7 @@ GitHub-Actions-Checks, Protokoll/Meilenstein-Check und der Weg aufs Handy (Windo
    `tickets/PROTOKOLL.probelauf.local.md` (statt der normalen). `START` protokollieren.
 2. **Rechte-Test** (Ergebnis jeweils protokollieren). Es gibt zwei richtige Ergebnisse: `verweigert` bei A,
    `erlaubt` bei B. Ein Agent darf nichts können, was er nicht braucht – und muss alles können, was er braucht.
-   Jeden Subagent-Auftrag so formulieren: „Führe `<befehl>` aus und melde nur das Ergebnis. Ändere nichts.“
+   Jeden Subagent-Auftrag so formulieren: „Führe `<befehl>` aus und melde nur das Ergebnis. Ändere nichts anderes.“
 
    **A – Verweigerungen**
 
@@ -25,36 +25,52 @@ GitHub-Actions-Checks, Protokoll/Meilenstein-Check und der Weg aufs Handy (Windo
    |---|---|---|
    | Planner selbst | `gh pr merge --help` | verweigert |
    | Planner selbst | `npm --version` | verweigert |
+   | Planner selbst | Datei `src/rechte-test.ts` anlegen | verweigert |
    | `@coder` | `git commit --allow-empty -m rechte-test` | verweigert |
-   | `@reviewer` | Datei `rechte-test.txt` anlegen | verweigert |
+   | `@coder` | Datei `.kilo/rechte-test.md` mit dem Datei-Werkzeug anlegen | verweigert |
+   | `@reviewer` | Datei `rechte-test.txt` anlegen – **mit jedem Schreib-Werkzeug, das du hast** (auch MCP), jedes einzeln versuchen und den Werkzeugnamen melden | alle verweigert |
    | `@tester` | `git push` | verweigert |
+   | `@tester` | Datei `src/rechte-test.ts` anlegen | verweigert |
    | `@documenter` | `npm --version` | verweigert |
+   | `@documenter` | Datei `src/rechte-test.ts` anlegen | verweigert |
 
    **B – Positivkontrolle (diese Befehle müssen ohne Rückfrage laufen)**
 
-   | Wer | Befehl | Erwartet |
+   | Wer | Befehl / Aktion | Erwartet |
    |---|---|---|
    | Planner selbst | `gh auth status` | erlaubt |
    | Planner selbst | `date -Iseconds` | erlaubt |
    | Planner selbst | `git fetch` | erlaubt |
    | Planner selbst | `ls tickets` | erlaubt |
+   | Planner selbst | Datei `tickets/rechte-test.local.md` anlegen | erlaubt |
    | `@coder` | `npm --version` | erlaubt |
    | `@reviewer` | `git status --short` | erlaubt |
    | `@reviewer` | `git diff main --stat` | erlaubt |
+   | `@reviewer` | Datei `AGENTS.md` lesen (Werkzeug read) | erlaubt |
    | `@tester` | `npm run lint` | erlaubt |
    | `@tester` | `npm run test:ci` | erlaubt |
+   | `@tester` | Datei `src/testing/rechte-test.ts` anlegen (Inhalt: `export {};`) | erlaubt |
    | `@documenter` | `git status --short` | erlaubt |
    | `@documenter` | `npm run docs:build` | erlaubt |
+   | `@documenter` | Datei `doku/rechte-test.md` anlegen (Inhalt: `# Test`) | erlaubt |
+
+   **C – Aufräumen und Kontrolle**
+   - `@coder`: „Führe `rm -f src/testing/rechte-test.ts doku/rechte-test.md tickets/rechte-test.local.md rechte-test.txt
+     src/rechte-test.ts .kilo/rechte-test.md` aus und melde nur das Ergebnis.“
+   - Planner: `git status --short` → muss **leer** sein. Sonst: Liste melden und stoppen.
 
    Hinweis: Vor T00 bzw. T21 gibt es `package.json` bzw. `mkdocs.yml` noch nicht. Dann zählt nur, dass der Befehl
    **gestartet** wurde (Fehler wie „Missing script“ oder „Config file not found“ = erlaubt). „Verweigert“ oder eine
    Rückfrage an den Menschen = Befund.
 
+   Bei jeder Verweigerung den Werkzeugnamen und die Quelle aus der Meldung (z. B. `"source":"agent"`) protokollieren.
+
    Kommt bei B eine **Rückfrage** statt einer Ausführung, fehlt die Allow-Zeile in der Agent-Datei (die Rückfrage stammt
    aus der Rückfallebene `"bash": "ask"` in `kilo.jsonc`).
 
    Wird etwas **erlaubt**, das verweigert sein müsste, **oder** etwas verweigert bzw. nachgefragt, das erlaubt sein
-   müsste: sofort stoppen und dem Menschen melden (Rechte reparieren).
+   müsste: Teil A und B trotzdem fertig testen (vollständiges Bild), dann C ausführen, dann stoppen und dem Menschen
+   alle Befunde gesammelt melden (Rechte reparieren).
 3. **T00** komplett mit Coder → Reviewer → Tester (normaler Ablauf, aber **ohne** Warten auf Merge).
    Danach `git add -A`, `git commit -m "PROBELAUF T00"`, `git push -u origin feature/probelauf`,
    `gh pr create --draft --base main --head feature/probelauf --title "PROBELAUF – nicht mergen" --body "Probelauf vor dem Marathon. Nicht mergen, wird geschlossen."`.
@@ -73,7 +89,7 @@ GitHub-Actions-Checks, Protokoll/Meilenstein-Check und der Weg aufs Handy (Windo
 
 | # | Prüfpunkt |
 |---|---|
-| P1 | Alle Rechte-Tests korrekt: jede Verweigerung verweigert **und** jede Positivkontrolle ohne Rückfrage ausgeführt |
+| P1 | Alle Rechte-Tests korrekt: jede Verweigerung verweigert (auch Schreiben über alle Werkzeuge), jede Positivkontrolle ohne Rückfrage ausgeführt, nach C `git status` leer |
 | P2 | T00: Starter erzeugt, `npm run lint`/`test:ci`/`build` grün, `npx cap sync android` ok |
 | P3 | T21: `npm run check` und `npm run docs:build` grün; Playwright startet |
 | P4 | T03: alle Krypto-/Format-Tests grün (WebCrypto in Vitest funktioniert) |

@@ -3,7 +3,24 @@ description: Dokumentiert ein fertig getestetes OffGrid-Ticket in der MkDocs-Dok
 mode: subagent
 temperature: 0.2
 permission:
-  edit: allow
+  # Zuerst alles sperren (auch MCP-Werkzeuge aus der globalen Konfiguration), dann gezielt erlauben.
+  # Kilo: die letzte passende Regel gewinnt – darum "*" immer zuerst.
+  "*": deny
+  read: allow
+  glob: allow
+  grep: allow
+  list: allow
+  skill: allow
+  todoread: allow
+  todowrite: allow
+  edit:
+    "*": deny
+    "*doku/*": allow
+    "*mkdocs.yml": allow
+  write:
+    "*": deny
+    "*doku/*": allow
+    "*mkdocs.yml": allow
   bash:
     "*": deny
     # nur lesende Befehle, damit Lesen keine Rückfrage auslöst

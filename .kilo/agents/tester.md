@@ -3,7 +3,24 @@ description: Schreibt und führt Unit-Tests für ein OffGrid-Ticket aus und prü
 mode: subagent
 temperature: 0.1
 permission:
-  edit: allow
+  # Zuerst alles sperren (auch MCP-Werkzeuge aus der globalen Konfiguration), dann gezielt erlauben.
+  # Kilo: die letzte passende Regel gewinnt – darum "*" immer zuerst.
+  "*": deny
+  read: allow
+  glob: allow
+  grep: allow
+  list: allow
+  skill: allow
+  todoread: allow
+  todowrite: allow
+  edit:
+    "*": deny
+    "*.spec.ts": allow
+    "*src/testing/*": allow
+  write:
+    "*": deny
+    "*.spec.ts": allow
+    "*src/testing/*": allow
   bash:
     "*": deny
     # nur lesende Befehle, damit Lesen keine Rückfrage auslöst

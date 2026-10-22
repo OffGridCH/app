@@ -82,7 +82,7 @@ MÄNGEL:            (nur Reviewer/Tester bei FAIL, nummeriert, mit Datei:Zeile u
 OFFENE FRAGEN:     (alles, was fehlte oder unklar war – sonst "keine")
 ```
 
-## PR-Beschreibung (vom Planner, Datei unter `/tmp/offgrid-pr-<nr>.md`)
+## PR-Beschreibung (vom Planner, Datei `tickets/PR-<nr>.local.md`, nicht committet)
 
 ```
 ## T<nr> – <Titel>

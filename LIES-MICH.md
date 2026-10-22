@@ -90,6 +90,12 @@ Ziel: Alles einmal echt testen, ohne dass etwas auf `main` kommt. Dauer ca. 1,5�
 ### Agent-Rechte (wenn du sie anpasst)
 - In jeder Agent-Datei steht `"*"` als **erste** Zeile im `bash:`-Block (`deny`, beim Coder `allow`), darunter die
   Ausnahmen. So greift die Agent-Regel, egal ob Kilo „spezifisch vor Wildcard“ oder „letzte Zeile gewinnt“ auswertet.
+- Ganz oben im `permission:`-Block steht `"*": deny`. Das sperrt jedes Werkzeug, das nicht ausdrücklich erlaubt ist –
+  auch Schreib-Werkzeuge von MCP-Servern aus deiner globalen Konfiguration (z. B. `filesystem_write_file`).
+  `edit: deny` allein reicht dafür **nicht**.
+- Schreibrechte sind pro Agent auf Pfade begrenzt (`edit:`/`write:` mit Mustern): Planner nur `tickets/*.local.md`,
+  Tester nur `*.spec.ts` und `src/testing/`, Documenter nur `doku/` und `mkdocs.yml`, Reviewer nichts, Coder alles
+  ausser den geschützten Pfaden. Zusätzlich prüft der Planner nach jedem Subagent mit `git status`, was sich geändert hat.
 - Rückfallebene: `kilo.jsonc` → `"permission": { "bash": "ask" }` (nur dieses Projekt). Die globale
   `~/.config/kilo/kilo.json` bleibt, wie sie ist.
 - Fragt Kilo dich während des Marathons nach einer Freigabe, fehlt in der Agent-Datei eine Allow-Zeile. Einmal freigeben,
