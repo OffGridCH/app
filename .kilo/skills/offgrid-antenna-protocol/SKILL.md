@@ -120,7 +120,7 @@ Binär, Gesamtlänge ≤ `info.max` (Default 222, wenn `info` fehlt).
 
 | Byte | Inhalt |
 |---|---|
-| 0 | `(version << 4) | type` – version = 1; type: 1 = `msg`, 2 = `ack`, 3 = `hs`, 4 = `hsa` |
+| 0 | `(version << 4) | type` – version = 1; type: 1 = `msg`, 2 = `ack`, 3 = `hs`, 4 = `hsa`, 5 = `loc` (ab T17), 6 = `gki`, 7 = `gmsg` (nur T20) |
 | 1–4 | `tag` = erste 4 Bytes von SHA-256(Schlüssel, mit dem verschlüsselt wurde; 16 Rohbytes) |
 | 5–16 | IV (12 Zufallsbytes) |
 | 17–… | AES-128-GCM-Ciphertext inkl. 16 Byte Auth-Tag; **AAD = Bytes 0–4** |
@@ -133,6 +133,12 @@ Klartext ist UTF-8-JSON:
 | `ack` | `{"i":"<wireId>"}` |
 | `hs` | `{"k":"<32 hex>","n":"<Anzeigename>"}` |
 | `hsa` | `{"ok":1}` |
+| `loc` | `{"i":"<wireId>","la":<Breite, 6 Nachkommastellen>,"lo":<Länge, 6 NK>,"ac":<Genauigkeit m, ganzzahlig>,"t":<Unix-Sek. der Messung>}` – optional (nur T19) `"s":"<shareId 8 hex>","e":<Ende Unix-Sek.>` |
+| `gki` | nur T20, siehe Skill `offgrid-groups` |
+| `gmsg` | nur T20, siehe Skill `offgrid-groups` |
+
+`loc` wird wie `msg` mit dem `sendingKey` des Kontakts verschlüsselt, über den Tag des `receivingKey` zugeordnet
+und mit einem normalen `ack` (gleiche `wireId`) bestätigt. Grösse ca. 105 Bytes – passt immer.
 
 API:
 ```ts
@@ -153,10 +159,10 @@ Frames mit `version !== 1`, unbekanntem `type` oder Länge < 33 Bytes werden ver
 ## 6. Empfangen und Senden (in `MessagingService`)
 
 Empfang `rx`:
-1. `peekFrame`. Für `msg`/`ack`: Kontakt suchen, dessen `receivingKey` den `tag` hat. Keiner → verwerfen.
+1. `peekFrame`. Für `msg`/`ack`/`loc`: Kontakt suchen, dessen `receivingKey` den `tag` hat. Keiner → verwerfen.
 2. Entschlüsseln. Fehler → verwerfen.
 3. `contacts.updateSignal(id, rssi, now)`.
-4. `msg`: Duplikat (`byWireId`) → nur erneut `ack` senden. Sonst Nachricht speichern (`direction 'in'`, `status 2`,
+4. `msg` / `loc` (Details zu `loc` im Skill `offgrid-location` §3): Duplikat (`byWireId`) → nur erneut `ack` senden. Sonst Nachricht speichern (`direction 'in'`, `status 2`,
    `rssi`, `sent_at` = jetzt) und `ack` senden (verschlüsselt mit `contact.sendingKey`). Vibration, falls Einstellung an.
 5. `ack`: eigene Nachricht mit dieser `wireId` auf `Delivered` setzen (egal ob Queued/Sent/Failed).
 6. `hs`/`hsa`: an `HandshakeService.onFrame(bytes, rssi)`.
@@ -165,6 +171,8 @@ Senden `send(contactId, text)`:
 1. Text trimmen; leer → nichts. Bytes > `maxContentBytes` → nichts (UI verhindert das).
 2. Nachricht speichern: `wireId` = 4 Zufallsbytes hex, `status Queued`, `sent_at` = jetzt.
 3. Wenn `state === 'ready'`: Frame bauen, `transmit`, Zuordnung `txId → messageId` merken.
+   Frame je nach `kind`: `'text'` → `msg` aus `content`; `'location'` → `loc` aus `CoordinateRepository.latestForMessage(id)`
+   (gilt genauso beim Leeren der Warteschlange und bei `retry`).
 4. `txdone ok` → `Sent`, **nur wenn** Status noch `Queued`. `txdone !ok` → `Failed`, **nur wenn** Status noch `Queued`.
    (Ein Status geht nie zurück; einzige Ausnahme: `retry` setzt `Failed` → `Queued`.)
 5. Wechsel auf `ready` → alle `queued()` der Reihe nach senden (je 250 ms Abstand).
@@ -194,3 +202,6 @@ Darf `ContactRepository`, `HandshakeRepository`, `CryptoService` und `frame.ts` 
   - `completeShowing(peerName = 'Demo-Kontakt')` – simuliert, dass jemand meinen angezeigten QR gescannt hat (`hs`-Frame).
   - `drop()` – simuliert Trennung (`state='disconnected'`, `error='lost'`). `restore()` – erneut `connect()`.
   - `failNext()` – nächster `txdone` schlägt fehl.
+  - `receiveLocation(displayName: string, latitude = 47.05812, longitude = 8.31998, accuracy = 12)` (ab T17) –
+    simuliert einen eingehenden `loc`-Frame dieses Kontakts.
+  - Ein gesendeter `loc`-Frame wird wie `msg` nach 1500 ms mit `ack` bestätigt.

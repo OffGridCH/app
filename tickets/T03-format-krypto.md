@@ -1,6 +1,6 @@
 # T03 – Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level
 
-**Abhängig von:** T00
+**Abhängig von:** T00, T21
 **Skills:** `offgrid-crypto-handshake`, `offgrid-screens` (nur §0), `offgrid-antenna-protocol` (nur §5 „Längen“ und §7), `offgrid-testing`
 **Dateien:** `src/app/core/format/`, `src/app/core/crypto/`, `src/app/core/messaging/signal.ts`, `src/app/core/messaging/limits.ts`
 

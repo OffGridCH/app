@@ -11,6 +11,8 @@ Senden, Warteschlange, Flush bei `ready`, `txdone`-Zuordnung, Empfang `msg`/`ack
 über das Token `HANDSHAKE_FRAME_HANDLER` (in `handshake-frame-handler.ts`, `providedIn: 'root'`-Factory = no-op; T08 überschreibt es).
 `counts`, `renameContact`, `deleteContact`, `deleteAll`, `reload`, Neuladen per `effect` auf `DataChangedService.version`.
 `signalLevel` für `ContactListItem` aus `core/messaging/signal.ts`.
+`messages()` liefert `MessageView[]` (mit `location` aus `CoordinateRepository.latestForMessages`; bis T17 immer `null`).
+Nachrichten speichern immer `kind: 'text'` (Standort folgt in T17).
 Vibration bei eingehender Nachricht ist **nicht** Teil dieses Tickets (kommt in T13).
 
 ## Akzeptanzkriterien

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Neue Gruppe</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#9DB4FF}a:hover{color:#C2D0FF}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0F1115; color: #EEF0F5; font-family: 'Schibsted Grotesk', 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <header style="display: flex; align-items: center; gap: 6px; padding: 14px 12px 8px 6px">
+    <a href="Kontakte.dc.html" aria-label="Zurück zu den Kontakten" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #EEF0F5; border-radius: 14px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+    </a>
+    <h1 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em">Neue Gruppe</h1>
+  </header>
+
+  <div style="margin: 8px 16px 0 16px; border-radius: 20px; background: #1A1D24; border: 1px solid #2C313B; padding: 16px; display: flex; flex-direction: column; gap: 6px">
+    <label for="gn" style="font-size: 13px; color: #C5CAD6">Gruppenname</label>
+    <input id="gn" type="text" value="Gipfeltour" style="height: 46px; box-sizing: border-box; border-radius: 14px; border: 1px solid #2C313B; background: #0F1115; color: #EEF0F5; padding: 0 14px; font-family: inherit; font-size: 16px; outline: none">
+  </div>
+
+  <div style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; font-weight: 500; color: #959CAB; letter-spacing: 0.12em; padding: 26px 28px 8px 28px">MITGLIEDER · {{count}} VON 8</div>
+
+  <div role="group" aria-label="Mitglieder auswählen" style="margin: 0 16px; border-radius: 20px; background: #1A1D24; border: 1px solid #2C313B; display: flex; flex-direction: column">
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+      <button type="button" role="checkbox" aria-checked="{{r.ariaChecked}}" onClick="{{r.toggle}}" style="{{r.rowStyle}}">
+        <div aria-hidden="true" style="width: 40px; height: 40px; border-radius: 50%; background: #0F1115; border: 1px solid #2C313B; box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+          <div style="display: grid; grid-template-columns: repeat(5, 4px); grid-auto-rows: 4px; gap: 1px">
+            <sc-for list="{{r.pattern}}" as="c" hint-placeholder-count="25"><div style="{{c.s}}"></div></sc-for>
+          </div>
+        </div>
+        <div style="flex-grow: 1; font-size: 16px; font-weight: 600; text-align: left">{{r.name}}</div>
+        <div aria-hidden="true" style="{{r.boxStyle}}">
+          <sc-if value="{{r.checked}}" hint-placeholder-val="{{ true }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0B1020" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>
+          </sc-if>
+        </div>
+      </button>
+    </sc-for>
+  </div>
+
+  <p style="margin: 14px 28px 0 28px; font-size: 13px; line-height: 1.45; color: #959CAB">Nur Kontakte mit abgeschlossenem Handshake. Jedes Mitglied bekommt den Gruppenschlüssel per Funk.</p>
+
+  <div style="flex-grow: 1"></div>
+
+  <div style="padding: 0 16px 26px 16px">
+    <a href="GruppenChat.dc.html" style="height: 54px; border-radius: 18px; background: #9DB4FF; color: #0B1020; text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700">Gruppe erstellen</a>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: { a: true, l: true, m: false } };
+  }
+  keyPattern(seed) {
+    var s = seed, g = [];
+    function r() { s = (s * 9301 + 49297) % 233280; return s / 233280; }
+    for (var y = 0; y < 5; y++) {
+      var row = [r() > 0.45, r() > 0.45, r() > 0.45];
+      for (var x = 0; x < 5; x++) {
+        var on = row[x < 3 ? x : 4 - x];
+        g.push({ s: on ? 'background:#C5CAD6;border-radius:1px' : 'background:transparent' });
+      }
+    }
+    return g;
+  }
+  renderVals() {
+    var sel = this.state.sel;
+    var people = [{ id: 'a', name: 'Anna Meier', seed: 11 }, { id: 'l', name: 'Luca Bernasconi', seed: 58 }, { id: 'm', name: 'Mia Frei', seed: 203 }];
+    var self = this;
+    var rows = people.map(function (p, i) {
+      var on = !!sel[p.id];
+      return {
+        name: p.name,
+        pattern: self.keyPattern(p.seed),
+        checked: on,
+        ariaChecked: on ? 'true' : 'false',
+        rowStyle: 'display:flex;align-items:center;gap:14px;min-height:64px;padding:0 16px;background:transparent;border:none;color:#EEF0F5;font-family:inherit;cursor:pointer;' + (i < people.length - 1 ? 'border-bottom:1px solid #262A33;' : ''),
+        boxStyle: 'width:24px;height:24px;border-radius:7px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex-shrink:0;' + (on ? 'background:#9DB4FF;' : 'border:1.5px solid #3D4350;'),
+        toggle: function () { var n = Object.assign({}, sel); n[p.id] = !on; self.setState({ sel: n }); }
+      };
+    });
+    var count = people.filter(function (p) { return sel[p.id]; }).length;
+    return { rows: rows, count: count };
+  }
+}
+</script>
+</body>
+</html>

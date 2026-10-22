@@ -8,6 +8,7 @@
 ## Umfang
 Seite laut Skill §6: Header mit Signal, Banner bei getrennter Antenne, Tagestrenner, Bubbles mit allen Status,
 Retry, Leerzustand, Composer mit Byte-Limit, Auto-Scroll ans Ende, `markRead`.
+Noch **ohne** Standort-Button und Standort-Bubbles (kommen in T18); `og-composer` mit `showLocation` false.
 
 ## Akzeptanzkriterien
 - [ ] Demo-Chat mit Anna: Aufbau und Masse wie Referenz `Main.dc.html`, Texte und Daten laut Skill §6.

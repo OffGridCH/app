@@ -52,6 +52,10 @@ Darunter Trennlinie 1px `--og-line`, margin `6px 20px 8px`.
 | `wrong-password` | „Falsches Passwort oder beschädigte Datei.“ |
 | `invalid-file` | „Das ist keine OffGrid-Export-Datei.“ |
 | `write-failed` | „Die Datei konnte nicht gespeichert werden.“ |
+| `location-denied` | „Standortzugriff fehlt. Erlaube ihn in den Android-Einstellungen.“ |
+| `location-timeout` | „Kein GPS-Signal. Geh ins Freie und versuch es erneut.“ |
+| `location-unavailable` | „Der Standort ist gerade nicht verfügbar.“ |
+| `no-maps-app` | „Keine Karten-App gefunden. Die Koordinaten sind kopiert.“ |
 
 Typ für Formularfehler (in `core/models/errors.ts`): `FormErrorCode = 'name-invalid' | 'password-too-short' | 'password-mismatch'`.
 Fehler unter Formularfeldern: Stil `help` in `--og-danger`. Fehler auf Seitenebene: `og-banner` bzw. `og-note`.
@@ -103,7 +107,8 @@ Aufbau:
    - Spalte gap 5, flex 1, min-width 0:
      - Zeile 1 (space-between, gap 12): Name `body-strong` (`display_name`) | `og-signal-bars md` mit Level des Kontakts.
      - Zeile 2 (space-between, gap 12): Vorschau `preview` (1 Zeile, Ellipsis) | rechts gap 6: `og-badge` (wenn ungelesen) + Zeit `meta`.
-       - Vorschau: letzter Text; bei eigener Nachricht mit Präfix „Du: “. Keine Nachricht → „Noch keine Nachrichten“.
+       - Vorschau: letzter Text; bei eigener Nachricht mit Präfix „Du: “. Standort-Nachricht → „Standort“ bzw. „Du: Standort“.
+         Keine Nachricht → „Noch keine Nachrichten“.
        - Farbe Vorschau: ungelesen > 0 → `--og-text-2`, sonst `--og-text-3`.
        - Zeit: `formatListTime(lastMessage.sentAt)`; ohne Nachricht leer.
    **Ausstehende Zeile** (aus `HandshakeService.pending`) = `<div>` (nicht klickbar), gleiche Masse:
@@ -182,6 +187,14 @@ Beim Öffnen und bei neuen Nachrichten: `markRead(contactId)`.
 4. `ion-footer`: `og-composer` mit `placeholder` „Nachricht an <display_name>“ (bei nicht `ready`: „Wird später gesendet“),
    `label` „Nachricht an <display_name>“, `sendLabel` „Senden“ (bei nicht `ready`: „In Warteschlange legen“),
    `maxBytes` = `MessagingService.maxContentBytes()`, `countBytes` = `contentBytes`.
+   Ab T18: `showLocation` true → Output `location` öffnet das Standort-Sheet (§10).
+5. Ab T18 – Standort-Nachrichten (`kind 'location'`) werden mit `og-location-bubble` statt `og-message-bubble` gezeigt:
+   - out: Titel „Mein Standort“; Meta wie Text-Nachrichten.
+   - in: Titel „Standort von <Vorname oder display_name>“; `distance`/`directionText`/`bearing` nur, wenn
+     `LocationService.myFix()` frisch ist (`isFresh`), sonst null; `directionText` = „Richtung <compassName>“.
+     „Anzeigen“ → `/chat/:contactId/standort/:messageId`. Meta = `formatTime(sentAt)`.
+   - Live (nur T19): `live` = „Live · bis <HH:mm>“, solange `share_until` in der Zukunft liegt; sonst „Live beendet“.
+     Bei eigener aktiver Live-Freigabe zusätzlich Button „Beenden“ (Stil wie „Anzeigen“).
 
 **Demo-Verlauf (nur `seedDemo()`, Zeiten relativ zu „jetzt“):**
 - Anna Meier (`last_rssi -92`, `last_seen_at` jetzt − 1 min):
@@ -189,11 +202,14 @@ Beim Öffnen und bei neuen Nachrichten: `markRead(contactId)`.
   2. out, jetzt − 11 min, Delivered: „Wir sind bei der Hütte und kommen in etwa 20 Minuten.“
   3. out, jetzt − 9 min, Sent: „Wartest du dort auf uns?“
   4. in, jetzt − 2 min, **ungelesen**: „Ja, ich warte hier. Es ist ziemlich windig.“
+- Vor- und Nachnamen im Seed: Anna/Meier, Luca/Bernasconi, Mia/Frei (`first_name`/`last_name` gesetzt).
 - Luca Bernasconi (`last_rssi -100`, `last_seen_at` jetzt − 5 min): in, jetzt − 3 h, gelesen: „Basislager erreicht.“
 - Mia Frei (`last_rssi -110`, `last_seen_at` gestern 19:12): out, gestern 19:12, Delivered: „Wir starten morgen um 7 Uhr.“
 - Handshake: Rolle `scanner`, Status `sent`, `peer_name` „Jonas Keller“, Schlüssel zufällig.
 
 ## 7. Einstellungen (`/einstellungen`, Referenz `Einstellungen.dc.html`)
+
+(Hinweis: Der Abschnitt Standort steht in §10 und §11.)
 
 Seite scrollt (`ion-content`), padding-bottom 32.
 1. `og-topbar` „Einstellungen“, back `/kontakte`.
@@ -243,3 +259,46 @@ Seite scrollt (`ion-content`), padding-bottom 32.
 6. Footer: `og-button primary` „Importieren“ → `BackupService.import(text, password)` – aktiv mit Datei und Passwort;
    während Arbeit „Wird importiert …“.
    Erfolg → `/kontakte` (replaceUrl). Fehler unter dem Passwortfeld.
+
+## 10. Standort senden – Sheet im Chat (ab T18, Referenz `StandortSenden.dc.html`)
+
+`features/chat/location-sheet.component.ts` in `og-sheet` mit Titel „Standort senden“. Beim Öffnen `LocationService.locate()`.
+1. **Wird bestimmt:** Karte (padding 16, Radius 20, Grund `--og-bg`, Rahmen 1px `--og-border`, gap 14) mit Spinner
+   (wie Step-List-Spinner) und Text „Standort wird bestimmt …“ (15px).
+2. **Fix da:** gleiche Karte: Kachel 48×48 Radius 14 `--og-accent-soft` mit Icon `pin` 24 `--og-accent` ·
+   Mono 16px/1.35 zweizeilig: Breite (z. B. „47.05021° N“) und Länge („8.30934° O“) ·
+   darunter 13px `--og-text-3`: „Genauigkeit <formatAccuracy> · <formatAgo(fix.at)>“.
+   Ist `accuracy > 100`: zusätzlich `og-note` „Ungenau – im Freien wird es meist besser.“
+3. **Fehler:** `og-note` mit Fehlertext (§0) und `og-button secondary` „Erneut versuchen“ → `locate()`.
+4. Text 14px/1.45 `--og-text-2`: „Wird per Funk an <display_name> gesendet – auch ohne Mobilnetz.“
+5. Nur T19: `og-segmented` (ariaLabel „Art der Freigabe“) mit „Einmal“ · „15 Min. live“ · „60 Min. live“, Standard „Einmal“.
+6. Buttons (gap 10): `og-button primary` Icon `send` „An <display_name> senden“ – nur aktiv mit Fix →
+   `MessagingService.sendLocation(contactId, fix)`, Sheet schliessen. `og-button secondary` „Abbrechen“ → schliessen.
+
+## 11. Standort ansehen (`/chat/:contactId/standort/:messageId`, ab T18, Referenz `StandortDetail.dc.html`)
+
+Beim Öffnen: aus `MessagingService.messages(contactId)` die Nachricht mit `messageId` nehmen (inkl. `location`) und
+`LocationService.locate()` für den eigenen Standort aufrufen. Nachricht fehlt → zurück zum Chat (replaceUrl).
+**Eigene Nachricht (`out`):** Titel „Mein Standort“, **kein** Block 2 (kein Pfeil, keine Entfernung), in Block 3 nur
+Koordinaten-Zeile und `og-info-row` „Gesendet“; Footer nur „In Karten-App öffnen“.
+1. `og-topbar` „Standort von <display_name>“, back `/chat/:contactId`, backLabel „Zurück zum Chat“.
+2. Block zentriert, padding `12px 24px 0`, gap 6:
+   - `og-bearing-dial` mit `bearing` (eigener Fix → Ziel), `label` „Richtung <compassName>, <Grad gerundet> Grad“.
+   - Entfernung 40/800, letter-spacing -0.03em (`formatDistance`); ohne eigenen Fix: „–“.
+   - 15px `--og-text-2`: „Richtung <compassName> · <Grad>°“; ohne eigenen Fix: „Eigener Standort fehlt“.
+   - 13px `--og-text-3` zentriert: „Norden ist oben. Richte das Handy nach Norden aus.“
+3. `og-card` (margin `20px 16px 0`):
+   - Zeile (Min-Höhe 56, padding `0 8px 0 16px`): Mono 13px `formatCoordinate` + `og-icon-button plain copy`
+     „Koordinaten kopieren“ → `copyCoordinates`; danach 2 s Icon `check` und `aria-live`-Text „Kopiert“.
+   - `og-info-row` „Empfangen“ – „<formatTime(recordedAt)> · <formatAccuracy>“ (bei eigener Nachricht Label „Gesendet“).
+   - `og-info-row` „Dein Standort“ – „<formatAgo(myFix.at)> · <formatAccuracy>“ bzw. Fehlertext kurz „nicht verfügbar“.
+4. Footer (padding `0 16px 26px`, gap 10): `og-button primary` Icon `map` „In Karten-App öffnen“ → `openInMaps`
+   (Fehler `no-maps-app` als `og-note`); `og-button secondary` Icon `refresh` „Meinen Standort aktualisieren“ → `locate()`
+   (während `locating` Text „Wird bestimmt …“ und deaktiviert).
+5. Live (nur T19): Werte aktualisieren sich automatisch mit jeder neuen Koordinate; über dem Dial Mono 11px
+   `--og-accent` „LIVE · BIS <HH:mm>“.
+
+## 12. Gruppen (nur T20, optional)
+
+Alle Gruppen-Screens und -Texte stehen im Skill `offgrid-groups` §5.
+
