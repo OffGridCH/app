@@ -12,7 +12,7 @@ Der Abschlussbericht (T22) zeigt am Ende, ob die Meilensteine gehalten wurden �
 
 | Nr. | Regel | Frist |
 |---|---|---|
-| W1 | **PR-Review:** Jeden PR ansehen, sobald der Planner „PR offen“ meldet: Abschnitt „Für dich zu prüfen“ lesen, Checks `app-checks` + `docs-check` grün, bei UI-Tickets die Screenshots in der Doku-Vorschau bzw. kurz im Browser (`localhost:4200`) anklicken. Dann **mergen** oder dem Planner `Korrigiere PR T<nr>: …` schreiben. | **≤ 30 Min** nach „PR offen“ |
+| W1 | **PR-Review:** Jeden PR ansehen, sobald der Planner „PR offen“ meldet: Abschnitt „Für dich zu prüfen“ lesen, Checks `app-checks` + `docs-check` grün, bei UI-Tickets die Screenshots in der Doku-Vorschau bzw. kurz im Browser (`localhost:4200`) anklicken. Dann **mergen** oder dem Planner `Korrigiere PR T<nr>: …` schreiben. Während ein PR wartet, baut der Planner unabhängige Tickets weiter. | Ziel **≤ 30 Min** nach „PR offen“, der Planner mahnt ab **60 Min** |
 | W2 | **Blockaden lösen:** Meldet der Planner `blockiert`, Notiz lesen und entscheiden (Frage beantworten, Ticket/Skill präzisieren, oder bewusst überspringen). | **≤ 20 Min** |
 | W3 | **Stand-Check:** Alle 2 h dem Planner `Stand-Check` schreiben. Er zeigt Fortschritt gegen den Meilenstein. Du antwortest mit `Stand-Check: im Plan` oder `Stand-Check: Plan angepasst – <was>`. | alle **2 h** |
 | W4 | **Kein Code am Planner vorbei:** Fehler gehen als Korrekturwunsch an den Planner, nicht als eigene Commits. Notfall-Ausnahme nur mit Protokolleintrag: dem Planner `Notfall: <was ich selbst geändert habe>` schreiben. | immer |

@@ -6,6 +6,14 @@ permission:
   edit: allow
   bash:
     "*": deny
+    # nur lesende Befehle, damit Lesen keine Rückfrage auslöst
+    "ls*": allow
+    "wc *": allow
+    "head *": allow
+    "tail *": allow
+    "grep *": allow
+    "rg *": allow
+    "git show*": allow
     "git status*": allow
     "git log*": allow
     "git diff*": allow
@@ -58,8 +66,8 @@ Du bist der **Planner** für das Projekt OffGrid. Du arbeitest streng nach `.kil
 0. **Meilenstein-Check:** `date -Iseconds`, vergangene Zeit seit `START` berechnen (T+hh:mm). Nächsten nicht erreichten
    Meilenstein aus `MEILENSTEINE.md` bestimmen und **eine** Zeile ausgeben + ins Protokoll:
    `Meilenstein M<n> (fällig T+hh:mm, jetzt T+hh:mm): <x>/<y> Tickets gemerged – im Plan | Rückstand <Minuten>`.
-   Ist eine Wächter-Frist aus `MEILENSTEINE.md` überschritten (PR > 30 Min offen, Blockade > 20 Min, Stand-Check > 2 h her),
-   zusätzlich `Erinnerung: W<n> – <was>` ausgeben und protokollieren.
+   Ist eine Wächter-Frist aus `MEILENSTEINE.md` überschritten (PR > 60 Min offen – Ziel sind 30 Min,
+   Blockade > 20 Min, Stand-Check > 2 h her), zusätzlich `Erinnerung: W<n> – <was>` ausgeben und protokollieren.
 1. **Sync:** Für jedes Ticket mit `PR offen`: `gh pr view feature/<ticket> --json state,mergeable,url`.
    `MERGED` → `fertig` (Datum eintragen; Protokoll `MERGE` mit `mergedAt` und Wartezeit seit PR-Erstellung). `CLOSED` → `blockiert` („PR geschlossen – Mensch fragen“).
    `mergeable` = `CONFLICTING` → `blockiert` („Merge-Konflikt mit main – Mensch löst“).

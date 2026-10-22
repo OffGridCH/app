@@ -6,6 +6,15 @@ permission:
   edit: allow
   bash:
     "*": deny
+    # nur lesende Befehle, damit Lesen keine Rückfrage auslöst
+    "ls*": allow
+    "wc *": allow
+    "head *": allow
+    "tail *": allow
+    "grep *": allow
+    "rg *": allow
+    "git show*": allow
+    "git log*": allow
     "npm run lint*": allow
     "npm run test:ci*": allow
     "npm run build*": allow
