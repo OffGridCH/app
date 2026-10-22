@@ -70,3 +70,7 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+# Doku (T21)
+.venv-docs/
+site/
