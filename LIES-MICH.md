@@ -87,6 +87,22 @@ Ziel: Alles einmal echt testen, ohne dass etwas auf `main` kommt. Dauer ca. 1,5�
      (`clean -fdx` entfernt alles Ungetrackte inkl. `node_modules`, `.venv-docs` und der lokalen Protokolle).
    - Windows: `git switch main && git branch -D feature/probelauf && git clean -fdx`.
 
+### Agent-Rechte (wenn du sie anpasst)
+- In jeder Agent-Datei steht `"*"` als **erste** Zeile im `bash:`-Block (`deny`, beim Coder `allow`), darunter die
+  Ausnahmen. So greift die Agent-Regel, egal ob Kilo „spezifisch vor Wildcard“ oder „letzte Zeile gewinnt“ auswertet.
+- Rückfallebene: `kilo.jsonc` → `"permission": { "bash": "ask" }` (nur dieses Projekt). Die globale
+  `~/.config/kilo/kilo.json` bleibt, wie sie ist.
+- Fragt Kilo dich während des Marathons nach einer Freigabe, fehlt in der Agent-Datei eine Allow-Zeile. Einmal freigeben,
+  nach dem Marathon (oder im nächsten Setup-PR) ergänzen.
+- Planner, Reviewer, Tester und Documenter dürfen nur lesende Befehle zusätzlich (`ls`, `wc`, `head`, `tail`, `grep`, `rg`,
+  `git show`/`log`). Bewusst **nicht**: `cat` (`cat > datei`), `sed` (`-i`), `find` (`-delete`), `python3`.
+
+### Setup-Änderungen committen
+Nie direkt auf `main` (gesperrt – der Commit liesse sich nicht pushen und `git pull --ff-only` bricht später ab).
+Immer: `git switch -c setup/<thema>` → commit → `git push -u origin setup/<thema>` → `gh pr create --base main` → selbst
+mergen → `git switch main && git pull --ff-only`. Liegt ein Commit schon versehentlich auf dem lokalen `main`:
+`git switch -c setup/<thema>` (nimmt ihn mit), pushen, PR, mergen, dann `git switch main && git fetch && git reset --hard origin/main`.
+
 ## Täglicher Ablauf
 
 ### Agents arbeiten lassen (VM)
@@ -94,7 +110,7 @@ Agent **planner** wählen und schreiben:
 > Start – arbeite die Tickets laut .kilo/rules/30-workflow.md ab.
 
 Das Wort **`Start`** setzt T+0:00 für die Meilensteine. **Lies vorher `MEILENSTEINE.md`** – dort stehen deine
-Fristen (PR-Review ≤ 30 Min, Blockaden ≤ 20 Min, Stand-Check alle 2 h …) und die Meilensteine M0–M8. Der Planner
+Fristen (PR-Review Ziel ≤ 30 Min, Mahnung ab 60 Min, Blockaden ≤ 20 Min, Stand-Check alle 2 h …) und die Meilensteine M0–M8. Der Planner
 erinnert dich, wenn du eine Frist reisst, und alles landet im Protokoll für den Abschlussbericht.
 
 Weitere Befehle an den Planner: `weiter`, `Stand-Check`, `Stand-Check: im Plan`, `Korrigiere PR T<nr>: …`,

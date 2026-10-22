@@ -15,13 +15,46 @@ GitHub-Actions-Checks, Protokoll/Meilenstein-Check und der Weg aufs Handy (Windo
 1. **Vorbereitung:** `gh auth status`, `git status` (sauber, auf `main`), `git pull --ff-only`,
    `git switch -c feature/probelauf`. Eigene Dateien: `tickets/STATUS.probelauf.local.md` und
    `tickets/PROTOKOLL.probelauf.local.md` (statt der normalen). `START` protokollieren.
-2. **Rechte-Test** (Ergebnis jeweils protokollieren; „verweigert“ ist hier das **richtige** Ergebnis):
-   - Planner selbst: `gh pr merge --help` → muss verweigert werden.
-   - `@coder`: „Führe `git commit --allow-empty -m rechte-test` aus und melde nur das Ergebnis. Ändere nichts.“ → verweigert.
-   - `@reviewer`: „Lege die Datei `rechte-test.txt` an und melde nur das Ergebnis.“ → verweigert.
-   - `@tester`: „Führe `git push` aus und melde nur das Ergebnis.“ → verweigert.
-   - `@documenter`: „Führe `npm --version` aus und melde nur das Ergebnis.“ → verweigert.
-   Wird etwas **erlaubt**, das verweigert sein müsste: sofort stoppen und dem Menschen melden (Rechte reparieren).
+2. **Rechte-Test** (Ergebnis jeweils protokollieren). Es gibt zwei richtige Ergebnisse: `verweigert` bei A,
+   `erlaubt` bei B. Ein Agent darf nichts können, was er nicht braucht – und muss alles können, was er braucht.
+   Jeden Subagent-Auftrag so formulieren: „Führe `<befehl>` aus und melde nur das Ergebnis. Ändere nichts.“
+
+   **A – Verweigerungen**
+
+   | Wer | Befehl / Aktion | Erwartet |
+   |---|---|---|
+   | Planner selbst | `gh pr merge --help` | verweigert |
+   | Planner selbst | `npm --version` | verweigert |
+   | `@coder` | `git commit --allow-empty -m rechte-test` | verweigert |
+   | `@reviewer` | Datei `rechte-test.txt` anlegen | verweigert |
+   | `@tester` | `git push` | verweigert |
+   | `@documenter` | `npm --version` | verweigert |
+
+   **B – Positivkontrolle (diese Befehle müssen ohne Rückfrage laufen)**
+
+   | Wer | Befehl | Erwartet |
+   |---|---|---|
+   | Planner selbst | `gh auth status` | erlaubt |
+   | Planner selbst | `date -Iseconds` | erlaubt |
+   | Planner selbst | `git fetch` | erlaubt |
+   | Planner selbst | `ls tickets` | erlaubt |
+   | `@coder` | `npm --version` | erlaubt |
+   | `@reviewer` | `git status --short` | erlaubt |
+   | `@reviewer` | `git diff main --stat` | erlaubt |
+   | `@tester` | `npm run lint` | erlaubt |
+   | `@tester` | `npm run test:ci` | erlaubt |
+   | `@documenter` | `git status --short` | erlaubt |
+   | `@documenter` | `npm run docs:build` | erlaubt |
+
+   Hinweis: Vor T00 bzw. T21 gibt es `package.json` bzw. `mkdocs.yml` noch nicht. Dann zählt nur, dass der Befehl
+   **gestartet** wurde (Fehler wie „Missing script“ oder „Config file not found“ = erlaubt). „Verweigert“ oder eine
+   Rückfrage an den Menschen = Befund.
+
+   Kommt bei B eine **Rückfrage** statt einer Ausführung, fehlt die Allow-Zeile in der Agent-Datei (die Rückfrage stammt
+   aus der Rückfallebene `"bash": "ask"` in `kilo.jsonc`).
+
+   Wird etwas **erlaubt**, das verweigert sein müsste, **oder** etwas verweigert bzw. nachgefragt, das erlaubt sein
+   müsste: sofort stoppen und dem Menschen melden (Rechte reparieren).
 3. **T00** komplett mit Coder → Reviewer → Tester (normaler Ablauf, aber **ohne** Warten auf Merge).
    Danach `git add -A`, `git commit -m "PROBELAUF T00"`, `git push -u origin feature/probelauf`,
    `gh pr create --draft --base main --head feature/probelauf --title "PROBELAUF – nicht mergen" --body "Probelauf vor dem Marathon. Nicht mergen, wird geschlossen."`.
@@ -40,7 +73,7 @@ GitHub-Actions-Checks, Protokoll/Meilenstein-Check und der Weg aufs Handy (Windo
 
 | # | Prüfpunkt |
 |---|---|
-| P1 | Alle 5 Rechte-Tests verweigert wie erwartet |
+| P1 | Alle Rechte-Tests korrekt: jede Verweigerung verweigert **und** jede Positivkontrolle ohne Rückfrage ausgeführt |
 | P2 | T00: Starter erzeugt, `npm run lint`/`test:ci`/`build` grün, `npx cap sync android` ok |
 | P3 | T21: `npm run check` und `npm run docs:build` grün; Playwright startet |
 | P4 | T03: alle Krypto-/Format-Tests grün (WebCrypto in Vitest funktioniert) |
