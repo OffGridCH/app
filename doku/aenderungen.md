@@ -2,6 +2,23 @@
 
 Neuester Eintrag oben.
 
+## T03 – Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level
+*2026-10-22*
+
+- Zeitformate in `src/app/core/format/time.ts`: Uhrzeit, Listenzeit („Gestern“, „Mo.“), letzter Empfang
+  („zuletzt 14:32“, „noch nie empfangen“) und Tagestrenner („HEUTE“, „GESTERN“), alle in der Zeitzone
+  `Europe/Zurich` und im Schweizer Format.
+- Funktexte in `src/app/core/format/radio.ts`: Frequenz in MHz ohne Nachkommastellen.
+- Krypto-Basis in `src/app/core/crypto/`: Schlüssel als 32 Hex-Zeichen, AES-GCM 128 mit 12-Byte-IV und
+  Authentifizierungs-Tag, Tag aus den ersten 4 Byte SHA-256, Hex- und Base64-Umrechnung. Nur WebCrypto, keine Pakete.
+- Schlüssel-Muster als Profilbild: 5 × 5 spiegelsymmetrisches Raster aus SHA-256 über die sortierten Schlüsselpaare,
+  nie fast leer; zeigt in der Kontaktliste das Muster zumgegenüber, ohne Schlüssel abzutippen.
+- Signalstärke je Kontakt: 0 bis 4 Balken aus dem RSSI, nach 15 Minuten ohne Kontakt wieder „Ausser Reichweite“,
+  mit Klartexten für Screenreader.
+- Textlängen: maximale Länge einer Nachricht im Frame (180 Byte, je nach Antennenlimit) und Prüfung von
+  Anzeigenamen (höchstens 40 Zeichen und 60 Byte).
+- Acht neue Testdateien mit 64 neuen Tests; zusammen mit T00 sind es 11 Testdateien und 72 Tests.
+
 ## T21 – CI-Checks und Doku-Grundgerüst (MkDocs, GitHub Pages)
 *2026-10-22*
 

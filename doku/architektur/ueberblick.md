@@ -1,6 +1,7 @@
 # Überblick
 
-Stand: **nach T00** (Projekt-Setup und Theme). Alles Weitere ist geplant.
+Stand: **nach T00** (Projekt-Setup und Theme) und **T03** (Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level).
+Alles Weitere ist geplant.
 
 ## Schichten
 
@@ -18,9 +19,10 @@ flowchart TD
   UI -. "wird von Seiten benutzt" .-> FEAT
 ```
 
-- `core/` ist für alles da, was ohne Bildschirm funktioniert. Auf diesem Branch stehen dort `log.ts`, `platform.ts`
-  und die Typen in `core/models/`; die Dienste für Antenne, Krypto, Daten, Nachrichten, Handshake, Backup, Standort
-  und Einstellungen kommen später (siehe „Geplant, noch nicht im Branch“ weiter unten).
+- `core/` ist für alles da, was ohne Bildschirm funktioniert. Auf diesem Branch stehen dort `log.ts`, `platform.ts`,
+  die Typen in `core/models/` sowie aus T03 `format/`, `crypto/` und `messaging/`; die Dienste für Antenne, Daten,
+  Nachrichten, Handshake, Backup, Standort und Einstellungen kommen später (siehe „Geplant, noch nicht im Branch“
+  weiter unten).
 - `ui/` ist für wiederverwendbare `og-`-Komponenten gedacht, die keine Services kennen (ab T01, T02).
 - `features/` enthält die Seiten. Jede Seite gehört in einen eigenen Ordner und heisst `<name>.page.ts`.
 - `core/platform.ts` entscheidet, ob die App nativ auf Android läuft oder im Browser.
@@ -37,6 +39,9 @@ src/
       log.ts             Logging (log.debug/info/warn/error)
       platform.ts        isNative(), STATUS_BAR_COLOR
       models/            antenna, contact, errors, handshake, message, settings
+      format/            time.ts, radio.ts – Zeit- und Funktexte (T03)
+      crypto/            hex.ts, base64.ts, CryptoService, KeyPatternService (T03)
+      messaging/         limits.ts, signal.ts – Textlängen, Signal-Level (T03)
     features/
       verbinden/ name/ kontakte/ handshake/ chat/ standort/
       einstellungen/ gruppe/
@@ -53,11 +58,9 @@ Geplant, noch nicht im Branch (jeweils mit Ticket-Stand, siehe [Start](../index.
 
 ```text
 core/
-  format/               time.ts (T03), radio.ts (T03)
   data/                 Datenbank, Repositories, Memory-Implementierung (T04)
   antenna/              AntennaPort, NDJSON, Serial- und Mock-Antenne (T05, T06)
-  crypto/               CryptoService, Schlüssel-Muster (T03)
-  messaging/            Frame-Codec, MessagingService (T05, T07)
+  messaging/            zusätzlich: Frame-Codec, MessagingService (T05, T07)
   handshake/            HandshakeService, QR-Scanner (T08, T11)
   backup/               BackupService, Datei-I/O (T14)
   location/             Geo-Funktionen, LocationService, Karten (T17, T18)
