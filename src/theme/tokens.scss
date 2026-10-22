@@ -1,0 +1,73 @@
+// OffGrid Design-Tokens – Quelle der Wahrheit für alle Farben, Schriften, Radien und Grössen.
+// T00 kopiert diese Datei unverändert nach src/theme/tokens.scss. Nie Werte ausserhalb dieser Datei definieren.
+
+:root {
+  // ---------- Flächen ----------
+  --og-bg: #0F1115;            // Seitenhintergrund
+  --og-surface: #1A1D24;       // Karten, eingehende Bubbles, Icon-Buttons, Avatar-Grund
+  --og-surface-2: #15181E;     // Schritt-Listen, Avatar-Grund "ausser Reichweite"
+  --og-bar: #13161B;           // Composer-Leiste unten im Chat
+  --og-input: #0F1115;         // Eingabefeld innerhalb einer Karte
+  --og-scrim: rgba(10, 12, 15, 0.72);
+
+  // ---------- Linien ----------
+  --og-line: #262A33;          // Trennlinien in Listen/Karten, Header-Unterkante
+  --og-border: #2C313B;        // Rahmen von Karten, Inputs, Icon-Buttons, eingehenden Bubbles
+  --og-border-muted: #3D4350;  // leeres Schritt-Kästchen, Punkte im Leerzustand
+  --og-dashed: #4A5060;        // gestrichelter Avatar (Kontakt ausstehend)
+
+  // ---------- Text ----------
+  --og-text: #EEF0F5;          // Haupttext
+  --og-text-2: #C5CAD6;        // Fliesstext, Labels, Vorschau ungelesen, Avatar-Muster
+  --og-text-3: #959CAB;        // Meta, Zeiten, Hilfstexte, Abschnittstitel
+  --og-placeholder: #8A91A0;
+
+  // ---------- Akzent (Eisblau) ----------
+  --og-accent: #9DB4FF;        // Primärbutton, eigene Bubble, Signalbalken an, Ungelesen-Badge, Links
+  --og-accent-hover: #C2D0FF;
+  --og-on-accent: #0B1020;     // Text/Icon auf Akzentfläche
+  --og-accent-soft: #232B45;   // Icon-Kachel hinter Akzent-Icon
+  --og-accent-pulse: rgba(157, 180, 255, 0.55);
+
+  // ---------- Signal ----------
+  --og-signal-off: #2E3440;    // Signalbalken aus, Schalter aus
+  --og-ok: #7FD6A4;            // Statuspunkt "verbunden", Erfolgs-Badge
+
+  // ---------- Gefahr / Fehler ----------
+  --og-danger: #FF8F87;        // "Nicht gesendet", Rahmen fehlgeschlagene Bubble, "Alle Daten löschen"
+  --og-danger-title: #FFB4AD;  // Titel im Fehler-Banner
+  --og-danger-text: #E8D6D3;   // Fliesstext im Fehler-Banner
+  --og-danger-bg: #2A2220;     // Banner-Hintergrund
+  --og-danger-border: #4A3330; // Banner-Rahmen
+
+  // ---------- Schriften ----------
+  --og-font: 'Schibsted Grotesk Variable', 'Schibsted Grotesk', system-ui, sans-serif;
+  --og-font-mono: 'Geist Mono', ui-monospace, monospace;
+
+  // ---------- Radien ----------
+  --og-r-xs: 9px;     // Schritt-Kästchen
+  --og-r-sm: 10px;    // kleiner Inline-Button ("Erneut senden")
+  --og-r-md: 12px;    // Segment im Tab-Umschalter, Banner-Button
+  --og-r-input: 14px; // Inputs, quadratische Icon-Kachel
+  --og-r-btn2: 16px;  // Sekundärbutton, Composer-Input, Senden-Button, Tab-Umschalter
+  --og-r-btn: 18px;   // Primärbutton, Listenzeile, Banner
+  --og-r-card: 20px;  // Karten
+  --og-r-qr: 28px;    // QR-Karte, Kamera-Rahmen, Hero-Icon
+  --og-r-bubble: 20px;
+  --og-r-bubble-tail: 6px;
+  --og-r-pill: 999px;
+
+  // ---------- Abstände ----------
+  --og-gutter: 16px;       // Seitenrand für Karten/Buttons
+  --og-gutter-text: 24px;  // Seitenrand für Fliesstext
+  --og-gutter-title: 20px; // Seitenrand für Seitentitel/Abschnitte in Kontakte
+  --og-section-gap: 26px;  // Abstand vor Abschnittstitel
+
+  // ---------- Grössen ----------
+  --og-touch: 44px;
+  --og-btn-h: 54px;        // Primärbutton
+  --og-btn2-h: 48px;       // Sekundärbutton
+  --og-input-h: 46px;      // Input in Formular-Karte
+  --og-composer-h: 48px;   // Input + Senden-Button im Chat
+  --og-row-min: 52px;      // Zeile in Info-Karte
+}

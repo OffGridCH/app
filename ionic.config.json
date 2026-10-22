@@ -1,0 +1,7 @@
+{
+  "name": "offgrid",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}

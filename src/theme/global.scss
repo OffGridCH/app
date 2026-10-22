@@ -1,0 +1,60 @@
+/*
+ * App Global CSS
+ * ----------------------------------------------------------------------------
+ * Globale Stile der OffGrid-App. Farben, Schriften und Mass kommen ausschliesslich
+ * aus `tokens.scss` (Skill `offgrid-design-system`). Es gibt nur ein dunkles Theme,
+ * darum werden keine Ionic-Paletten für helle oder gemischte Modi geladen.
+ */
+
+@use 'tokens.scss';
+
+/* Core CSS required for Ionic components to work properly */
+@import '@ionic/angular/css/core.css';
+
+/* Basic CSS for apps built with Ionic */
+@import '@ionic/angular/css/normalize.css';
+@import '@ionic/angular/css/structure.css';
+@import '@ionic/angular/css/typography.css';
+@import '@ionic/angular/css/display.css';
+
+/* Optional CSS utils that can be commented out */
+@import '@ionic/angular/css/padding.css';
+@import '@ionic/angular/css/float-elements.css';
+@import '@ionic/angular/css/text-alignment.css';
+@import '@ionic/angular/css/text-transformation.css';
+@import '@ionic/angular/css/flex-utils.css';
+
+/* Ionic-Farben auf die OffGrid-Tokens abbilden. */
+:root {
+  --ion-background-color: var(--og-bg);
+  --ion-text-color: var(--og-text);
+  --ion-font-family: var(--og-font);
+}
+
+body {
+  background: var(--og-bg);
+  color: var(--og-text);
+  font-family: var(--og-font);
+}
+
+ion-content {
+  --background: var(--og-bg);
+}
+
+ion-header,
+ion-footer {
+  background: var(--og-bg);
+}
+
+/* Visuell versteckt, für Screenreader sichtbar. */
+.og-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
