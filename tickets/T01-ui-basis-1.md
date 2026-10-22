@@ -1,6 +1,6 @@
 # T01 – UI-Basis 1: Grundkomponenten
 
-**Abhängig von:** T00
+**Abhängig von:** T00, T21
 **Skills:** `offgrid-design-system`
 **Dateien:** `src/app/ui/**`
 **Referenz:** `docs/design/screens/Einstellungen.dc.html`, `Export.dc.html`

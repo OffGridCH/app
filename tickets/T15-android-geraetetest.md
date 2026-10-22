@@ -1,6 +1,6 @@
 # T15 – Android-Build und Gerätetest
 
-**Abhängig von:** T06, T11, T12, T14
+**Abhängig von:** T06, T11, T12, T14, T18
 **Skills:** `offgrid-architecture`, `offgrid-antenna-protocol`
 **Dateien:** `android/**` (nur Fehlerbehebungen), `test-protokoll/T15.md` (neu, Protokoll)
 
@@ -15,6 +15,9 @@
    - [ ] Signalbalken ändern sich mit Abstand
    - [ ] Nachricht bei getrennter Antenne → Warteschlange → nach Einstecken gesendet
    - [ ] Export auf A, Import auf drittem Gerät (oder nach „Alle Daten löschen“) → Daten wieder da
+   - [ ] Standort: Berechtigungsdialog erscheint; im Freien Fix mit Genauigkeit < 30 m
+   - [ ] Standort A → B: B sieht Entfernung und Richtung, die zur Realität passen (z. B. 200 m Abstand testen)
+   - [ ] „In Karten-App öffnen“ öffnet die installierte Offline-Karten-App an der richtigen Stelle
    - [ ] App-Neustart: Kontakte/Nachrichten bleiben
    - [ ] App-Icon ist das OffGrid-Logo (vorher in Android Studio gesetzt, siehe `LIES-MICH.md` → Logo)
 

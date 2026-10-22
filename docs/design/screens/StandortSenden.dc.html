@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Standort senden</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#9DB4FF}a:hover{color:#C2D0FF}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0F1115; color: #EEF0F5; font-family: 'Schibsted Grotesk', 'Helvetica Neue', sans-serif; position: relative; overflow: hidden">
+
+  <div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+    <div style="height: 66px; border-bottom: 1px solid #262A33; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 56px">
+      <div style="width: 40px; height: 40px; border-radius: 50%; background: #1A1D24; border: 1px solid #2C313B; box-sizing: border-box"></div>
+      <div style="font-size: 17px; font-weight: 650">Anna Meier</div>
+    </div>
+    <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; padding: 16px 14px 120px 14px">
+      <div style="align-self: flex-start; width: 220px; height: 44px; border-radius: 20px 20px 20px 6px; background: #1A1D24; border: 1px solid #2C313B"></div>
+      <div style="align-self: flex-end; width: 180px; height: 44px; border-radius: 20px 20px 6px 20px; background: #9DB4FF"></div>
+    </div>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(10, 12, 15, 0.72)"></div>
+
+  <section role="dialog" aria-labelledby="sheet-title" style="position: absolute; left: 0; right: 0; bottom: 0; background: #1A1D24; border-top: 1px solid #2C313B; border-radius: 28px 28px 0 0; padding: 10px 20px 28px 20px; display: flex; flex-direction: column; gap: 18px">
+    <div aria-hidden="true" style="align-self: center; width: 36px; height: 4px; border-radius: 999px; background: #3D4350"></div>
+    <h2 id="sheet-title" style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em">Standort senden</h2>
+
+    <div style="display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 20px; background: #0F1115; border: 1px solid #2C313B">
+      <div aria-hidden="true" style="width: 48px; height: 48px; border-radius: 14px; background: #232B45; color: #9DB4FF; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+        <div style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 16px; line-height: 1.35">47.05021° N<br>8.30934° O</div>
+        <div style="font-size: 13px; color: #959CAB">Genauigkeit ±8 m · gerade eben</div>
+      </div>
+    </div>
+
+    <p style="margin: 0; font-size: 14px; line-height: 1.45; color: #C5CAD6">Wird per Funk an Anna Meier gesendet – auch ohne Mobilnetz.</p>
+
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <a href="ChatStandort.dc.html" style="height: 54px; border-radius: 18px; background: #9DB4FF; color: #0B1020; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; font-weight: 700">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"></path><path d="M6 11l6-6 6 6"></path></svg>
+        <span>An Anna Meier senden</span>
+      </a>
+      <a href="ChatStandort.dc.html" style="height: 48px; border-radius: 16px; border: 1px solid #2C313B; box-sizing: border-box; color: #EEF0F5; text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600">Abbrechen</a>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -10,7 +10,8 @@
 2. Abstrakte `DatabaseService` + `SqliteDatabaseService` (`open()` mit Verbindung `offgrid`, Migration v1,
    `PRAGMA foreign_keys = ON`; `replaceAll`; `deleteAllUserData`) + `MemoryDatabaseService` (inkl. `seedDemo()`).
    `DataChangedService` laut Architektur §4.
-3. Abstrakte Repositories + SQLite-Implementierungen + Memory-Implementierungen laut Skill.
+3. Abstrakte Repositories (inkl. `CoordinateRepository`) + SQLite-Implementierungen + Memory-Implementierungen laut Skill.
+   Migrations-Mechanismus mit `PRAGMA user_version` laut Daten-Skill §0.
 4. `memory/seed.ts` mit den Demo-Daten laut `offgrid-screens` §6 und Daten-Skill §4.
 5. `SettingsService` laut Architektur §4 (Defaults laut Daten-Skill §2).
 6. `AppStartService.init()` Schritte 1, 2, 4, 5, 6 (Antenne kommt in T05). In `AppComponent` aufrufen.

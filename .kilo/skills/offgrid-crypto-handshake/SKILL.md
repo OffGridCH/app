@@ -78,7 +78,9 @@ Gleiches Muster auf beiden Handys → Menschen können vergleichen, ob der Austa
 Klartext-Inhalt (JSON):
 ```json
 { "format": "offgrid-backup-data", "v": 1, "createdAt": "<ISO>",
-  "displayName": "...", "contacts": [ /* Contact */ ], "messages": [ /* Message */ ] }
+  "displayName": "...", "contacts": [ /* Contact */ ], "messages": [ /* Message */ ],
+  "coordinates": [ /* Coordinate */ ],
+  "groups": [], "groupMembers": [], "groupMessages": [] }   // Gruppen-Felder erst ab T20, beim Import optional
 ```
 Handshakes und Settings ausser `displayName` werden **nicht** exportiert.
 

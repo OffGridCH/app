@@ -1,7 +1,6 @@
 // Kilo-Projektkonfiguration für OffGrid
 // Regeln werden in dieser Reihenfolge geladen. AGENTS.md im Projekt-Root liest Kilo zusätzlich automatisch.
 {
-  "$schema": "https://app.kilo.ai/config.json",
   // Projekt startet immer mit dem OffGrid-Planner, nicht mit dem globalen agent-os-coder
   "default_agent": "planner",
   "instructions": [

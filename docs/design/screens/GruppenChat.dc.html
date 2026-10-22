@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Gruppenchat Gipfeltour</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#9DB4FF}a:hover{color:#C2D0FF}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+input::placeholder{color:#8A91A0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0F1115; color: #EEF0F5; font-family: 'Schibsted Grotesk', 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <header style="display: flex; align-items: center; gap: 10px; padding: 14px 12px 12px 6px; border-bottom: 1px solid #262A33">
+    <a href="Kontakte.dc.html" aria-label="Zurück zu den Kontakten" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #EEF0F5; border-radius: 14px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+    </a>
+    <div aria-hidden="true" style="width: 40px; height: 40px; border-radius: 12px; background: #1A1D24; border: 1px solid #2C313B; box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+      <div style="display: grid; grid-template-columns: repeat(5, 4px); grid-auto-rows: 4px; gap: 1px">
+        <sc-for list="{{kGroup}}" as="c" hint-placeholder-count="25"><div style="{{c.s}}"></div></sc-for>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0">
+      <div style="font-size: 17px; font-weight: 650; line-height: 1.2">Gipfeltour</div>
+      <div style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #959CAB">Gruppe · 3 Mitglieder</div>
+    </div>
+  </header>
+
+  <main style="flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; padding: 16px 14px 10px 14px; overflow: hidden">
+
+    <div style="display: flex; align-items: center; gap: 10px; margin: 4px 0 10px 0">
+      <div style="flex-grow: 1; height: 1px; background: #262A33"></div>
+      <div style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #959CAB; letter-spacing: 0.12em">HEUTE</div>
+      <div style="flex-grow: 1; height: 1px; background: #262A33"></div>
+    </div>
+
+    <div style="align-self: flex-start; max-width: 78%; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-size: 12px; font-weight: 650; color: #C5CAD6; padding-left: 6px">Anna Meier</div>
+      <div style="background: #1A1D24; border: 1px solid #2C313B; border-radius: 20px 20px 20px 6px; padding: 10px 14px; font-size: 16px; line-height: 1.4">Treffpunkt ist die Hütte, alle einverstanden?</div>
+      <div style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #959CAB; padding-left: 6px">14:30</div>
+    </div>
+
+    <div style="align-self: flex-start; max-width: 78%; display: flex; flex-direction: column; gap: 4px; margin-top: 8px">
+      <div style="font-size: 12px; font-weight: 650; color: #C5CAD6; padding-left: 6px">Luca Bernasconi</div>
+      <div style="background: #1A1D24; border: 1px solid #2C313B; border-radius: 20px 20px 20px 6px; padding: 10px 14px; font-size: 16px; line-height: 1.4">Ja, bin in 30 Minuten dort.</div>
+      <div style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #959CAB; padding-left: 6px">14:32</div>
+    </div>
+
+    <div style="align-self: flex-end; max-width: 78%; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 8px">
+      <div style="background: #9DB4FF; color: #0B1020; border-radius: 20px 20px 6px 20px; padding: 10px 14px; font-size: 16px; line-height: 1.4; font-weight: 500">Passt, bis gleich.</div>
+      <div style="display: flex; align-items: center; gap: 6px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #959CAB; padding-right: 6px">
+        <span>14:33 · gesendet</span>
+        <svg width="15" height="11" viewBox="0 0 20 14" aria-hidden="true"><rect x="0" y="10" width="3.5" height="4" rx="1" fill="#9DB4FF"></rect><rect x="5.5" y="7" width="3.5" height="7" rx="1" fill="#9DB4FF"></rect><rect x="11" y="4" width="3.5" height="10" rx="1" fill="#2E3440"></rect><rect x="16.5" y="0" width="3.5" height="14" rx="1" fill="#2E3440"></rect></svg>
+      </div>
+    </div>
+
+  </main>
+
+  <form style="display: flex; align-items: flex-end; gap: 10px; padding: 10px 14px 22px 14px; border-top: 1px solid #262A33; background: #13161B">
+    <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 5px">
+      <label for="msg" class="sr">Nachricht an Gipfeltour</label>
+      <input id="msg" type="text" placeholder="Nachricht an Gipfeltour" style="height: 48px; box-sizing: border-box; border-radius: 16px; border: 1px solid #2C313B; background: #1A1D24; color: #EEF0F5; padding: 0 16px; font-family: inherit; font-size: 16px; outline: none">
+      <div style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #959CAB; padding-left: 4px">0 / 120 Zeichen pro Funkspruch</div>
+    </div>
+    <button type="button" aria-label="Senden" style="width: 48px; height: 48px; flex-shrink: 0; margin-bottom: 21px; border: none; border-radius: 16px; background: #9DB4FF; color: #0B1020; display: flex; align-items: center; justify-content: center; cursor: pointer">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"></path><path d="M6 11l6-6 6 6"></path></svg>
+    </button>
+  </form>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  keyPattern(seed) {
+    var s = seed, g = [];
+    function r() { s = (s * 9301 + 49297) % 233280; return s / 233280; }
+    for (var y = 0; y < 5; y++) {
+      var row = [r() > 0.45, r() > 0.45, r() > 0.45];
+      for (var x = 0; x < 5; x++) {
+        var on = row[x < 3 ? x : 4 - x];
+        g.push({ s: on ? 'background:#9DB4FF;border-radius:1px' : 'background:transparent' });
+      }
+    }
+    return g;
+  }
+  renderVals() {
+    return { kGroup: this.keyPattern(777) };
+  }
+}
+</script>
+</body>
+</html>

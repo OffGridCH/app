@@ -6,7 +6,7 @@ QR-Code-Handshake hinzugefügt, jede Nachricht ist mit einem pro Kontakt ausgeta
 
 Dieses Repo enthält **nur die App** (Ionic + Angular + Capacitor). Die Firmware der Antenne liegt in einem anderen Repo.
 
-## Die 7 Grundregeln (immer gültig)
+## Grundregeln (immer gültig)
 
 1. **Arbeite nur am aktuellen Ticket.** Ein Ticket liegt in `tickets/`. Mach nichts, was dort nicht verlangt ist.
    Keine „Verbesserungen“ nebenbei, keine zusätzlichen Features, keine Umbenennungen ausserhalb des Tickets.
@@ -20,7 +20,9 @@ Dieses Repo enthält **nur die App** (Ionic + Angular + Capacitor). Die Firmware
 6. **Fertig heisst:** `npm run lint`, `npm run test:ci` und `npm run build` laufen ohne Fehler (siehe Skill `offgrid-testing`).
 7. **Git:** `main` ist geschützt. Ein Ticket = ein Branch `feature/<ticket>` = ein PR. Nur der Planner committet,
    pusht und eröffnet PRs; gemerged wird nur vom Menschen (Details `.kilo/rules/30-workflow.md`).
-8. **Ändere nie** `AGENTS.md`, `kilo.jsonc`, `LIES-MICH.md`, `.kilo/**`, `docs/**`, `scripts/**` – ausser ein Ticket verlangt es ausdrücklich.
+8. **Ändere nie** `AGENTS.md`, `kilo.jsonc`, `LIES-MICH.md`, `.kilo/**`, `docs/**`, `scripts/**`, `.github/**`,
+   `mkdocs.yml`, `requirements-docs.txt`, `tools/**`, `MEILENSTEINE.md` – ausser ein Ticket verlangt es ausdrücklich. `doku/**` schreibt nur der Documenter (und T21).
+9. **Checks:** lokal `npm run check` und `npm run docs:build` – dieselben Prüfungen laufen in GitHub Actions bei jedem PR.
 
 ## Wo was steht
 
@@ -34,6 +36,9 @@ Dieses Repo enthält **nur die App** (Ionic + Angular + Capacitor). Die Firmware
 | Datenbank | Skill `offgrid-data` |
 | Antenne / Serial / LoRa-Pakete | Skill `offgrid-antenna-protocol` |
 | Schlüssel, Handshake, Verschlüsselung, Backup | Skill `offgrid-crypto-handshake` |
+| Standort (GPS, Entfernung, Richtung, Karten-App) | Skill `offgrid-location` |
+| Gruppenchat (nur optionales Ticket T20) | Skill `offgrid-groups` |
+| Frontend-Doku (MkDocs, Ordner `doku/`) | Skill `offgrid-docs` |
 | Tests | Skill `offgrid-testing` |
 | Review-Checkliste | Skill `offgrid-review` |
 | Design-Referenz (HTML aus dem Canvas) | `docs/design/screens/*.dc.html` |
@@ -46,3 +51,4 @@ Dieses Repo enthält **nur die App** (Ionic + Angular + Capacitor). Die Firmware
 - `coder` (Subagent): setzt genau ein Ticket um.
 - `reviewer` (Subagent): prüft read-only gegen `offgrid-review`. Ergebnis `PASS` oder `FAIL` mit Liste.
 - `tester` (Subagent): schreibt/führt Tests aus, prüft Lint und Build. Ergebnis `PASS` oder `FAIL`.
+- `documenter` (Subagent): aktualisiert die Doku in `doku/` für das Ticket und baut sie. Ändert nie App-Code.

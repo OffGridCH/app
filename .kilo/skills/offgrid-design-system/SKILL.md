@@ -63,6 +63,14 @@ Alle Icons sind Inline-SVG mit `fill="none" stroke="currentColor" stroke-linecap
 | `file` | 20 / 2 | `<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>` |
 | `info` | 18 / 2 | `<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16.5v.01"/>` |
 | `warning` | 18 / 2 | `<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4"/><path d="M12 17v.01"/>` |
+| `pin` | 22 / 2 | `<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.5"/>` |
+| `map` | 20 / 2.2 | `<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14"/><path d="M15 6v14"/>` |
+| `copy` | 20 / 2 | `<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>` |
+| `refresh` | 18 / 2 | `<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>` |
+| `users` | 20 / 2 | `<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>` (nur T20) |
+
+Richtungspfeil (gefüllt, kein Stroke, in `og-location-bubble`/`og-bearing-dial`): `<path d="M12 3l5.5 15L12 15l-5.5 3z"/>` im
+`viewBox="0 0 24 24"`, gedreht mit `transform="rotate(<Grad> 12 12)"`, Füllung `--og-accent`.
 
 Inputs von `og-icon`: `name` (required), `size` (px, Default aus Tabelle), `strokeWidth` (Default aus Tabelle).
 Keine Emojis, keine Icon-Fonts, keine anderen Icons.
@@ -105,7 +113,7 @@ Trennlinie unten 1px `--og-line` ausser `last`. Label im Stil `row` in `--og-tex
 
 ### og-avatar (Schlüssel-Muster)
 Inputs: `pattern: boolean[]` (25 Werte, Zeilen von oben, links nach rechts), `size: 40|48|56|72|96`,
-`variant: 'normal' | 'pending'`.
+`variant: 'normal' | 'pending' | 'square'` (`square` nur T20: Gruppen – Radius 12 bei 40, 14 bei 48, Zellen in `--og-accent`).
 - Kreis, Grund `--og-surface`, Rahmen 1px `--og-border`, darin 5×5-Raster zentriert.
 - Zellgrösse/Lücke je `size`: 40→4/1px, 48→5/1px, 56→5/1px, 72→7/1.5px, 96→9/2px. Zellradius 1px (96: 2px).
 - Zelle an: Grund `--og-text-2`; Zelle aus: transparent.
@@ -185,14 +193,57 @@ Inputs: `direction: 'in' | 'out'`, `status: 'queued' | 'sent' | 'delivered' | 'f
 
 ### og-composer
 Inputs: `placeholder`, `label` (verstecktes Label, Klasse `og-sr-only`), `sendLabel` (aria-label Senden-Button),
-`maxBytes` (number), `countBytes: (text: string) => number` (die Seite übergibt `contentBytes` aus `core/messaging/limits.ts`).
-Output: `send(text)`. Model `text`. Nach `send` wird `text` geleert.
-Leiste: Grund `--og-bar`, Rand oben 1px `--og-line`, padding `10px 14px 22px`, gap 10, Elemente unten ausgerichtet.
+`maxBytes` (number), `countBytes: (text: string) => number` (die Seite übergibt `contentBytes` aus `core/messaging/limits.ts`),
+`showLocation` (bool, Default false; ab T18 im Einzelchat true).
+Outputs: `send(text)`, `location()` (Standort-Button gedrückt). Model `text`. Nach `send` wird `text` geleert.
+Leiste: Grund `--og-bar`, Rand oben 1px `--og-line`, padding `10px 14px 22px`, gap 10 (mit Standort-Button gap 8),
+Elemente unten ausgerichtet.
+Standort-Button (nur bei `showLocation`): ganz links, 48×48, Radius 16, Grund `--og-surface`, Rahmen 1px `--og-border`,
+Icon `pin` 22 in `--og-text`, `aria-label` „Standort senden“, margin-bottom 21px.
 Input (mit verstecktem Label `Nachricht an <Name>`): Höhe 48, Radius 16, Grund `--og-surface`, Rahmen 1px `--og-border`.
 Darunter Zähler im `meta`-Stil, padding-left 4: `<countBytes(text)> / <maxBytes> Zeichen pro Funkspruch`.
 Senden-Button 48×48 Radius 16 `--og-accent`, Icon `send` in `--og-on-accent`, `aria-label` aus Input `sendLabel`,
 margin-bottom 21px (bündig mit Input). Deaktiviert, wenn Text leer (nach trim) oder Bytes > maxBytes.
 Bei Überschreitung: Zähler in `--og-danger`. Enter sendet.
+
+### og-location-bubble (ab T18; Referenz `ChatStandort.dc.html`)
+Inputs: `direction`, `status`, `meta`, `groupStart` (wie `og-message-bubble`), `title` (string), `coordinate`
+(`Coordinate`), `distance` (string | null), `directionText` (string | null), `bearing` (number | null), `live` (string | null).
+Outputs: `open()`, `retry()`.
+- Breite fest: out 250px, in 260px. Radius wie Message-Bubble, padding `12px 14px`, flex column.
+- `out`: Grund `--og-accent`, Text `--og-on-accent`, gap 6: Zeile Icon `pin` 18 + Titel (15/700) · Zeile Mono 12px/1.5:
+  `formatCoordinate` und darunter „Genauigkeit <formatAccuracy>“. queued/failed: Rahmen-Varianten wie Message-Bubble.
+- `in`: Grund `--og-surface`, Rahmen 1px `--og-border`, gap 10: Zeile Icon `pin` 18 in `--og-accent` + Titel ·
+  wenn `distance`: Zeile mit Kreis 44×44 (Rahmen 1px `--og-border`) und Richtungspfeil 26 (gedreht um `bearing`),
+  daneben Entfernung (24/750, letter-spacing -0.02em) und darunter `directionText` (14px `--og-text-2`) ·
+  Mono 12px `--og-text-3`: „<formatCoordinate> · <formatAccuracy>“ · Button (`<button>`) „Anzeigen“: Höhe 40, Radius 12,
+  Grund `--og-line`, Text 14/650 → `open`.
+- `live` (nur T19, z. B. „Live · bis 15:05“): kleines Label über dem Titel, Mono 11px `--og-accent`, letter-spacing 0.08em.
+- Meta-Zeile darunter exakt wie `og-message-bubble`.
+
+### og-sheet (ab T18; Referenz `StandortSenden.dc.html`)
+Inputs: `open` (bool), `title`. Output: `closed()`. Inhalt per Projektion.
+- Abdunkelung: ganzflächig `--og-scrim`; Klick darauf → `closed`.
+- Panel unten: Grund `--og-surface`, Rand oben 1px `--og-border`, Radius `28px 28px 0 0`,
+  padding `10px 20px calc(28px + env(safe-area-inset-bottom))`, flex column gap 18.
+- Griff 36×4 Pill `--og-border-muted`, zentriert. Titel `<h2>` 20/700. `role="dialog"`, `aria-modal="true"`,
+  `aria-labelledby` auf den Titel. Escape/Zurück-Taste → `closed`. Fokus beim Öffnen auf den ersten Button.
+
+### og-bearing-dial (ab T18; Referenz `StandortDetail.dc.html`)
+Inputs: `bearing` (number | null), `label` (aria-label). SVG `viewBox="0 0 240 240"`, 232×232:
+- Kreis r 116 Füllung `--og-surface-2`, Rand 1.5px `--og-border`; innerer Kreis r 78 Rand 1px `--og-line`.
+- 8 Striche (alle 30° ausser 0/90/180/270): Linie y 8→16, 2px `--og-border-muted`, rund.
+- Buchstaben Mono 13px: „N“ oben (y 34, `--og-accent`, 600), „O“ rechts (x 212), „S“ unten (y 218), „W“ links (x 28), `--og-text-3`.
+- Pfeil `M120 54 L148 154 L120 138 L92 154 Z` in `--og-accent`, gedreht um `bearing` um (120,120); Mittelpunkt r 4 `--og-bg`.
+- `bearing` null → kein Pfeil, in der Mitte Mono 13px `--og-text-3` „?“.
+- `role="img"` mit `aria-label`.
+
+### og-check-row (nur T20; Referenz `GruppeErstellen.dc.html`)
+Inputs: `name`, `pattern` (boolean[25]), `checked` (bool), `disabled` (bool), `last` (bool). Output: `toggle()`.
+`<button type="button" role="checkbox" aria-checked>`: Min-Höhe 64, padding `0 16px`, gap 14, transparent, Trennlinie
+unten 1px `--og-line` ausser `last`. Inhalt: `og-avatar size 40` · Name 16/600 linksbündig (flex 1) · Checkbox 24×24
+Radius 7 (an: Grund `--og-accent` + Icon `check` 14 in `--og-on-accent`; aus: Rahmen 1.5px `--og-border-muted`).
+`disabled`: Opazität 0.4.
 
 ### og-qr
 Input `data: string`. Zeichnet QR-Code als SVG (Paket `qrcode`, Funktion `toString(data, {type:'svg', margin:0,

@@ -40,5 +40,6 @@ Du bist der **Coder** für OffGrid.
 - Keine neuen npm-Pakete ausser der Liste „Erlaubte Pakete“ im Skill `offgrid-architecture`.
 - Bestehende Tests nicht löschen oder abschwächen, damit sie grün werden.
 - Keine Git-Operationen ausser `git status`/`git diff`: nicht committen, nicht pushen, Branch nicht wechseln (macht der Planner).
-- Keine Dateien in `.kilo/`, `docs/`, `tickets/`, `scripts/`, `AGENTS.md`, `kilo.jsonc`, `LIES-MICH.md` ändern.
+- Keine Dateien in `.kilo/`, `docs/`, `tickets/`, `scripts/`, `tools/`, `MEILENSTEINE.md`, `.github/`, `doku/`, `mkdocs.yml`, `requirements-docs.txt`,
+  `AGENTS.md`, `kilo.jsonc`, `LIES-MICH.md` ändern (Ausnahme: Ticket T21 verlangt es).
 - Wenn du Mängel vom Reviewer/Tester bekommst: behebe **nur** diese Mängel.

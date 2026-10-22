@@ -6,14 +6,16 @@
 AGENTS.md                  Grundregeln, liest Kilo automatisch
 kilo.jsonc                 lädt .kilo/rules/*
 .kilo/rules/               Projekt/Umgebung, Code-Konventionen, Ablauf + Definition of Done
-.kilo/agents/              planner (primär), coder, reviewer, tester (Subagents, eigene Sessions)
+.kilo/agents/              planner (primär), coder, reviewer, tester, documenter (Subagents, eigene Sessions)
 .kilo/skills/              8 Skills (Design-System + tokens.scss, Screens, Architektur, Daten,
                            Antennen-Protokoll, Krypto/Handshake, Tests, Review)
 docs/design/               Design-Referenz (Screens + Logo)
 docs/esp-schnittstelle.md  Vorschlag für deinen Kollegen (Serial-Protokoll)
 docs/datenmodell.md        Änderungen am ERD mit Begründung
 scripts/android.ps1        baut unter Windows und öffnet Android Studio
-tickets/                   T00–T16, STATUS.md (Abhängigkeiten), STATUS.local.md (Live-Status, nur lokal)
+tickets/                   T00–T22, STATUS.md (Abhängigkeiten), STATUS.local.md / PROTOKOLL.local.md (nur lokal)
+MEILENSTEINE.md            deine Meilensteine und Wächter-Regeln
+tools/screens.mjs          Playwright-Screenshots für die Doku
 ```
 
 ## Deine Umgebung – so spielt alles zusammen
@@ -67,11 +69,36 @@ tickets/                   T00–T16, STATUS.md (Abhängigkeiten), STATUS.local.
 3. Android Studio: oben in der Geräteauswahl → **Pair Devices Using Wi-Fi** → QR-Code mit dem Handy scannen
    (*Kabelloses Debugging → Gerät mit QR-Code koppeln*).
 
+## Probelauf (am Abend vor dem Marathon, Pflicht)
+
+Ziel: Alles einmal echt testen, ohne dass etwas auf `main` kommt. Dauer ca. 1,5–3 h.
+
+1. Einrichtung oben komplett erledigt (inkl. `gh auth login`, `main` gesperrt, GitHub Pages auf „GitHub Actions“).
+2. In Kilo Agent `planner` → **`Probelauf`** schreiben. Er arbeitet `tickets/T99-probelauf.md` ab: Rechte-Test der Agents,
+   dann T00, T21 und T03 auf dem Branch `feature/probelauf`, mit einem **Draft-PR** „PROBELAUF – nicht mergen“.
+3. Während er läuft, du (Prüfpunkte P8/P9):
+   - Windows: `.\scripts\android.ps1 -Branch feature/probelauf` → Android Studio → Handy wählen → Run → dunkle App startet.
+   - VM: `npm run docs:serve` → Windows-Browser `http://localhost:8000` → Doku sichtbar.
+4. Bericht lesen: `tickets/PROBELAUF.local.md`. Alles ok? Sonst Skills/Tickets korrigieren (Branch `setup/fix-…` + PR) und
+   den Probelauf wiederholen.
+5. **Aufräumen** (wichtig, damit der Marathon sauber startet):
+   - GitHub: Draft-PR **schliessen** (nicht mergen), Branch `feature/probelauf` löschen.
+   - VM: `git switch main && git pull --ff-only && git branch -D feature/probelauf && git clean -fdx`
+     (`clean -fdx` entfernt alles Ungetrackte inkl. `node_modules`, `.venv-docs` und der lokalen Protokolle).
+   - Windows: `git switch main && git branch -D feature/probelauf && git clean -fdx`.
+
 ## Täglicher Ablauf
 
 ### Agents arbeiten lassen (VM)
 Agent **planner** wählen und schreiben:
-> Arbeite die Tickets laut .kilo/rules/30-workflow.md ab. Starte mit dem ersten startbaren Ticket.
+> Start – arbeite die Tickets laut .kilo/rules/30-workflow.md ab.
+
+Das Wort **`Start`** setzt T+0:00 für die Meilensteine. **Lies vorher `MEILENSTEINE.md`** – dort stehen deine
+Fristen (PR-Review ≤ 30 Min, Blockaden ≤ 20 Min, Stand-Check alle 2 h …) und die Meilensteine M0–M8. Der Planner
+erinnert dich, wenn du eine Frist reisst, und alles landet im Protokoll für den Abschlussbericht.
+
+Weitere Befehle an den Planner: `weiter`, `Stand-Check`, `Stand-Check: im Plan`, `Korrigiere PR T<nr>: …`,
+`T<nr> zurückstellen`, `Firmware: …`, `Pause 20`, `Notfall: …`.
 
 **So läuft es mit PRs:** Pro Ticket legt der Planner `feature/T<nr>-…` an, lässt Coder/Reviewer/Tester arbeiten,
 committet, pusht und eröffnet einen PR gegen `main`. Hängt das nächste Ticket von einem noch nicht gemergten PR ab,
@@ -90,7 +117,8 @@ Review von Hand: `@reviewer Prüfe Ticket tickets/T10-screen-kontakte.md`.
 ### Im Browser ansehen (VM → Windows-Browser)
 `npm start` auf der VM. VS Code leitet den Port automatisch weiter → unter Windows `http://localhost:4200` öffnen.
 Mit F12 → Gerätesymbol auf Handy-Grösse stellen. Mock steuern in der Browser-Konsole:
-`ogMock.receive('Anna Meier', 'Hallo')`, `ogMock.completeShowing()`, `ogMock.drop()`, `ogMock.restore()`, `ogMock.failNext()`.
+`ogMock.receive('Anna Meier', 'Hallo')`, `ogMock.receiveLocation('Anna Meier')`, `ogMock.completeShowing()`, `ogMock.drop()`,
+`ogMock.restore()`, `ogMock.failNext()`.
 Onboarding/Leerzustand testen: `localStorage.setItem('og.noseed','1')` und neu laden (zurück: `removeItem`).
 
 ### Aufs Handy (Windows)
@@ -119,6 +147,36 @@ dann einmal unter Windows bauen und schauen, ob es kompiliert.
 *Launcher Icons (Adaptive and Legacy)*: Foreground = `offgrid-mark.svg` (Resize ~80 %), Background = Farbe `#0F1115`.
 Danach unter Windows auf einem eigenen Branch committen (`git switch -c feature/app-icon`, `git add -A`, `git commit`,
 `git push -u origin feature/app-icon`) und auf GitHub einen PR öffnen und mergen.
+
+## Doku-Website und Checks (ab T21)
+
+**Einmalig auf der VM:** `python3 --version` (≥ 3.10) und `sudo apt install python3-venv`, falls `venv` fehlt.
+Nach dem Merge von T21: `npm run docs:install`.
+
+**Einmalig auf GitHub** (Repo `OffGridCH/app`, öffentlich, Free-Plan reicht):
+1. *Settings → Pages → Build and deployment → Source:* **GitHub Actions**.
+2. *Settings → Rules/Branches* → Regel für `main` ergänzen: **Require status checks to pass** mit den Checks
+   `app-checks` und `docs-check` (erscheinen in der Liste, sobald der erste PR nach T21 gelaufen ist).
+3. Beim ersten Lauf von „Doku veröffentlichen“ ggf. unter *Settings → Environments → github-pages* erlauben,
+   dass `main` deployen darf (ist normalerweise schon so eingestellt).
+
+**Ansehen:**
+- Live nach jedem Merge: `https://offgridch.github.io/app/`
+- Lokal während der Arbeit: `npm run docs:serve` auf der VM → unter Windows `http://localhost:8000`.
+
+**Ablauf:** Nach dem Tester schreibt der `documenter` die Doku für das Ticket in denselben PR. Im PR siehst du Code und
+Doku zusammen; die Checks `app-checks` und `docs-check` müssen grün sein, bevor du mergen kannst.
+Ist ein Check rot, markiert der Planner das Ticket als `blockiert` („CI rot“). Dann z. B. `Korrigiere PR T07: CI rot`.
+
+## Standort und Karten
+Die App hat keine eigene Karte (ohne Internet keine Kartenkacheln). Sie zeigt Entfernung und Richtung und übergibt die
+Koordinaten an eine Karten-App. Damit das im Gelände geht: auf beiden Test-Handys eine **Offline-Karten-App**
+(z. B. Organic Maps oder OsmAnd) installieren und das Gebiet **vorher** herunterladen.
+
+## Optionale Tickets freigeben
+T19 (Live-Standort), T16 (Hintergrund) und T20 (Gruppenchat) stehen auf `blockiert`. Freigeben: in
+`tickets/STATUS.local.md` den Status auf `offen` setzen und dem Planner `weiter` schreiben. Empfohlene Reihenfolge:
+T19 → T16 → T20 (Gruppenchat ganz am Schluss).
 
 ## Was die Agents nicht können
 - Firmware/Antenne: Ohne zwei Antennen mit Firmware ist der echte Funktest (T15) nicht möglich. Bis dahin läuft alles mit Mock.

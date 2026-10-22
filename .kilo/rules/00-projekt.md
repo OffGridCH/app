@@ -24,6 +24,9 @@
 | Lint | `npm run lint` |
 | Tests einmal, headless | `npm run test:ci` |
 | Produktions-Build | `npm run build` |
+| Alle App-Checks (wie CI) | `npm run check` |
+| Doku einmalig einrichten | `npm run docs:install` |
+| Doku bauen (wie CI) / ansehen | `npm run docs:build` / `npm run docs:serve` (Port 8000) |
 | Android synchronisieren | `npx cap sync android` |
 
 ## Ordner (Kurzfassung – Details im Skill `offgrid-architecture`)

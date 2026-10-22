@@ -11,7 +11,8 @@ Prüfe jeden Punkt. Jeder Verstoss ist ein Mangel mit `Datei:Zeile`, Punkt-Numme
 - A1 Nur Dateien in den im Ticket genannten Bereichen geändert.
 - A2 Jedes Akzeptanzkriterium ist sichtbar erfüllt (einzeln abhaken).
 - A3 Nichts umgesetzt, was nicht im Ticket steht (keine Extra-Features, keine Umbenennungen).
-- A4 Keine Änderungen an `.kilo/`, `docs/`, `tickets/`, `scripts/`, `AGENTS.md`, `kilo.jsonc`, `LIES-MICH.md`.
+- A4 Keine Änderungen an `.kilo/`, `docs/`, `tickets/`, `scripts/`, `tools/`, `MEILENSTEINE.md`, `.github/`, `doku/`, `mkdocs.yml`, `requirements-docs.txt`,
+  `AGENTS.md`, `kilo.jsonc`, `LIES-MICH.md` (Ausnahme: Ticket T21).
 - A5 Keine neuen Pakete ausser „Erlaubte Pakete“ (Skill `offgrid-architecture`) – `package.json` diffen.
 
 ## B. Architektur

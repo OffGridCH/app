@@ -15,7 +15,9 @@ Grundlage ist das ERD aus der Planung (contacts, messages, coordinates). Die ver
 | `messages.read_at` | – | `TEXT NULL` | Ungelesen-Zähler |
 | `handshakes` | – | neue Tabelle | Handshake überlebt App-Neustart, „Schlüssel ausstehend“ in der Liste |
 | `settings` | – | neue Tabelle (key/value) | Anzeigename, Install-ID, Schalter |
-| `coordinates` | wie ERD | unverändert, im MVP ungenutzt | Standort ist nicht im MVP |
+| `messages.kind` | – | `TEXT 'text'/'location'` | Standort ist eine Nachricht mit Zustellstatus |
+| `coordinates` | wie ERD | + `message_id`, `accuracy`, `share_id`, `share_until`; `latitude`/`longitude`/`recorded_at` Pflicht; `context` = `'einmal'`/`'live'` | Standort senden/empfangen, Genauigkeit anzeigen, Live-Standort (optional) |
+| `groups`, `group_members`, `group_messages` | – | neue Tabellen (Migration v2, nur optionales T20) | Gruppenchat |
 
 Schlüssel: `CHAR(32)` = 16 Zufallsbytes als Hex → AES-128-GCM.
 `sending_key` = damit verschlüssle ich an den Kontakt, `receiving_key` = damit verschlüsselt der Kontakt an mich.

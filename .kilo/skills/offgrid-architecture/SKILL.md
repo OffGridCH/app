@@ -22,7 +22,15 @@ Zusätzlich zu dem, was `ionic start` erzeugt:
 | `@capawesome/capacitor-file-picker` | Import | T14 |
 | `@capacitor/status-bar`, `@capacitor/splash-screen` | Systemleisten | T00 |
 | `@capacitor/app` | App wieder im Vordergrund → Antenne neu verbinden, falls getrennt | T00 (Nutzung T06) |
+| `@capacitor/geolocation` | Eigener Standort (GPS, offline) | T17 |
+| `@capacitor/clipboard` | Koordinaten kopieren | T18 |
+| `@capacitor/app-launcher` | Standort in Karten-App öffnen (`geo:`-Link) | T18 |
 | USB-Serial: **lokales Capacitor-Plugin** `UsbSerial` (siehe Skill `offgrid-antenna-protocol`) mit Gradle-Dependency `com.github.mik3y:usb-serial-for-android` | Antenne | T06 |
+
+`playwright` (dev, nur für `tools/screens.mjs`, T21).
+Python (nur Doku, nicht Teil der App): `mkdocs-material` laut `requirements-docs.txt` in `.venv-docs/` (T21).
+GitHub Actions (nur T21): `actions/checkout@v4`, `actions/setup-node@v4`, `actions/setup-python@v5`,
+`actions/upload-pages-artifact@v3`, `actions/deploy-pages@v4`.
 
 Alles andere ist verboten. Kryptografie nur über **WebCrypto** (`crypto.subtle`, `crypto.getRandomValues`),
 UUIDs über `crypto.randomUUID()`.
@@ -54,6 +62,8 @@ src/
                              handshake-frame-handler.ts (Token HANDSHAKE_FRAME_HANDLER)
       handshake/             handshake.service.ts, scanner.ts (QR-Scanner-Plugin gekapselt)
       backup/                backup.service.ts, file-io.ts (Datei wählen/speichern, nativ + Browser)
+      location/              geo.ts (reine Funktionen), location.service.ts, maps.ts (Karten-App/Kopieren) – Skill offgrid-location
+      groups/                group.service.ts (nur T20, optional) – Skill offgrid-groups
     ui/                      je Komponente ein Ordner: button/ (og-button + og-link-button), icon/, icon-button/, topbar/,
                              section-label/, card/, info-row/, avatar/, signal-bars/, status-dot/, badge/,
                              banner/ (og-banner + og-banner-action + og-note), step-list/, text-field/,
@@ -63,7 +73,9 @@ src/
       name/name.page.ts
       kontakte/kontakte.page.ts
       handshake/handshake.page.ts, kontakt-benennen.page.ts
-      chat/chat.page.ts
+      chat/chat.page.ts, location-sheet.component.ts (T18)
+      standort/standort.page.ts (T18)
+      gruppe/gruppe-neu.page.ts, gruppe-chat.page.ts (nur T20, optional)
       einstellungen/einstellungen.page.ts, export.page.ts, import.page.ts
   theme/ tokens.scss, typography.scss, global.scss
   testing/ Test-Helfer (nur Tester)
@@ -71,6 +83,11 @@ src/
   environments/         environment.ts / environment.prod.ts vom Starter (+ `version`, T13)
   index.html            lang="de", Titel „OffGrid“ (T00)
 scripts/android.ps1    Windows-Skript für den Menschen (nicht ändern)
+doku/                  MkDocs-Quellen der Frontend-Doku (Skill offgrid-docs)
+tools/screens.mjs      Playwright-Screenshots für die Doku (nicht ändern)
+MEILENSTEINE.md        Zeitplan und Wächter-Regeln für den Menschen (nicht ändern)
+mkdocs.yml, requirements-docs.txt   Doku-Konfiguration (T21)
+.github/workflows/     ci.yml (Checks), pages.yml (Doku veröffentlichen) – T21
 android/app/src/main/java/…/UsbSerialPlugin.java   lokales Capacitor-Plugin (T06)
 ```
 
@@ -84,7 +101,7 @@ In `app.config.ts`:
 // damit MemoryDatabaseService und die App DIESELBEN Instanzen benutzen:
 { provide: DatabaseService, useExisting: isNative() ? SqliteDatabaseService : MemoryDatabaseService },
 { provide: ContactRepository, useExisting: isNative() ? SqliteContactRepository : MemoryContactRepository },
-// gleich für MessageRepository, HandshakeRepository, SettingsRepository
+// gleich für MessageRepository, CoordinateRepository, HandshakeRepository, SettingsRepository
 { provide: HANDSHAKE_FRAME_HANDLER, useExisting: HandshakeService },   // ab T08
 ```
 
@@ -120,14 +137,17 @@ Alle Services `@Injectable({ providedIn: 'root' })` ausser wo oben anders. Öffe
 - `contacts: Signal<ContactListItem[]>` – sortiert nach letzter Nachricht absteigend; Kontakte ohne Nachricht nach `created_at`.
 - `counts: Signal<{ contacts: number; messages: number }>`
 - `unreadCount(contactId): Signal<number>`
-- `messages(contactId): Signal<Message[]>` – aufsteigend nach `sent_at`.
+- `messages(contactId): Signal<MessageView[]>` – aufsteigend nach `sent_at`, jede Nachricht mit ihrer aktuellsten
+  Koordinate (`location`, sonst `null`) aus `CoordinateRepository.latestForMessages`.
 - `maxContentBytes: Signal<number>` – laut Skill `offgrid-antenna-protocol` §5
 - `send(contactId, text): Promise<void>`, `retry(messageId): Promise<void>`, `markRead(contactId): void`
+- `sendLocation(contactId, fix: GeoFix): Promise<void>` (ab T17) – Standort-Nachricht, Details Skill `offgrid-location`
 - `renameContact(id, displayName, firstName, lastName): Promise<void>`, `deleteContact(id): Promise<void>`,
   `deleteAll(): Promise<void>` (über `DatabaseService.deleteAllUserData()`), `reload(): Promise<void>`
 - Darf **nicht** `HandshakeService` injizieren, nur das Token `HANDSHAKE_FRAME_HANDLER`
   (`InjectionToken<{ onFrame(bytes: Uint8Array, rssi: number): Promise<void> }>`, Default-Factory = no-op).
-- Verarbeitet eingehende Frames (`msg`, `ack`) und leitet `hs`/`hsa` an `HandshakeService` weiter.
+- Verarbeitet eingehende Frames (`msg`, `ack`, ab T17 `loc`) und leitet `hs`/`hsa` an `HandshakeService` weiter
+  (ab T20 `gki`/`gmsg` an `GroupService` über das Token `GROUP_FRAME_HANDLER`, gleiches Muster).
 - Leert die Warteschlange (`queued`) in Reihenfolge `sent_at`, sobald `AntennaPort.state` auf `ready` wechselt.
 
 ### HandshakeService – Details im Skill `offgrid-crypto-handshake`
@@ -147,6 +167,11 @@ Alle Services `@Injectable({ providedIn: 'root' })` ausser wo oben anders. Öffe
 - `import(fileText: string, password: string): Promise<void>`
 - `error: Signal<BackupErrorCode | null>`
 
+### LocationService (ab T17) – Details im Skill `offgrid-location`
+- `myFix: Signal<GeoFix | null>`, `locating: Signal<boolean>`, `error: Signal<LocationErrorCode | null>`
+- `locate(): Promise<GeoFix | null>`
+- `isFresh(fix, now): boolean` (≤ 10 min alt)
+
 ### KeyPatternService
 - `forContact(contact): Promise<boolean[]>`, `forInstall(installId): Promise<boolean[]>` (mit Cache pro Eingabe)
 
@@ -161,11 +186,14 @@ Alle Services `@Injectable({ providedIn: 'root' })` ausser wo oben anders. Öffe
 | `kontakte/neu` | HandshakePage | Query `?tab=scan` öffnet Tab „Code scannen“ |
 | `kontakte/neu/fertig/:contactId` | KontaktBenennenPage | |
 | `chat/:contactId` | ChatPage | |
+| `chat/:contactId/standort/:messageId` | StandortPage | ab T18 |
+| `gruppe/neu` | GruppeNeuPage | nur T20 (optional) |
+| `gruppe/:groupId` | GruppeChatPage | nur T20 (optional) |
 | `einstellungen` | EinstellungenPage | |
 | `einstellungen/export` | ExportPage | |
 | `einstellungen/import` | ImportPage | |
 
-Guard `onboardingGuard` (funktional) auf `kontakte`, `chat/*`, `einstellungen*`, `kontakte/neu*`:
+Guard `onboardingGuard` (funktional) auf `kontakte`, `chat/*`, `einstellungen*`, `kontakte/neu*`, `gruppe/*`:
 wenn `SettingsService.onboardingDone()` false → `UrlTree` auf `verbinden`.
 
 ## 6. Start (`AppStartService.init()`, aufgerufen in `AppComponent`)
@@ -189,11 +217,19 @@ export interface Contact {
   firstName: string | null; lastName: string | null; handshakeAt: string;
   lastRssi: number | null; lastSeenAt: string | null; createdAt: string; updatedAt: string | null;
 }
+export type MessageKind = 'text' | 'location';
 export interface Message {
-  id: string; contactId: string; wireId: string; content: string; direction: Direction;
+  id: string; contactId: string; wireId: string; content: string; direction: Direction; kind: MessageKind;
   sentAt: string; status: MessageStatus; rssi: number | null; readAt: string | null;
   createdAt: string; updatedAt: string | null;
 }
+export interface Coordinate {
+  id: string; contactId: string; messageId: string | null; latitude: number; longitude: number;
+  accuracy: number | null; context: 'einmal' | 'live'; shareId: string | null; shareUntil: string | null;
+  recordedAt: string; createdAt: string; updatedAt: string | null;
+}
+export interface MessageView extends Message { location: Coordinate | null; }
+export interface GeoFix { latitude: number; longitude: number; accuracy: number; at: string; }
 export interface ContactListItem {
   contact: Contact; lastMessage: Message | null; unread: number; signalLevel: 0 | 1 | 2 | 3 | 4;
 }
@@ -208,7 +244,8 @@ export interface Handshake {
 export type SettingsKey = 'install_id' | 'display_name' | 'onboarding_done' | 'bg_receive' | 'vibrate';
 
 // antenna.ts – AntennaState, AntennaInfo, AntennaEvent, AntennaErrorCode laut Skill offgrid-antenna-protocol §4
-// frame.ts-Typ (in models/antenna.ts): export type FrameType = 'msg' | 'ack' | 'hs' | 'hsa';
+// frame.ts-Typ (in models/antenna.ts) – jeder Wert wird erst im genannten Ticket ergänzt:
+// export type FrameType = 'msg' | 'ack' | 'hs' | 'hsa'   (T00)  | 'loc' (T17)  | 'gki' | 'gmsg' (T20);
 ```
 
 Alle Zeitstempel sind ISO-8601-Strings in UTC (`new Date().toISOString()`).
