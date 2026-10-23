@@ -46,7 +46,7 @@ Darunter Trennlinie 1px `--og-line`, margin `6px 20px 8px`.
 | `antenna-not-ready` | „Antenne nicht verbunden. Der Schlüssel wird gesendet, sobald sie verbunden ist.“ |
 | `scanner-unavailable` | „Der QR-Scanner ist auf diesem Handy nicht verfügbar.“ |
 | `scan-cancelled` | (kein Text, einfach zurück zum Tab) |
-| `name-invalid` | „Der Name muss 1 bis 40 Zeichen lang sein.“ |
+| `name-invalid` | „Der Name darf höchstens 24 Bytes haben.“ |
 | `password-too-short` | „Mindestens 8 Zeichen.“ |
 | `password-mismatch` | „Die Passwörter stimmen nicht überein.“ |
 | `wrong-password` | „Falsches Passwort oder beschädigte Datei.“ |
@@ -59,6 +59,9 @@ Darunter Trennlinie 1px `--og-line`, margin `6px 20px 8px`.
 
 Typ für Formularfehler (in `core/models/errors.ts`): `FormErrorCode = 'name-invalid' | 'password-too-short' | 'password-mismatch'`.
 Fehler unter Formularfeldern: Stil `help` in `--og-danger`. Fehler auf Seitenebene: `og-banner` bzw. `og-note`.
+
+Hinweis Anzeigename: `maxlength` zählt Zeichen, die Gültigkeitsprüfung `isValidDisplayName` zählt UTF-8-Bytes.
+Bei Umlauten sind deshalb weniger Zeichen erlaubt; der Fehlertext `name-invalid` bleibt byte-basiert.
 
 ---
 
@@ -90,7 +93,7 @@ Aufbau: kein Hero. padding-top 56.
 - Section-Label `--og-accent`: „SCHRITT 2 VON 2“
 - `<h1>` `display`: „Wie heisst du?“
 - `body-2`: „Dieser Name wird beim Hinzufügen an deine Kontakte übertragen.“
-- `og-card padded` mit `og-text-field` id `dn`, Label „Anzeigename“, maxlength 40, Vorschlag leer.
+- `og-card padded` mit `og-text-field` id `dn`, Label „Anzeigename“, maxlength 24, Vorschlag leer.
 - Footer: `og-button primary` „Los gehts“ – aktiv, wenn `isValidDisplayName(name)`. Speichert Name (getrimmt),
   `completeOnboarding()`, navigiert `replaceUrl` zu `/kontakte`.
 
@@ -156,7 +159,7 @@ Aufbau:
    - `<h1>` `hero`: „Schlüssel ausgetauscht“
    - `body-2` max-width 300: „Vergleicht das Muster auf beiden Handys. Sieht es gleich aus, hat alles geklappt.“
 Beim Öffnen: `HandshakeService.clearCompleted()`. Kontakt fehlt → `/kontakte` (replaceUrl).
-2. `og-card padded` (margin-top 32): `og-text-field` „Anzeigename“ (vorbelegt mit `display_name`, maxlength 40,
+2. `og-card padded` (margin-top 32): `og-text-field` „Anzeigename“ (vorbelegt mit `display_name`, maxlength 24,
    Fehler `name-invalid` wenn nicht `isValidDisplayName`); Vorname/Nachname maxlength 100;
    Grid 2 Spalten gap 10: „Vorname“ (optional), „Nachname“ (optional), Platzhalter „Vorname“/„Nachname“.
 3. Footer gap 10:
@@ -214,7 +217,7 @@ Beim Öffnen und bei neuen Nachrichten: `markRead(contactId)`.
 Seite scrollt (`ion-content`), padding-bottom 32.
 1. `og-topbar` „Einstellungen“, back `/kontakte`.
 2. Block zentriert padding `20px 16px 8px`, gap 12: `og-avatar 72` (eigenes Muster) + Meta-Label „DEIN MUSTER“ (letter-spacing 0.08em).
-3. `og-section-label card` „PROFIL“ · `og-card padded` (gap 8): `og-text-field` „Anzeigename“ (maxlength 40) + Hint
+3. `og-section-label card` „PROFIL“ · `og-card padded` (gap 8): `og-text-field` „Anzeigename“ (maxlength 24) + Hint
    „Wird beim Hinzufügen an neue Kontakte übertragen.“ Bei `blurred`: wenn `isValidDisplayName` → speichern, sonst Fehler `name-invalid`.
 4. „ANTENNE“ · `og-card`:
    - Zeile (Min-Höhe 60, gap 12): `og-status-dot` + „Verbunden“ / „Getrennt“ (16px) + rechts `og-signal-bars md`.

@@ -150,11 +150,12 @@ Frames mit `version !== 1`, unbekanntem `type` oder Länge < 33 Bytes werden ver
 `encodeFrame` wirft `Error('too-long')`, wenn der fertige Frame länger als `max` ist (max als 4. Parameter, Default 222).
 
 **Längen (`core/messaging/limits.ts`):**
-- `contentBytes(text) = new TextEncoder().encode(JSON.stringify(text)).length - 2` (zählt JSON-Escapes mit).
-- `maxContentBytes(max) = Math.min(180, max - 69)` (69 = 33 Frame-Overhead + 36 JSON-Hülle ohne Text).
+- `contentBytes(text) = new TextEncoder().encode(text).length` (UTF-8-Bytes des Textes, ohne JSON-Escapes).
+- `maxContentBytes(max) = Math.min(83, max - 33)` (83 = Geräte-Textlimit `limits.max_text_bytes`,
+  OffGrid Link §7.5; 33 = Frame-Overhead: 1 Byte Version/Typ + 4 Byte Empfänger-Tag + 12 Byte IV + 16 Byte Auth-Tag).
   `MessagingService.maxContentBytes` ist das als `computed` aus `info().max ?? 222`.
-- Anzeigename: höchstens 40 Zeichen **und** `contentBytes(name) <= 60` (damit `hs`-Frames immer passen).
-  Prüffunktion `isValidDisplayName(name)` (trim, 1–40 Zeichen, ≤ 60 Bytes).
+- Anzeigename: höchstens 24 UTF-8-Bytes (Gerätevertrag OffGrid Link §7.2/§7.3 für `sec.provision`/`id.set_name`).
+  Prüffunktion `isValidDisplayName(name)` (trim, 1–24 UTF-8-Bytes).
 
 ## 6. Empfangen und Senden (in `MessagingService`)
 

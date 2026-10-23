@@ -54,7 +54,7 @@ Damit ist WebCrypto in allen Tests echt vorhanden – **nicht** mocken. Fehlt `s
 | `core/crypto/hex.spec.ts`, `base64.spec.ts` | Hin- und Rückweg, leere Eingabe |
 | `core/crypto/crypto.service.spec.ts` | `newKey` 32 Hex; `encrypt`→`decrypt` gleich; falscher Schlüssel wirft; `tag` 8 Hex und stabil |
 | `core/messaging/frame.spec.ts` | encode→peek (type, tag) →decode für alle Typen (ab T17 inkl. `loc`); `too-long` bei zu grossem Frame; zu kurzer Frame → `peek` null; falsche Version verworfen |
-| `core/messaging/limits.spec.ts` | `contentBytes` zählt Umlaute (2 Bytes) und `"` (2 Bytes); `maxContentBytes(222)` = 153, `(255)` = 180; `isValidDisplayName`: leer/41 Zeichen/zu viele Bytes → false |
+| `core/messaging/limits.spec.ts` | `contentBytes` zählt UTF-8-Bytes ohne JSON-Escapes (Umlaut 2 Bytes, `"` 1 Byte); `maxContentBytes(222)` = 83, `(255)` = 83, `(100)` = 67; `isValidDisplayName`: leer/25 Bytes/zu viele Bytes → false, 24 Bytes → true |
 | `core/format/radio.spec.ts` | `formatMHz(868100000)` = „868“ |
 | `core/location/geo.spec.ts` (T17) | Distanz (47.05021, 8.30934)→(47.37689, 8.54169) = 40 342 m ±100; (47.05021, 8.30934)→(47.05812, 8.31998) = 1193 m ±5 und Kurs 42.5° ±0.5 (= Demo „1.2 km Nordosten“); Distanz gleicher Punkt = 0; Kurs nach Norden 0, Osten ≈ 90; `compassName` 22.4 → „Norden“, 22.6 → „Nordosten“, 359 → „Norden“; `formatDistance` 849 → „850 m“, 996 → „1.0 km“, 1234 → „1.2 km“, 9990 → „10 km“, 12345 → „12 km“; `formatCoordinate(-33.9, -70.6)` mit „S“ und „W“; `formatAgo` Grenzen |
 | `core/location/location.service.spec.ts` (T17) | Geolocation gemockt: Erfolg setzt `myFix`; Ablehnung → `location-denied`; `isFresh` 10-min-Grenze |

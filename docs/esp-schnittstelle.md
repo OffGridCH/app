@@ -60,7 +60,9 @@ oder nur als `{"t":"log","msg":"…"}`.
 
 | Frage | Antwort |
 |---|---|
-| Max. LoRa-Payload in Bytes (`max`) | |
+| Max. LoRa-Payload in Bytes (`max`) | 222 |
+| Max. Anzeigename in UTF-8-Bytes (`sec.provision`, `id.set_name`) | 24 |
+| Max. Textinhalt in Bytes (`limits.max_text_bytes`) | 83 |
 | Spreading Factor / Bandbreite / Coding Rate | |
 | Duty-Cycle-Begrenzung (868 MHz: 1 %) – wie gehandhabt? | |
 | USB-Chip / CDC? Reset bei DTR? | |
