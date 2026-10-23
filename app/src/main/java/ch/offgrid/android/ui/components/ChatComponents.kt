@@ -46,7 +46,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -66,6 +68,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -353,6 +357,11 @@ fun Composer(
     // over-long text dims it.
     val sendAlpha by animateFloatAsState(if (over) 0.4f else 1f, tween(150), label = "sendAlpha")
     val counterColor by animateColorAsState(if (over) Og.danger else Og.text3, tween(150), label = "counter")
+    // The buttons line up with the input, so they sit above the counter: 5 dp gap plus the counter's
+    // height (21 dp at 1x like the HTML; more when large fonts wrap it).
+    val density = LocalDensity.current
+    var counterHeight by remember { mutableIntStateOf(with(density) { 16.dp.roundToPx() }) }
+    val buttonBottom = with(density) { counterHeight.toDp() } + 5.dp
     Column(Modifier.fillMaxWidth().background(Og.bar)) {
         HorizontalDivider(thickness = 1.dp, color = Og.line)
         Row(
@@ -362,7 +371,7 @@ fun Composer(
         ) {
             if (onLocation != null) {
                 Box(
-                    Modifier.padding(bottom = 20.dp).size(48.dp).clip(RoundedCornerShape(16.dp)).background(Og.surface)
+                    Modifier.padding(bottom = buttonBottom).size(48.dp).clip(RoundedCornerShape(16.dp)).background(Og.surface)
                         .border(1.dp, Og.border, RoundedCornerShape(16.dp)).clickable(role = Role.Button, onClick = onLocation)
                         .semantics { contentDescription = "Standort senden" },
                     contentAlignment = Alignment.Center,
@@ -392,11 +401,11 @@ fun Composer(
                 Text(
                     "$usedBytes / $maxBytes Zeichen pro Funkspruch",
                     style = OgType.meta.copy(color = counterColor),
-                    modifier = Modifier.padding(start = 4.dp),
+                    modifier = Modifier.padding(start = 4.dp).onSizeChanged { counterHeight = it.height },
                 )
             }
             Box(
-                Modifier.padding(bottom = 20.dp).size(48.dp).alpha(sendAlpha).clip(RoundedCornerShape(16.dp)).background(Og.accent)
+                Modifier.padding(bottom = buttonBottom).size(48.dp).alpha(sendAlpha).clip(RoundedCornerShape(16.dp)).background(Og.accent)
                     .clickable(enabled = canSend, role = Role.Button, onClick = onSend)
                     .semantics { contentDescription = sendLabel },
                 contentAlignment = Alignment.Center,

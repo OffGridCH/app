@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -131,22 +133,30 @@ fun ContactsScreen(nav: NavHostController) {
     }
 }
 
-/** "● Antenne verbunden · USB-C · 868 MHz", tappable to the connect screen. */
+/**
+ * "● Antenne verbunden · USB-C · 868 MHz", tappable to the connect screen. With large fonts the
+ * meta part moves to its own line as a whole instead of breaking word by word.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AntennaStatusLine(ready: Boolean, kind: LinkKind, freqMhz: Double?, onClick: () -> Unit) {
     Row(
         Modifier.padding(horizontal = 12.dp).fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 8.dp),
+            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         StatusDot(ready)
-        Text(if (ready) "Antenne verbunden" else "Antenne getrennt", style = OgType.preview.copy(color = Og.text2))
-        val transport = if (kind == LinkKind.SIMULATED) "Simuliert" else "USB-C"
-        Text(
-            if (ready) "· $transport · ${freqMhz?.let(Formats::band) ?: "868"} MHz" else "· Tippen zum Verbinden",
-            style = OgType.meta,
-        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.Center) {
+            Text(if (ready) "Antenne verbunden" else "Antenne getrennt", style = OgType.preview.copy(color = Og.text2),
+                modifier = Modifier.align(Alignment.CenterVertically))
+            val transport = if (kind == LinkKind.SIMULATED) "Simuliert" else "USB-C"
+            Text(
+                if (ready) "· $transport · ${freqMhz?.let(Formats::band) ?: "868"} MHz" else "· Tippen zum Verbinden",
+                style = OgType.meta,
+                modifier = Modifier.align(Alignment.CenterVertically),
+            )
+        }
     }
 }
 
