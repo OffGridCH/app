@@ -40,19 +40,25 @@ enum class OgIcon(val size: Dp, val stroke: Float, vararg val paths: String) {
     Users(20.dp, 2f, circle(9f, 8f, 3.5f), "M2.5 20a6.5 6.5 0 0 1 13 0", "M16 4.5a3.5 3.5 0 0 1 0 7", "M18 14.5a6.5 6.5 0 0 1 3.5 5.5"),
     ;
 
-    val vector: ImageVector by lazy {
-        ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
-            paths.forEach { d ->
-                addPath(
-                    pathData = PathParser().parsePathString(d).toNodes(),
-                    stroke = SolidColor(Color.Black),
-                    strokeLineWidth = stroke,
-                    strokeLineCap = StrokeCap.Round,
-                    strokeLineJoin = StrokeJoin.Round,
-                )
-            }
-        }.build()
-    }
+    val vector: ImageVector by lazy { build(stroke) }
+
+    private val variants = HashMap<Float, ImageVector>()
+
+    /** The same icon with another stroke width; a few places in the design draw an icon bolder. */
+    fun vector(strokeWidth: Float): ImageVector =
+        if (strokeWidth == stroke) vector else synchronized(variants) { variants.getOrPut(strokeWidth) { build(strokeWidth) } }
+
+    private fun build(strokeWidth: Float) = ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
+        paths.forEach { d ->
+            addPath(
+                pathData = PathParser().parsePathString(d).toNodes(),
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = strokeWidth,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }
+    }.build()
 }
 
 /** Filled direction arrow used in location bubbles. */
@@ -68,6 +74,6 @@ private fun rect(x: Float, y: Float, w: Float, h: Float, r: Float) =
     "M${x + r} ${y}h${w - 2 * r}a$r $r 0 0 1 $r ${r}v${h - 2 * r}a$r $r 0 0 1 ${-r} ${r}h${-(w - 2 * r)}a$r $r 0 0 1 ${-r} ${-r}v${-(h - 2 * r)}a$r $r 0 0 1 $r ${-r}z"
 
 @Composable
-fun OgIconView(icon: OgIcon, tint: Color, modifier: Modifier = Modifier, size: Dp = icon.size) {
-    Icon(imageVector = icon.vector, contentDescription = null, tint = tint, modifier = modifier.size(size))
+fun OgIconView(icon: OgIcon, tint: Color, modifier: Modifier = Modifier, size: Dp = icon.size, strokeWidth: Float = icon.stroke) {
+    Icon(imageVector = icon.vector(strokeWidth), contentDescription = null, tint = tint, modifier = modifier.size(size))
 }

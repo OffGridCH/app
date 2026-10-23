@@ -1,6 +1,7 @@
 package ch.offgrid.android.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -210,16 +211,19 @@ fun SettingsScreen(nav: NavHostController) {
 
 @Composable
 private fun SwitchRow(title: String, help: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+    // The whole row toggles, so TalkBack reads title, help and state as one switch.
     Row(
-        Modifier.fillMaxWidth().heightIn(min = if (help != null) 68.dp else 60.dp).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().heightIn(min = if (help != null) 68.dp else 60.dp)
+            .toggleable(checked, role = Role.Switch, onValueChange = onChange)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(title, style = OgType.body)
             if (help != null) Text(help, style = OgType.help.copy(fontSize = 13.sp))
         }
-        OgSwitch(checked, onChange, title)
+        OgSwitch(checked, onCheckedChange = null)
     }
 }
 

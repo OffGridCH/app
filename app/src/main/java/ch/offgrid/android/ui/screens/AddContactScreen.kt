@@ -100,7 +100,7 @@ fun AddContactScreen(nav: NavHostController, scanTab: Boolean) {
 
     Page {
         OgTopBar("Kontakt hinzufügen", onBack = { nav.back() }, backLabel = "Zurück zu den Kontakten")
-        OgSegmented(listOf("mine" to "Mein Code", "scan" to "Code scannen"), tab) {
+        OgSegmented(listOf("mine" to "Mein Code", "scan" to "Code scannen"), tab, label = "Art des Hinzufügens") {
             tab = it
             app.pairing.clearError()
         }
