@@ -1,32 +1,29 @@
-# T17 – Standort: Kern (GPS, Geo-Funktionen, Funk-Frame)
+# T17 – Standort: Kern (GPS, Geo-Funktionen)
 
-**Abhängig von:** T07
-**Skills:** `offgrid-location` (§1–3), `offgrid-antenna-protocol` (§5, §6, §8), `offgrid-data`, `offgrid-architecture`, `offgrid-testing`
-**Dateien:** `src/app/core/location/geo.ts`, `src/app/core/location/location.service.ts`, `src/app/core/messaging/frame.ts`,
-`src/app/core/messaging/messaging.service.ts`, `src/app/core/antenna/mock-antenna.service.ts`, `src/app/core/antenna/og-mock.d.ts`,
-`src/app/core/models/errors.ts`, `src/app/core/models/antenna.ts` (nur `FrameType` + `'loc'`), `android/app/src/main/AndroidManifest.xml` (nur Standort-Berechtigungen),
-`package.json` (nur `@capacitor/geolocation`), `src/testing/**` (nur Tester)
+**Abhängig von:** T23
+**Skills:** `offgrid-location` (§1–3), `offgrid-antenna-protocol` (§5, §9), `offgrid-data`, `offgrid-architecture`, `offgrid-testing`
+**Dateien:** `src/app/core/location/geo.ts`, `src/app/core/location/location.service.ts`, `src/app/core/models/errors.ts` (nur `LocationErrorCode`),
+`android/app/src/main/AndroidManifest.xml` (nur Standort-Berechtigungen), `package.json` (nur `@capacitor/geolocation`)
 
 ## Ziel
-Standort bestimmen, als `loc`-Frame senden und empfangen, mit Zustellstatus wie bei Text. Noch keine UI.
+Den eigenen Standort bestimmen und Entfernung und Richtung zu einem empfangenen Standort berechnen. Noch keine UI.
+Das Senden und Empfangen von Standort-Nachrichten (`msg.send` mit `type: "geo"`, `msg.received` mit `type: "geo"`, Koordinate speichern) **gibt es schon**
+(`MessagingService.sendLocation` und der Empfang, T23); die App baut keinen Funk-Frame mehr.
 
 ## Umfang
 1. `npm install @capacitor/geolocation`, `npx cap sync android`, Manifest laut Skill §2.
 2. `geo.ts` mit allen Funktionen aus §1.
 3. `LocationService` laut §2 inkl. Demo-Fix im Browser.
-4. `frame.ts`: Typ 5 `loc`.
-5. `MessagingService.sendLocation` und Empfang `loc` laut §3; `messages()` liefert `MessageView` mit `location`;
-   Vorschau-Daten für `kind 'location'` (die Texte setzt die UI).
-6. Mock: `ogMock.receiveLocation(...)`; gesendete `loc`-Frames bekommen `ack`.
+4. Prüfen, dass `MessagingService.sendLocation` mit einem `GeoFix` aus `LocationService` zusammenpasst (`GeoFix` liegt in `core/models/message.ts`); nur bei Lücken ändern.
 
 ## Akzeptanzkriterien
-- [ ] `loc`-Frame exakt laut Protokoll §5 (Feldnamen, 6 Nachkommastellen, ganzzahlige Genauigkeit).
-- [ ] Status-Übergänge für Standort-Nachrichten identisch zu Text (Queued → Sent → Delivered, Failed, Retry).
-- [ ] Browser-Konsole: `ogMock.receiveLocation('Anna Meier')` erzeugt eine Standort-Nachricht mit Koordinate.
+- [ ] Alle Funktionen aus Skill §1 liefern die dort genannten Werte (Pflichttests in `offgrid-testing`).
+- [ ] `LocationService.locate()` setzt `myFix` bzw. den Fehlercode laut Skill §2 (Browser: Demo-Fix nach 600 ms).
+- [ ] Browser-Konsole: `ogMock.receiveLocation('Anna Meier')` erzeugt eine Standort-Nachricht mit Koordinate (funktioniert schon seit T23; hier nur prüfen).
 - [ ] Prüfbefehle grün.
 
 ## Tests
-`geo.spec.ts`, `location.service.spec.ts`, Ergänzungen in `frame.spec.ts` und `messaging.service.spec.ts` laut Skill `offgrid-testing`.
+`geo.spec.ts`, `location.service.spec.ts` laut Skill `offgrid-testing`. Die Tests für `sendLocation` und den Empfang stehen schon in `messaging.service.spec.ts`.
 
 ## Nicht im Umfang
 UI (T18), Live-Standort (T19).

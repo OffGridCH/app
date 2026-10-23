@@ -41,12 +41,12 @@ Jeder Meilenstein hat Bedingungen. „Gemerged“ heisst: PR auf GitHub gemerged
 - **Verfehlt?** T00/T21 haben Vorrang vor allem. Bei > 1 h Verspätung: Ursache im Protokoll, ggf. Setup von Hand reparieren (W4-Notfall).
 
 ### M2 – Bausteine · **T+6:00**
-- [ ] T01, T02, T03, T04, T05 gemerged
+- [ ] T01, T02, T03, T04, T23 gemerged (T23 ersetzt T05, T07 und T08)
 - [ ] Im Browser: App startet mit Demo-Daten, Mock-Antenne wird „bereit“
 - **Verfehlt?** Keine Massnahme ausser Tempo bei W1. Ab 1,5 h Verspätung: T06 (natives USB) ans Ende verschieben – dem Planner `T06 zurückstellen` schreiben.
 
 ### M3 – Kern-Logik · **T+10:00**
-- [ ] T06, T07, T08, T09 gemerged (T06 darf bei Zurückstellung fehlen)
+- [ ] T06, T09 gemerged (T06 darf bei Zurückstellung fehlen)
 - [ ] Onboarding im Browser durchklickbar
 - **Verfehlt?** T19/T16/T20 sind damit gestrichen. Bei > 2 h: T14 (Backup) zurückstellen.
 

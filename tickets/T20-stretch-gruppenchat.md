@@ -3,6 +3,8 @@
 **Abhängig von:** T15
 **Status-Hinweis:** Optional und als **letztes** Ticket. Startet erst, wenn der Mensch es freigibt
 (in `STATUS.local.md` auf `offen` setzen).
+**Offene Entscheidung vor dem Start:** Die Spezifikationen stellen Gruppenchats „out of scope“ für v1; der Skill `offgrid-groups` ist **veraltet** (Funkmodem-Entwurf).
+Zuerst klären, ob Gruppen aus Einzelnachrichten entstehen oder das Ticket entfällt; dann Skill und Ticket neu schreiben.
 **Skills:** `offgrid-groups`, `offgrid-antenna-protocol` (§5, §6), `offgrid-data`, `offgrid-crypto-handshake` (§5), `offgrid-design-system`, `offgrid-screens` (§0, §3, §6),
 `offgrid-architecture`, `offgrid-testing`
 **Dateien:** `src/app/core/groups/`, `src/app/core/data/**` (Migration v2, Group-Repositories), `src/app/core/models/`

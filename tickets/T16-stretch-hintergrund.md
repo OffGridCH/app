@@ -9,7 +9,9 @@ Android beendet bzw. drosselt die App im Hintergrund – dann bricht die USB-Ser
 
 ## Vorschlag (vom Menschen zu entscheiden, dann Ticket präzisieren)
 - Paket `@capawesome-team/capacitor-android-foreground-service` (muss in „Erlaubte Pakete“ ergänzt werden).
-- Bei `bgReceive === true` und Antenne `ready`: Foreground-Service mit dauerhafter Benachrichtigung „OffGrid empfängt Nachrichten“.
+- Bei `bgReceive === true` und Antenne `unlocked`: Foreground-Service mit dauerhafter Benachrichtigung „OffGrid empfängt Nachrichten“.
+- **Heartbeat nötig:** Die Antenne sperrt sich nach 15 s ohne gültige Zeile der App. Der Dienst muss daher auch im Hintergrund alle 5 s `sys.ping` senden
+  (sonst sperrt die Antenne, der Funk geht aus und es kommen keine Nachrichten mehr an).
 - Benachrichtigung bei neuer Nachricht: `@capacitor/local-notifications` (ebenfalls ergänzen).
 
 ## Falls T16 nicht umgesetzt wird

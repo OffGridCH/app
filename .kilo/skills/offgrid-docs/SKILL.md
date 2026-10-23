@@ -81,10 +81,9 @@ doku/
 | T01, T02 | oberflaeche/design-system |
 | T03 | architektur/services, funktionen/nachrichten (Signalstärke, Längen) |
 | T04 | architektur/datenmodell, architektur/services |
-| T05, T06 | funktionen/antenne, protokoll/serial |
+| T06 | funktionen/antenne, protokoll/serial |
 | T23 | funktionen/antenne, funktionen/nachrichten, funktionen/kontakte-handshake, protokoll/serial, protokoll/funk-protokoll, architektur/* (nav: „Funk-Protokoll“ statt „Funk-Frames“) |
-| T07 | funktionen/nachrichten, architektur/services |
-| T08, T11 | funktionen/kontakte-handshake |
+| T11 | funktionen/kontakte-handshake |
 | T09, T10, T12, T13 | oberflaeche/screens |
 | T14 | funktionen/backup |
 | T17, T18, T19 | funktionen/standort, oberflaeche/screens |
