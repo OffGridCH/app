@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -34,10 +35,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ch.offgrid.android.BuildConfig
+import ch.offgrid.android.R
 import ch.offgrid.android.domain.AntennaPhase
 import ch.offgrid.android.link.LinkKind
 import ch.offgrid.android.domain.Settings
@@ -134,7 +137,7 @@ fun ConnectScreen(onNext: (onboardingDone: Boolean) -> Unit) {
 }
 
 /**
- * Hero of `Antenne.dc.html`: three rings around the accent tile. While the app looks for the
+ * Hero of `Antenne.dc.html`: three rings around the antenna. While the app looks for the
  * antenna a ring ripples outwards from the tile; it stays still with reduced motion.
  */
 @Composable
@@ -156,8 +159,8 @@ private fun ConnectHero(searching: Boolean, onDebugLongPress: (() -> Unit)?) {
                 drawCircle(Og.ringAccent.copy(alpha = 1f - t), r, style = Stroke(1.5.dp.toPx()))
             }
         }
-        Box(Modifier.size(84.dp).clip(RoundedCornerShape(28.dp)).background(Og.accent), contentAlignment = Alignment.Center) {
-            OgIconView(OgIcon.Antenna, Og.onAccent, size = 40.dp)
-        }
+        // The real antenna instead of the icon tile: render `icon-upright.png` from
+        // offgrid-antenna-3d at ecf734b, cropped and scaled to 3x of 220 dp.
+        Image(painterResource(R.drawable.antenna_render), contentDescription = null, modifier = Modifier.height(220.dp))
     }
 }
