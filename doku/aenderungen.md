@@ -1,5 +1,20 @@
 # Änderungen
 
+## T01 – UI-Basis 1: Grundkomponenten
+*2026-10-23*
+
+- 13 `og-`-Grundkomponenten liegen unter `src/app/ui/`: Icon, Button, Link-Button, Icon-Button, Topbar,
+  Abschnittstitel, Karte, Info-Zeile, Statuspunkt, Badge, Eingabefeld, Schalter und Segmentumschalter.
+- Alle Komponenten sind Standalone, nutzen OnPush und kommen ohne Services aus; `src/app/ui/index.ts` exportiert
+  sie alle.
+- Farben, Radien und Grössen kommen ausschliesslich aus den Design-Tokens, die Schriften aus den
+  Typografie-Mixins in `src/theme/typography.scss`.
+- `og-button` rendert ein `<button>`, `og-link-button` und `og-icon-button` mit Route ein `<a>`.
+- `og-switch` trägt die Rolle `switch`, `og-segmented` die Rolle `tablist` – beide mit den passenden
+  ARIA-Attributen.
+- Die Zustandskomponenten (Avatar, Signalbalken, Banner, Schrittliste, Nachrichtenblase, Composer, QR)
+  folgen mit T02.
+
 ## T21 – CI-Checks (lokal + GitHub Actions) und Doku-Grundgerüst (MkDocs → GitHub Pages)
 *2026-10-23*
 

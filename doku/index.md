@@ -34,7 +34,8 @@ Hinweis steht, ist im Code dieses Branches vorhanden.
 |---|---|---|
 | Projektgerüst, dunkles Theme, Design-Tokens | fertig | T00 |
 | CI-Checks (Lint, Tests, Build) und Doku-Website | fertig | T21 |
-| UI-Basis-Komponenten (Buttons, Karten, Eingabefelder) | geplant | T01, T02 |
+| UI-Grundkomponenten (Icons, Buttons, Karten, Eingabefeld, Schalter) | fertig | T01 |
+| UI-Zustandskomponenten (Avatar, Signalbalken, Banner, Schrittliste, Blase, Composer, QR) | geplant | T02 |
 | Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level | geplant | T03 |
 | Datenbank, Repositories, App-Start | geplant | T04 |
 | Antennen-Abstraktion, Frame-Codec, Mock-Antenne | geplant | T05 |
