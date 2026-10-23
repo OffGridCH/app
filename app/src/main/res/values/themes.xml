@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.OffGrid" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/og_bg</item>
+        <item name="android:statusBarColor">@color/og_bg</item>
+        <item name="android:navigationBarColor">@color/og_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- The logo is only used on the splash screen (design system section 6). -->
+    <style name="Theme.OffGrid.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/og_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
+        <item name="postSplashScreenTheme">@style/Theme.OffGrid</item>
+    </style>
+</resources>

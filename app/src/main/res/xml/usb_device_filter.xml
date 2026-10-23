@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Silicon Labs CP210x, the USB-UART bridge on the Heltec WiFi LoRa 32 V3 -->
+    <usb-device vendor-id="4292" product-id="60000" />
+    <!-- Espressif native USB (ESP32-S3 boards without a bridge) -->
+    <usb-device vendor-id="12346" />
+    <!-- WCH CH340/CH9102, used on some LoRa boards -->
+    <usb-device vendor-id="6790" />
+</resources>

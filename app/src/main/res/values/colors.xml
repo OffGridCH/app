@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="og_bg">#FF0F1115</color>
+    <color name="og_accent">#FF9DB4FF</color>
+    <color name="og_on_accent">#FF0B1020</color>
+</resources>
