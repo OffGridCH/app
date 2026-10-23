@@ -1,7 +1,14 @@
 package ch.offgrid.android.ui.screens
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,12 +29,17 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ch.offgrid.android.BuildConfig
 import ch.offgrid.android.domain.AntennaPhase
+import ch.offgrid.android.link.LinkKind
 import ch.offgrid.android.domain.Settings
 import ch.offgrid.android.ui.LocalApp
 import ch.offgrid.android.ui.components.ButtonVariant
@@ -39,6 +51,7 @@ import ch.offgrid.android.ui.components.OgNote
 import ch.offgrid.android.ui.components.Step
 import ch.offgrid.android.ui.components.StepList
 import ch.offgrid.android.ui.components.StepState
+import ch.offgrid.android.ui.theme.LocalReducedMotion
 import ch.offgrid.android.ui.theme.Og
 import ch.offgrid.android.ui.theme.OgType
 
@@ -59,15 +72,19 @@ fun ConnectScreen(onNext: (onboardingDone: Boolean) -> Unit) {
     val found = phase == AntennaPhase.DEVICE_FOUND || phase == AntennaPhase.CONNECTING || phase == AntennaPhase.READY
     Page {
         Column(Modifier.weight(1f).verticalScroll(scroll)) {
-            Box(Modifier.fillMaxWidth().height(330.dp).semantics { invisibleToUser() }, contentAlignment = Alignment.Center) {
-                Box(Modifier.size(300.dp).border(1.dp, Og.line, CircleShape))
-                Box(Modifier.size(220.dp).border(1.dp, Og.borderMuted, CircleShape))
-                // The design PNG shows this ring brighter than the accent-soft token, so accent at 35 %.
-                Box(Modifier.size(140.dp).border(1.5.dp, Og.accent.copy(alpha = 0.35f), CircleShape))
-                Box(Modifier.size(84.dp).clip(RoundedCornerShape(28.dp)).background(Og.accent), contentAlignment = Alignment.Center) {
-                    OgIconView(OgIcon.Antenna, Og.onAccent, size = 40.dp)
-                }
-            }
+            ConnectHero(
+                searching = phase == AntennaPhase.SEARCHING || phase == AntennaPhase.DEVICE_FOUND || phase == AntennaPhase.CONNECTING,
+                // Debug builds: a long press switches to the simulated antenna, so a phone without a
+                // Heltec still gets through onboarding.
+                onDebugLongPress = if (BuildConfig.DEBUG) {
+                    {
+                        app.setLinkKind(LinkKind.SIMULATED)
+                        app.antenna.connect()
+                    }
+                } else {
+                    null
+                },
+            )
             Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (onboarded == false) {
                     Text("SCHRITT 1 VON 2", style = OgType.section.copy(color = Og.accent))
@@ -75,7 +92,7 @@ fun ConnectScreen(onNext: (onboardingDone: Boolean) -> Unit) {
                 Text("Antenne anschliessen", style = OgType.display, modifier = Modifier.semantics { heading() })
                 Text(
                     "Verbinde die OffGrid-Antenne per USB-C mit deinem Handy. Danach schreibst du auch ohne Mobilnetz.",
-                    style = OgType.body2,
+                    style = OgType.body2.copy(fontSize = 16.sp),
                 )
             }
             StepList(
@@ -112,6 +129,35 @@ fun ConnectScreen(onNext: (onboardingDone: Boolean) -> Unit) {
             OgButton("Weiter", onClick = { onNext(onboarded == true) }, enabled = state.ready)
             OgButton("Erneut suchen", onClick = { app.antenna.disconnect(); app.antenna.connect() },
                 variant = ButtonVariant.Secondary, enabled = !state.busy)
+        }
+    }
+}
+
+/**
+ * Hero of `Antenne.dc.html`: three rings around the accent tile. While the app looks for the
+ * antenna a ring ripples outwards from the tile; it stays still with reduced motion.
+ */
+@Composable
+private fun ConnectHero(searching: Boolean, onDebugLongPress: (() -> Unit)?) {
+    val reduced = LocalReducedMotion.current
+    Box(
+        Modifier.fillMaxWidth().height(330.dp).semantics { invisibleToUser() }
+            .then(if (onDebugLongPress != null) Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { onDebugLongPress() }) } else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(300.dp).border(1.dp, Og.line, CircleShape))
+        Box(Modifier.size(220.dp).border(1.dp, Og.signalOff, CircleShape))
+        Box(Modifier.size(140.dp).border(1.5.dp, Og.ringAccent, CircleShape))
+        if (searching && !reduced) {
+            val ripple = rememberInfiniteTransition(label = "ripple")
+            val t by ripple.animateFloat(0f, 1f, infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "t")
+            Canvas(Modifier.size(300.dp)) {
+                val r = 42.dp.toPx() + (size.minDimension / 2 - 42.dp.toPx()) * t
+                drawCircle(Og.ringAccent.copy(alpha = 1f - t), r, style = Stroke(1.5.dp.toPx()))
+            }
+        }
+        Box(Modifier.size(84.dp).clip(RoundedCornerShape(28.dp)).background(Og.accent), contentAlignment = Alignment.Center) {
+            OgIconView(OgIcon.Antenna, Og.onAccent, size = 40.dp)
         }
     }
 }
