@@ -12,8 +12,9 @@ Dieselben Prüfungen laufen lokal und automatisch bei jedem PR gegen `main`.
 | `npm run check` | Lint, Tests und Build in einem Durchgang |
 | `npm run docs:build` | Doku bauen: `mkdocs build --strict` |
 
-`npm run check` ist der Befehl, den die CI ausführt. `npm run docs:build` braucht das virtuelle Python-Umfeld aus
-`npm run docs:install` (`.venv-docs/`).
+Die CI führt dieselben drei Prüfungen als einzelne Schritte aus (`npm run lint`, `npm run test:ci`, `npm run build` –
+siehe Tabelle unten). `npm run check` fasst sie lokal in einem Durchgang zusammen; im Job `docs-check` wird
+`mkdocs build --strict` direkt aufgerufen, ohne `.venv-docs/`.
 
 ## GitHub Actions
 
