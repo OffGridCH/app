@@ -52,10 +52,13 @@ fun ConnectScreen(onNext: (onboardingDone: Boolean) -> Unit) {
     LaunchedEffect(Unit) {
         if (state.phase == AntennaPhase.DISCONNECTED || state.phase == AntennaPhase.ERROR) app.antenna.connect()
     }
+    val scroll = rememberScrollState()
+    // On phone-sized screens the note sits below the fold; bring it into view when it appears.
+    LaunchedEffect(state.error) { if (state.error != null) scroll.animateScrollTo(scroll.maxValue) }
     val phase = state.phase
     val found = phase == AntennaPhase.DEVICE_FOUND || phase == AntennaPhase.CONNECTING || phase == AntennaPhase.READY
     Page {
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        Column(Modifier.weight(1f).verticalScroll(scroll)) {
             Box(Modifier.fillMaxWidth().height(330.dp).semantics { invisibleToUser() }, contentAlignment = Alignment.Center) {
                 Box(Modifier.size(300.dp).border(1.dp, Og.line, CircleShape))
                 Box(Modifier.size(220.dp).border(1.dp, Og.borderMuted, CircleShape))
