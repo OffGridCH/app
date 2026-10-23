@@ -10,9 +10,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import ch.offgrid.android.analytics.AnalyticsEvent
+import ch.offgrid.android.domain.Conversation
 import ch.offgrid.android.ui.AppNavHost
 import ch.offgrid.android.ui.LocalApp
 import ch.offgrid.android.ui.theme.OffGridTheme
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,10 +25,14 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         val container = (application as OffGridApp).container
-        if (savedInstanceState == null) container.analytics.track(AnalyticsEvent.AppOpened)
+        if (savedInstanceState == null) {
+            container.analytics.track(AnalyticsEvent.AppOpened)
+            // After a recreation the intent is the old one; the chat is already on the back stack.
+            openRequest.value = Conversation.parse(intent?.dataString)
+        }
         setContent {
             CompositionLocalProvider(LocalApp provides container) {
-                OffGridTheme { AppNavHost() }
+                OffGridTheme { AppNavHost(openRequest) }
             }
         }
         handleUsbIntent(intent)
@@ -34,8 +40,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        Conversation.parse(intent.dataString)?.let { openRequest.value = it }
         handleUsbIntent(intent)
     }
+
+    /** Conversation to open from a notification tap; AppNavHost consumes it. */
+    private val openRequest = MutableStateFlow<Conversation?>(null)
 
     /** Plugging in the Heltec starts the app with USB permission already granted; connect right away. */
     private fun handleUsbIntent(intent: Intent?) {

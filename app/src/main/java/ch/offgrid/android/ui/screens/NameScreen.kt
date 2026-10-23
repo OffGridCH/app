@@ -1,5 +1,9 @@
 package ch.offgrid.android.ui.screens
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -43,9 +47,7 @@ fun NameScreen(onDone: () -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
     val valid = MessageLimits.isValidName(name)
-    fun submit() {
-        if (!valid || saving) return
-        saving = true
+    fun finish() {
         scope.launch {
             val trimmed = name.trim()
             app.settings.put(Settings.DISPLAY_NAME, trimmed)
@@ -53,6 +55,17 @@ fun NameScreen(onDone: () -> Unit) {
             // The name travels in our QR code, so the device needs it too (id.set_name).
             runCatching { app.antenna.call("id.set_name", buildJsonObject { put("name", trimmed) }) }
             onDone()
+        }
+    }
+    // Messages arrive while the app is closed, so ask once here (Android 13+); a refusal is fine.
+    val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { finish() }
+    fun submit() {
+        if (!valid || saving) return
+        saving = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !app.notifier.canPost()) {
+            notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            finish()
         }
     }
     Page {
