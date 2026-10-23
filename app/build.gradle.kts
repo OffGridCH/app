@@ -26,10 +26,14 @@ android {
         }
         val posthogKey = local.getProperty("POSTHOG_KEY", "").trim().filter { it.isLetterOrDigit() || it == '_' || it == '-' }
         buildConfigField("String", "POSTHOG_KEY", "\"$posthogKey\"")
+        // Optional serial-to-TCP bridge to a real antenna for debug builds (`OFFGRID_TCP_LINK=10.0.2.2:5555`).
+        val tcpLink = local.getProperty("OFFGRID_TCP_LINK", "").trim().filter { it.isLetterOrDigit() || it in ".:-" }
+        buildConfigField("String", "TCP_LINK", "\"$tcpLink\"")
     }
 
     buildTypes {
         release {
+            buildConfigField("String", "TCP_LINK", "\"\"")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

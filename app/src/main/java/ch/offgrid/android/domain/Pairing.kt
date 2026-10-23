@@ -100,8 +100,16 @@ class Pairing(
                 val id = messaging.upsertFromDevice(deviceId, contactJson, keepName = false)
                 _state.update { it.copy(error = null, scannedName = contactJson.str("name"), scannedContactId = id, pingSent = false) }
                 watchConfirmation(id)
-                antenna.call("msg.send", Messaging.pingArgs(contactJson.int("contact_id")!!))
-                _state.update { it.copy(pingSent = true) }
+                // The contact is stored at this point; the ping only speeds up activation. Firmware that
+                // rejects it (the team image up to ed9fd57 refuses every reaction, see docs/hardware.md)
+                // must not turn a successful pairing into an error. The peer's own ping activates us anyway.
+                val pinged = try {
+                    antenna.call("msg.send", Messaging.pingArgs(contactJson.int("contact_id")!!))
+                    true
+                } catch (_: LinkCommandException) {
+                    false
+                }
+                _state.update { it.copy(pingSent = pinged) }
             } catch (e: LinkCommandException) {
                 _state.update {
                     it.copy(error = when (e.error.code) {

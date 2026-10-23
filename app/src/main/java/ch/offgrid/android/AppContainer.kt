@@ -20,7 +20,7 @@ import ch.offgrid.android.link.LinkKind
 import ch.offgrid.android.link.sim.SimFlashStore
 import ch.offgrid.android.link.sim.SimulatedHeltec
 import ch.offgrid.android.link.sim.SimulatedLink
-import ch.offgrid.android.link.usb.UsbSerialLink
+import ch.offgrid.android.link.hardwareLink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,7 +41,7 @@ class AppContainer(private val context: Context) {
 
     val simDevice = SimulatedHeltec(SimFlashStore(File(context.filesDir, "sim-heltec.json")), scope)
     val simLink = SimulatedLink(simDevice)
-    private val usbLink = UsbSerialLink(context)
+    private val usbLink = hardwareLink(context)
 
     private val _linkKind = MutableStateFlow(
         runBlocking { settings.get(Settings.LINK_KIND) }?.let(LinkKind::valueOf) ?: defaultLinkKind(),

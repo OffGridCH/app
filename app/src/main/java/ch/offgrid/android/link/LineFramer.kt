@@ -1,5 +1,6 @@
 package ch.offgrid.android.link
 
+import kotlinx.serialization.json.JsonObject
 import java.io.ByteArrayOutputStream
 
 /** Maximum line length in bytes including the newline, in both directions (link spec section 3.2). */
@@ -22,7 +23,11 @@ sealed interface FramedLine {
  *
  * Rules implemented here (spec 3.2 and 3.3):
  * - lines end with LF, a trailing CR is tolerated and stripped;
- * - after connecting, everything up to the first LF is dropped because we may attach mid-line;
+ * - after connecting, the first line may be the tail of a line we attached in the middle of. It is
+ *   dropped unless it is a complete JSON object: a proper suffix of an object line can never parse
+ *   as an object, because its closing brace belongs to an opening brace outside the suffix. Over the
+ *   Heltec's UART bridge nothing is in flight when the port opens, so dropping blindly (the spec's
+ *   wording) threw away the answer to the first `sys.hello` and cost every connect a 500 ms retry;
  * - lines longer than 2048 bytes (including the LF) are discarded up to the next LF;
  * - lines that do not start with `{` are reported as noise and must be ignored by the caller;
  * - empty lines are skipped silently (the device sends one empty LF at boot).
@@ -35,7 +40,7 @@ class LineFramer(
     dropFirstPartialLine: Boolean = true,
 ) {
     private val buffer = ByteArrayOutputStream()
-    private var skippingToNewline = dropFirstPartialLine
+    private var firstLine = dropFirstPartialLine
     private var overflowed = false
 
     fun feed(bytes: ByteArray, offset: Int = 0, length: Int = bytes.size - offset): List<FramedLine> {
@@ -44,17 +49,18 @@ class LineFramer(
             val b = bytes[i]
             if (b == LF) {
                 when {
-                    skippingToNewline -> skippingToNewline = false
                     overflowed -> {
                         overflowed = false
-                        out += FramedLine.TooLong
+                        if (!firstLine) out += FramedLine.TooLong
                     }
+                    firstLine -> emitIfCompleteObject(out)
                     else -> emit(out)
                 }
+                firstLine = false
                 buffer.reset()
                 continue
             }
-            if (skippingToNewline || overflowed) continue
+            if (overflowed) continue
             buffer.write(b.toInt())
             // The limit counts the terminating LF, so content may use at most maxLineBytes - 1 bytes.
             if (buffer.size() > maxLineBytes - 1) {
@@ -63,6 +69,14 @@ class LineFramer(
             }
         }
         return out
+    }
+
+    private fun emitIfCompleteObject(out: MutableList<FramedLine>) {
+        val candidate = mutableListOf<FramedLine>()
+        emit(candidate)
+        val line = candidate.singleOrNull() as? FramedLine.Json ?: return
+        val complete = runCatching { LinkCodec.json.parseToJsonElement(line.text) is JsonObject }.getOrDefault(false)
+        if (complete) out += line
     }
 
     private fun emit(out: MutableList<FramedLine>) {
