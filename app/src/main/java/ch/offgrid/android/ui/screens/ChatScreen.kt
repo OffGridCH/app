@@ -90,7 +90,6 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
     var reactTo by remember { mutableStateOf<MessageEntity?>(null) }
     LaunchedEffect(messages.size) { app.messaging.markRead(contactId) }
     val c = contact ?: return
-    val callName = c.firstName ?: c.displayName
     val ready = antenna.ready
 
     Box(Modifier.fillMaxSize()) {
@@ -106,15 +105,18 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
                 },
             )
             if (!ready) DisconnectedBanner { nav.navigate(Routes.CONNECT) }
-            MessageList(messages, now, Modifier.weight(1f), empty = "Noch keine Nachrichten. Schreib die erste.") { m, _ ->
+            MessageList(messages, now, Modifier.weight(1f), empty = "Noch keine Nachrichten. Schreib die erste.") { row ->
+                val m = row.message
                 if (m.kind == "geo") {
-                    GeoBubble(m, c, myFix, now, ready, onOpen = { nav.navigate(Routes.location(c.id, m.id)) }, onRetry = { app.messaging.retry(m.id) })
+                    GeoBubble(row, c, myFix, now, ready, onOpen = { nav.navigate(Routes.location(c.id, m.id)) }, onRetry = { app.messaging.retry(m.id) })
                 } else {
                     MessageBubble(
                         out = m.direction == "out",
                         status = m.status,
                         text = m.text,
                         meta = metaFor(m, ready),
+                        groupStart = row.groupStart,
+                        continued = row.continued,
                         reaction = m.peerReaction,
                         onRetry = { app.messaging.retry(m.id) },
                         onLongPress = if (m.direction == "in" && m.ctr != null) ({ reactTo = m }) else null,
@@ -124,7 +126,7 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
             ChatComposer(
                 draft = draft,
                 onDraft = { draft = it },
-                target = callName,
+                target = c.displayName,
                 ready = ready,
                 maxBytes = antenna.maxTextBytes,
                 onSend = {
@@ -134,25 +136,28 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
                 onLocation = { locationSheet = true },
             )
         }
-        if (locationSheet) {
-            LocationSheet(c.displayName, onClose = { locationSheet = false }) { fix ->
-                app.messaging.sendLocation(c.id, fix)
-                locationSheet = false
-            }
+        LocationSheet(locationSheet, c.displayName, onClose = { locationSheet = false }) { fix ->
+            app.messaging.sendLocation(c.id, fix)
+            locationSheet = false
         }
-        reactTo?.let { m ->
-            OgSheet("Reaktion", onClose = { reactTo = null }) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    REACTIONS.forEach { emoji ->
-                        Box(
-                            Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Og.surface2)
-                                .clickable(role = Role.Button) { app.messaging.react(m, emoji); reactTo = null },
-                            contentAlignment = Alignment.Center,
-                        ) { Text(emoji, fontSize = 22.sp) }
-                    }
+        // Keep the last target while the sheet slides out.
+        var lastReactTo by remember { mutableStateOf<MessageEntity?>(null) }
+        reactTo?.let { lastReactTo = it }
+        OgSheet(reactTo != null, "Reaktion", onClose = { reactTo = null }) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                REACTIONS.forEach { emoji ->
+                    val chosen = lastReactTo?.peerReaction == emoji
+                    Box(
+                        Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(if (chosen) Og.accentSoft else Og.surface2)
+                            .clickable(role = Role.Button, onClickLabel = if (chosen) "Reaktion entfernen" else "Reagieren") {
+                                lastReactTo?.let { app.messaging.react(it, if (chosen) null else emoji) }
+                                reactTo = null
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(emoji, fontSize = 22.sp) }
                 }
-                OgButton("Abbrechen", { reactTo = null }, variant = ButtonVariant.Secondary)
             }
+            OgButton("Abbrechen", { reactTo = null }, variant = ButtonVariant.Secondary)
         }
     }
 }
@@ -169,7 +174,7 @@ fun ChatHeader(title: String, meta: String, onBack: () -> Unit, avatar: @Composa
         avatar()
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(title, style = OgType.chatName, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
-            Text(meta, style = OgType.meta.copy(fontSize = 12.sp), maxLines = 1)
+            Text(meta, style = OgType.meta, maxLines = 1)
         }
         trailing()
     }
@@ -181,17 +186,9 @@ fun DisconnectedBanner(onConnect: () -> Unit) {
     OgBanner("Antenne getrennt", "Nachrichten werden gesendet, sobald sie wieder verbunden ist.", "Verbinden", onConnect)
 }
 
-/** One row of the message list: a day divider or a message with its predecessor. */
-private sealed interface ListRow {
-    val key: String
-
-    data class Day(val label: String, override val key: String) : ListRow
-    data class Msg(val message: MessageEntity, val previous: MessageEntity?, override val key: String) : ListRow
-}
-
 /**
  * Bottom-aligned message list with day dividers. It is laid out in reverse, so it opens at the
- * newest message and stays there when new ones arrive.
+ * newest message and stays there when new ones arrive. New bubbles fade and slide into place.
  */
 @Composable
 fun MessageList(
@@ -199,7 +196,7 @@ fun MessageList(
     now: Long,
     modifier: Modifier,
     empty: String,
-    item: @Composable (MessageEntity, previous: MessageEntity?) -> Unit,
+    item: @Composable (MessageRow.Msg) -> Unit,
 ) {
     if (messages.isEmpty()) {
         Box(modifier.fillMaxWidth().padding(horizontal = 32.dp), contentAlignment = Alignment.Center) {
@@ -207,15 +204,7 @@ fun MessageList(
         }
         return
     }
-    val rows = remember(messages, now) {
-        buildList {
-            messages.forEachIndexed { i, m ->
-                val previous = messages.getOrNull(i - 1)
-                if (previous == null || !Formats.sameDay(previous.sentAt, m.sentAt)) add(ListRow.Day(Formats.day(m.sentAt, now), "day-${m.id}"))
-                add(ListRow.Msg(m, previous, "msg-${m.id}"))
-            }
-        }.asReversed()
-    }
+    val rows = remember(messages, now) { messageRows(messages, now).asReversed() }
     val listState = rememberLazyListState()
     LaunchedEffect(messages.lastOrNull()?.id) { listState.animateScrollToItem(0) }
     LazyColumn(
@@ -225,10 +214,12 @@ fun MessageList(
         contentPadding = PaddingValues(start = 14.dp, top = 16.dp, end = 14.dp, bottom = 10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom),
     ) {
-        items(rows, key = { it.key }) { row ->
-            when (row) {
-                is ListRow.Day -> DayDivider(row.label)
-                is ListRow.Msg -> item(row.message, row.previous)
+        items(rows, key = { it.key }, contentType = { if (it is MessageRow.Day) 0 else 1 }) { row ->
+            Box(Modifier.animateItem()) {
+                when (row) {
+                    is MessageRow.Day -> DayDivider(row.label)
+                    is MessageRow.Msg -> item(row)
+                }
             }
         }
     }
@@ -247,7 +238,8 @@ fun metaFor(m: MessageEntity, ready: Boolean): String {
 }
 
 @Composable
-private fun GeoBubble(m: MessageEntity, c: ContactEntity, myFix: GeoFix?, now: Long, ready: Boolean, onOpen: () -> Unit, onRetry: () -> Unit) {
+private fun GeoBubble(row: MessageRow.Msg, c: ContactEntity, myFix: GeoFix?, now: Long, ready: Boolean, onOpen: () -> Unit, onRetry: () -> Unit) {
+    val m = row.message
     val lat = m.lat ?: return
     val lon = m.lon ?: return
     val out = m.direction == "out"
@@ -266,6 +258,8 @@ private fun GeoBubble(m: MessageEntity, c: ContactEntity, myFix: GeoFix?, now: L
         bearing = bearing,
         onOpen = onOpen,
         onRetry = onRetry,
+        groupStart = row.groupStart,
+        continued = row.continued,
     )
 }
 
@@ -295,7 +289,7 @@ fun ChatComposer(
 
 /** Sheet "Standort senden" (spec §10): locate once, show the fix, send it as a `geo` message. */
 @Composable
-private fun BoxScope.LocationSheet(name: String, onClose: () -> Unit, onSend: (GeoFix) -> Unit) {
+private fun BoxScope.LocationSheet(visible: Boolean, name: String, onClose: () -> Unit, onSend: (GeoFix) -> Unit) {
     val app = LocalApp.current
     val scope = rememberCoroutineScope()
     val fix by app.location.fix.collectAsStateWithLifecycle()
@@ -305,13 +299,14 @@ private fun BoxScope.LocationSheet(name: String, onClose: () -> Unit, onSend: (G
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         scope.launch { app.location.locate() }
     }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(visible) {
+        if (!visible) return@LaunchedEffect
         if (!app.location.needsPermission()) app.location.locate()
         else permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
     val current = fix?.takeIf { app.location.isFresh(it, now) }
 
-    OgSheet("Standort senden", onClose = onClose) {
+    OgSheet(visible, "Standort senden", onClose = onClose) {
         when {
             locating || (current == null && error == null) -> FixCard {
                 Spinner()

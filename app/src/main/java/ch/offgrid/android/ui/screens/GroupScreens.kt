@@ -128,14 +128,16 @@ fun GroupChatScreen(nav: NavHostController, groupId: Long) {
             avatar = { OgAvatar(groupPattern(g), 40.dp, AvatarVariant.Square) },
         )
         if (!antenna.ready) DisconnectedBanner { nav.navigate(Routes.CONNECT) }
-        MessageList(messages, now, Modifier.weight(1f), empty = "Noch keine Nachrichten. Schreib die erste.") { m, previous ->
-            val showSender = m.direction == "in" && (previous == null || previous.direction != "in" || previous.senderContactId != m.senderContactId)
+        MessageList(messages, now, Modifier.weight(1f), empty = "Noch keine Nachrichten. Schreib die erste.") { row ->
+            val m = row.message
             MessageBubble(
                 out = m.direction == "out",
                 status = m.status,
                 text = m.text,
                 meta = metaFor(m, antenna.ready),
-                senderName = if (showSender) m.senderName else null,
+                groupStart = row.groupStart,
+                continued = row.continued,
+                senderName = if (row.showSender) m.senderName else null,
                 onRetry = { app.messaging.retry(m.id) },
             )
         }

@@ -1,10 +1,24 @@
 package ch.offgrid.android.ui.components
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +27,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -30,23 +43,35 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -56,6 +81,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import ch.offgrid.android.data.MessageStatus
 import ch.offgrid.android.ui.theme.Grotesk
@@ -70,90 +96,164 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 private val inShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = 20.dp, bottomStart = 6.dp)
 private val outShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = 6.dp, bottomStart = 20.dp)
 
+/** An outgoing bubble right after another outgoing one tucks its top corner in (`Main.dc.html`). */
+private val outShapeContinued = RoundedCornerShape(topStart = 20.dp, topEnd = 6.dp, bottomEnd = 6.dp, bottomStart = 20.dp)
+
+private fun bubbleShape(out: Boolean, continued: Boolean) = when {
+    !out -> inShape
+    continued -> outShapeContinued
+    else -> outShape
+}
+
 /** Day separator: line, `HEUTE`, line. */
 @Composable
 fun DayDivider(label: String) {
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp).semantics(mergeDescendants = true) { heading() },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         HorizontalDivider(Modifier.weight(1f), thickness = 1.dp, color = Og.line)
         Text(label, style = OgType.section)
         HorizontalDivider(Modifier.weight(1f), thickness = 1.dp, color = Og.line)
     }
 }
 
-/** Meta line under outgoing bubbles: time, status word and small signal bars. */
+/** Meta line under outgoing bubbles: time, status word and small signal bars, or the retry row. */
 @Composable
 private fun OutMeta(status: Int, meta: String, onRetry: () -> Unit) {
-    if (status == MessageStatus.FAILED) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Nicht gesendet", style = OgType.meta.copy(color = Og.danger, fontSize = 12.sp))
-            Box(
-                Modifier.height(32.dp).clip(RoundedCornerShape(10.dp)).background(Og.surface).border(1.dp, Og.border, RoundedCornerShape(10.dp))
-                    .clickable(role = Role.Button, onClick = onRetry).padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) { Text("Erneut senden", style = TextStyle(fontFamily = Grotesk, fontSize = 13.sp, fontWeight = FontWeight(600), color = Og.text)) }
+    AnimatedContent(
+        targetState = status == MessageStatus.FAILED,
+        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) },
+        contentAlignment = Alignment.CenterEnd,
+        label = "outMeta",
+    ) { failed ->
+        if (failed) {
+            Row(Modifier.padding(end = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Nicht gesendet", style = OgType.meta.copy(color = Og.danger))
+                Box(
+                    Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(10.dp)).background(Og.surface)
+                        .border(1.dp, Og.border, RoundedCornerShape(10.dp))
+                        .clickable(role = Role.Button, onClick = onRetry).padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text("Erneut senden", style = TextStyle(fontFamily = Grotesk, fontSize = 13.sp, fontWeight = FontWeight(600), color = Og.text)) }
+            }
+        } else {
+            val level = when (status) {
+                MessageStatus.DELIVERED -> 4
+                MessageStatus.SENT -> 2
+                else -> 0
+            }
+            Row(Modifier.padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(meta, style = OgType.meta)
+                SignalBars(level, small = true)
+            }
         }
-        return
-    }
-    val level = when (status) {
-        MessageStatus.DELIVERED -> 4
-        MessageStatus.SENT -> 2
-        else -> 0
-    }
-    Row(Modifier.padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(meta, style = OgType.meta)
-        SignalBars(level, small = true)
     }
 }
 
-/** `og-message-bubble`. Outgoing bubbles are solid when sent, dashed while queued, red-outlined on failure. */
+private fun isQueued(status: Int) = status == MessageStatus.LOCAL_QUEUED || status == MessageStatus.DEVICE_QUEUED
+
+/**
+ * Outgoing bubble per status: solid accent when sent or delivered, dashed accent outline while
+ * queued, red outline on failure. Fill and outlines cross-fade when the status changes.
+ */
+@Composable
+private fun Modifier.outBubble(status: Int, shape: Shape): Modifier {
+    val failed = status == MessageStatus.FAILED
+    val solid = !isQueued(status) && !failed
+    val fill by animateFloatAsState(if (solid) 1f else 0f, tween(250), label = "fill")
+    val dashed by animateFloatAsState(if (isQueued(status)) 1f else 0f, tween(250), label = "dashed")
+    val danger by animateFloatAsState(if (failed) 1f else 0f, tween(250), label = "danger")
+    return this
+        .clip(shape)
+        .background(Og.accent.copy(alpha = fill))
+        .dashedBorder(Og.accent.copy(alpha = dashed), 1.5.dp, shape)
+        .border(1.5.dp, Og.danger.copy(alpha = danger), shape)
+}
+
+/** Text colour inside an outgoing bubble: on-accent on the solid fill, normal text on outlines. */
+@Composable
+private fun outForeground(status: Int): Color {
+    val outlined = isQueued(status) || status == MessageStatus.FAILED
+    return animateColorAsState(if (outlined) Og.text else Og.onAccent, tween(250), label = "fg").value
+}
+
+/** Long press with haptic feedback and a TalkBack action of the same name. */
+@Composable
+private fun Modifier.longPressAction(label: String, action: () -> Unit): Modifier {
+    val haptics = LocalHapticFeedback.current
+    return pointerInput(action) {
+        detectTapGestures(onLongPress = {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            action()
+        })
+    }.semantics { onLongClick(label) { action(); true } }
+}
+
+/**
+ * `og-message-bubble`. [groupStart] adds the 8 dp gap where the direction changes; [continued]
+ * marks an outgoing bubble that directly follows another outgoing one.
+ */
 @Composable
 fun MessageBubble(
     out: Boolean,
     status: Int,
     text: String,
     meta: String,
+    groupStart: Boolean = false,
+    continued: Boolean = false,
     senderName: String? = null,
     reaction: String? = null,
     onRetry: () -> Unit = {},
     onLongPress: (() -> Unit)? = null,
 ) {
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (out) Alignment.End else Alignment.Start) {
-        Column(Modifier.fillMaxWidth(0.78f), horizontalAlignment = if (out) Alignment.End else Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(if (status == MessageStatus.FAILED) 6.dp else 4.dp)) {
+    Column(Modifier.fillMaxWidth().padding(top = if (groupStart) 8.dp else 0.dp), horizontalAlignment = if (out) Alignment.End else Alignment.Start) {
+        Column(
+            Modifier.fillMaxWidth(0.78f),
+            horizontalAlignment = if (out) Alignment.End else Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(if (status == MessageStatus.FAILED) 6.dp else 4.dp),
+        ) {
             if (senderName != null) {
-                Text(senderName, modifier = Modifier.padding(start = 6.dp, bottom = 2.dp),
-                    style = TextStyle(fontFamily = Grotesk, fontSize = 12.sp, fontWeight = FontWeight(650), color = Og.text2))
+                Text(
+                    senderName,
+                    modifier = Modifier.padding(start = 6.dp),
+                    style = TextStyle(fontFamily = Grotesk, fontSize = 12.sp, fontWeight = FontWeight(650), color = Og.text2),
+                )
             }
-            val queued = out && (status == MessageStatus.LOCAL_QUEUED || status == MessageStatus.DEVICE_QUEUED)
-            val failed = out && status == MessageStatus.FAILED
-            val shape = if (out) outShape else inShape
+            val shape = bubbleShape(out, continued)
             Box(
                 Modifier
-                    .clip(shape)
-                    .then(
-                        when {
-                            !out -> Modifier.background(Og.surface).border(1.dp, Og.border, shape)
-                            queued -> Modifier.dashedBorder(Og.accent, 1.5.dp, 20.dp)
-                            failed -> Modifier.border(1.5.dp, Og.danger, shape)
-                            else -> Modifier.background(Og.accent)
-                        },
-                    )
-                    .then(if (onLongPress != null) Modifier.clickable(onClick = onLongPress) else Modifier)
+                    .then(if (out) Modifier.outBubble(status, shape) else Modifier.clip(shape).background(Og.surface).border(1.dp, Og.border, shape))
+                    .then(if (onLongPress != null) Modifier.longPressAction("Reagieren", onLongPress) else Modifier)
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(
                     text,
-                    style = OgType.body.copy(
-                        color = if (out && !queued && !failed) Og.onAccent else Og.text,
-                        fontWeight = FontWeight(if (out) 500 else 400),
-                    ),
+                    style = OgType.body.copy(color = if (out) outForeground(status) else Og.text, fontWeight = FontWeight(if (out) 500 else 400)),
                 )
             }
-            if (reaction != null) Text(reaction, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 6.dp))
+            AnimatedVisibility(reaction != null) {
+                Text(reaction.orEmpty(), fontSize = 16.sp, modifier = Modifier.padding(horizontal = 6.dp))
+            }
             if (out) OutMeta(status, meta, onRetry) else Text(meta, style = OgType.meta, modifier = Modifier.padding(start = 6.dp))
         }
     }
+}
+
+/**
+ * Bearing that turns along the shorter way round (350° → 10° turns 20°, not 340°). The value is
+ * unbounded; rotation does not care.
+ */
+@Composable
+fun rememberBearingAngle(bearing: Double?): State<Float> {
+    val angle = remember { Animatable((bearing ?: 0.0).toFloat()) }
+    LaunchedEffect(bearing) {
+        if (bearing == null) return@LaunchedEffect
+        val delta = ((bearing.toFloat() - angle.value) % 360f + 540f) % 360f - 180f
+        angle.animateTo(angle.value + delta, tween(450, easing = FastOutSlowInEasing))
+    }
+    return angle.asState()
 }
 
 /** `og-location-bubble`: own position (accent) or the peer's with distance and direction. */
@@ -170,32 +270,29 @@ fun LocationBubble(
     bearing: Double?,
     onOpen: () -> Unit,
     onRetry: () -> Unit,
+    groupStart: Boolean = false,
+    continued: Boolean = false,
 ) {
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (out) Alignment.End else Alignment.Start,
-        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        val queued = out && (status == MessageStatus.LOCAL_QUEUED || status == MessageStatus.DEVICE_QUEUED)
-        val failed = out && status == MessageStatus.FAILED
-        val shape = if (out) outShape else inShape
+    Column(
+        Modifier.fillMaxWidth().padding(top = if (groupStart) 8.dp else 0.dp),
+        horizontalAlignment = if (out) Alignment.End else Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(if (status == MessageStatus.FAILED) 6.dp else 4.dp),
+    ) {
+        val shape = bubbleShape(out, continued)
         Column(
             Modifier
                 .width(if (out) 250.dp else 260.dp)
-                .clip(shape)
                 .then(
-                    when {
-                        !out -> Modifier.background(Og.surface).border(1.dp, Og.border, shape)
-                        queued -> Modifier.dashedBorder(Og.accent, 1.5.dp, 20.dp)
-                        failed -> Modifier.border(1.5.dp, Og.danger, shape)
-                        else -> Modifier.background(Og.accent)
-                    },
+                    // Own location: the whole bubble opens the detail. Incoming: only "Anzeigen" does.
+                    if (out) Modifier.outBubble(status, shape).clickable(role = Role.Button, onClickLabel = "Anzeigen", onClick = onOpen)
+                    else Modifier.clip(shape).background(Og.surface).border(1.dp, Og.border, shape),
                 )
-                .clickable(onClick = onOpen)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(if (out) 6.dp else 10.dp),
         ) {
-            val solid = out && !queued && !failed
-            val fg = if (solid) Og.onAccent else Og.text
+            val fg = if (out) outForeground(status) else Og.text
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OgIconView(OgIcon.Pin, if (out) fg else Og.accent, size = 18.dp)
+                OgIconView(OgIcon.Pin, if (out) fg else Og.accent, size = 18.dp, strokeWidth = 2.2f)
                 Text(title, style = TextStyle(fontFamily = Grotesk, fontSize = 15.sp, fontWeight = FontWeight(700), color = fg))
             }
             if (out) {
@@ -206,18 +303,28 @@ fun LocationBubble(
             } else {
                 if (distance != null) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val angle by rememberBearingAngle(bearing)
                         Box(Modifier.size(44.dp).border(1.dp, Og.border, CircleShape), contentAlignment = Alignment.Center) {
-                            Icon(DirectionArrow, null, tint = Og.accent, modifier = Modifier.size(26.dp).rotate((bearing ?: 0.0).toFloat()))
+                            Icon(DirectionArrow, null, tint = Og.accent, modifier = Modifier.size(26.dp).rotate(angle))
                         }
-                        Column {
-                            Text(distance, style = TextStyle(fontFamily = Grotesk, fontSize = 24.sp, fontWeight = FontWeight(750), letterSpacing = (-0.48).sp, color = Og.text))
+                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text(
+                                distance,
+                                style = TextStyle(
+                                    fontFamily = Grotesk, fontSize = 24.sp, lineHeight = 1.1.em, fontWeight = FontWeight(750),
+                                    letterSpacing = (-0.02).em, color = Og.text,
+                                ),
+                            )
                             if (directionText != null) Text(directionText, style = TextStyle(fontFamily = Grotesk, fontSize = 14.sp, color = Og.text2))
                         }
                     }
                 }
-                Text(coordinate + (accuracy?.let { " · $it" } ?: ""), style = TextStyle(fontFamily = Mono, fontSize = 12.sp, color = Og.text3))
+                Text(
+                    coordinate + (accuracy?.let { " · $it" } ?: ""),
+                    style = TextStyle(fontFamily = Mono, fontSize = 12.sp, lineHeight = 1.5.em, color = Og.text3),
+                )
                 Box(
-                    Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(12.dp)).background(Og.line)
+                    Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp)).background(Og.line)
                         .clickable(role = Role.Button, onClick = onOpen),
                     contentAlignment = Alignment.Center,
                 ) { Text("Anzeigen", style = TextStyle(fontFamily = Grotesk, fontSize = 14.sp, fontWeight = FontWeight(650), color = Og.text)) }
@@ -240,7 +347,12 @@ fun Composer(
     onSend: () -> Unit,
     onLocation: (() -> Unit)?,
 ) {
-    val canSend = text.isNotBlank() && usedBytes <= maxBytes
+    val over = usedBytes > maxBytes
+    val canSend = text.isNotBlank() && !over
+    // The design keeps the send button at full colour while the field is empty; only an
+    // over-long text dims it.
+    val sendAlpha by animateFloatAsState(if (over) 0.4f else 1f, tween(150), label = "sendAlpha")
+    val counterColor by animateColorAsState(if (over) Og.danger else Og.text3, tween(150), label = "counter")
     Column(Modifier.fillMaxWidth().background(Og.bar)) {
         HorizontalDivider(thickness = 1.dp, color = Og.line)
         Row(
@@ -250,13 +362,13 @@ fun Composer(
         ) {
             if (onLocation != null) {
                 Box(
-                    Modifier.padding(bottom = 21.dp).size(48.dp).clip(RoundedCornerShape(16.dp)).background(Og.surface)
+                    Modifier.padding(bottom = 20.dp).size(48.dp).clip(RoundedCornerShape(16.dp)).background(Og.surface)
                         .border(1.dp, Og.border, RoundedCornerShape(16.dp)).clickable(role = Role.Button, onClick = onLocation)
                         .semantics { contentDescription = "Standort senden" },
                     contentAlignment = Alignment.Center,
                 ) { OgIconView(OgIcon.Pin, Og.text) }
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 BasicTextField(
                     value = text,
                     onValueChange = onTextChange,
@@ -279,12 +391,12 @@ fun Composer(
                 )
                 Text(
                     "$usedBytes / $maxBytes Zeichen pro Funkspruch",
-                    style = OgType.meta.copy(color = if (usedBytes > maxBytes) Og.danger else Og.text3),
+                    style = OgType.meta.copy(color = counterColor),
                     modifier = Modifier.padding(start = 4.dp),
                 )
             }
             Box(
-                Modifier.padding(bottom = 21.dp).size(48.dp).alpha(if (canSend) 1f else 0.9f).clip(RoundedCornerShape(16.dp)).background(Og.accent)
+                Modifier.padding(bottom = 20.dp).size(48.dp).alpha(sendAlpha).clip(RoundedCornerShape(16.dp)).background(Og.accent)
                     .clickable(enabled = canSend, role = Role.Button, onClick = onSend)
                     .semantics { contentDescription = sendLabel },
                 contentAlignment = Alignment.Center,
@@ -293,34 +405,65 @@ fun Composer(
     }
 }
 
-/** `og-sheet`: scrim plus bottom panel with handle and title. Back closes it. */
+private val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
+/**
+ * `og-sheet`: scrim plus bottom panel with handle and title. It slides up and the scrim fades in;
+ * both reverse when [visible] turns false. Back and a tap on the scrim close it.
+ */
 @Composable
-fun BoxScope.OgSheet(title: String, onClose: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    BackHandler(onBack = onClose)
-    Box(
-        Modifier.matchParentSize().background(Og.scrim)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose),
-    )
-    Column(
-        Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(Og.surface)
-            .border(1.dp, Og.border, RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
-            .navigationBarsPadding()
-            .padding(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+fun BoxScope.OgSheet(visible: Boolean, title: String, onClose: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    BackHandler(enabled = visible, onBack = onClose)
+    AnimatedVisibility(visible, Modifier.matchParentSize(), enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
+        Box(
+            Modifier.fillMaxWidth().background(Og.scrim)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose),
+        )
+    }
+    AnimatedVisibility(
+        visible,
+        Modifier.align(Alignment.BottomCenter),
+        enter = slideInVertically(tween(280, easing = FastOutSlowInEasing)) { it },
+        exit = slideOutVertically(tween(200)) { it },
     ) {
-        Box(Modifier.align(Alignment.CenterHorizontally).size(36.dp, 4.dp).clip(RoundedCornerShape(999.dp)).background(Og.borderMuted))
-        Text(title, style = OgType.pageTitle)
-        content()
+        Column(
+            Modifier.fillMaxWidth()
+                .clip(sheetShape)
+                .background(Og.surface)
+                .topBorder(Og.border, 1.dp, 28.dp)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                .semantics { paneTitle = title }
+                .navigationBarsPadding()
+                .padding(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Box(Modifier.align(Alignment.CenterHorizontally).size(36.dp, 4.dp).clip(RoundedCornerShape(999.dp)).background(Og.borderMuted))
+            Text(title, style = OgType.pageTitle, modifier = Modifier.semantics { heading() })
+            content()
+        }
     }
 }
 
-/** `og-bearing-dial`: compass rose with north up and the arrow rotated to the target bearing. */
+/** `border-top` on a panel with rounded top corners: the line follows both corner arcs. */
+private fun Modifier.topBorder(color: Color, width: Dp, radius: Dp) = drawWithContent {
+    drawContent()
+    val w = width.toPx()
+    val r = radius.toPx()
+    val half = w / 2
+    val path = Path().apply {
+        moveTo(half, r)
+        arcTo(Rect(half, half, 2 * r - half, 2 * r - half), 180f, 90f, false)
+        lineTo(size.width - r, half)
+        arcTo(Rect(size.width - 2 * r + half, half, size.width - half, 2 * r - half), 270f, 90f, false)
+    }
+    drawPath(path, color, style = Stroke(w))
+}
+
+/** `og-bearing-dial`: compass rose with north up and the arrow turned to the target bearing. */
 @Composable
 fun BearingDial(bearing: Double?, label: String) {
     val measurer = rememberTextMeasurer()
+    val angle by rememberBearingAngle(bearing)
     Canvas(Modifier.size(232.dp).semantics { contentDescription = label; role = Role.Image }) {
         val s = size.width / 240f
         val c = Offset(120 * s, 120 * s)
@@ -341,7 +484,7 @@ fun BearingDial(bearing: Double?, label: String) {
         letter("S", 120f, 214f, Og.text3, 400)
         letter("W", 28f, 120f, Og.text3, 400)
         if (bearing != null) {
-            rotate(bearing.toFloat(), c) {
+            rotate(angle, c) {
                 val p = Path().apply {
                     moveTo(120 * s, 54 * s); lineTo(148 * s, 154 * s); lineTo(120 * s, 138 * s); lineTo(92 * s, 154 * s); close()
                 }
@@ -354,7 +497,10 @@ fun BearingDial(bearing: Double?, label: String) {
     }
 }
 
-/** QR code on a light card (padding 22, radius 28), modules drawn as soft squares like the design. */
+/**
+ * QR code on a light card (padding 22, radius 28). Modules touch and have a 2 dp corner radius
+ * like the design; the code fades in once it is ready.
+ */
 @Composable
 fun QrCard(data: String?, modifier: Modifier = Modifier) {
     val matrix = remember(data) {
@@ -368,19 +514,22 @@ fun QrCard(data: String?, modifier: Modifier = Modifier) {
             .semantics { contentDescription = "QR-Code mit deinem Schlüssel"; role = Role.Image },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(230.dp)) {
-            if (matrix == null) return@Canvas
-            val n = matrix.width
-            val cell = size.width / n
-            val inset = cell * 0.06f
-            for (y in 0 until n) for (x in 0 until n) {
-                if (matrix.get(x, y)) {
-                    drawRoundRect(Og.bg, Offset(x * cell + inset, y * cell + inset), Size(cell - 2 * inset, cell - 2 * inset),
-                        CornerRadius(cell * 0.28f, cell * 0.28f))
+        Crossfade(matrix, animationSpec = tween(250), label = "qr") { m ->
+            Box(Modifier.size(230.dp), contentAlignment = Alignment.Center) {
+                if (m == null) {
+                    Spinner(28.dp)
+                } else {
+                    Canvas(Modifier.size(230.dp)) {
+                        val n = m.width
+                        val cell = size.width / n
+                        val r = minOf(2.dp.toPx(), cell / 2)
+                        for (y in 0 until n) for (x in 0 until n) {
+                            if (m.get(x, y)) drawRoundRect(Og.bg, Offset(x * cell, y * cell), Size(cell, cell), CornerRadius(r, r))
+                        }
+                    }
                 }
             }
         }
-        if (matrix == null) Spinner(28.dp)
     }
 }
 
