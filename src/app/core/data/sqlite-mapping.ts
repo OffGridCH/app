@@ -12,6 +12,15 @@ export const CONTACT_COLUMNS =
 export const MESSAGE_COLUMNS =
   'id, contact_id, wire_id, content, direction, kind, sent_at, status, rssi, read_at, created_at, updated_at';
 
+/**
+ * Spaltenliste der Tabelle `messages`, mit dem Tabellennamen qualifiziert.
+ *
+ * Nötig in Abfragen mit `JOIN`, sonst sind Spaltennamen wie `contact_id` mehrdeutig.
+ */
+export const MESSAGE_COLUMNS_QUALIFIED = MESSAGE_COLUMNS.split(', ')
+  .map((column) => `messages.${column}`)
+  .join(', ');
+
 export const COORDINATE_COLUMNS =
   'id, contact_id, message_id, latitude, longitude, accuracy, context, share_id, share_until, recorded_at, created_at, updated_at';
 
@@ -33,6 +42,18 @@ export const MESSAGE_UPDATE_STATUS = 'UPDATE messages SET status = ?, updated_at
 
 export const MESSAGE_MARK_READ =
   "UPDATE messages SET read_at = ?, updated_at = ? WHERE contact_id = ? AND direction = 'in' AND read_at IS NULL";
+
+/**
+ * Die letzte Nachricht je Kontakt.
+ *
+ * Alle projizierten Spalten sind mit `messages.` qualifiziert, sonst meldet SQLite
+ * bei der Unterabfrage `latest` „ambiguous column name: contact_id“.
+ */
+export const MESSAGE_LAST_PER_CONTACT = `SELECT ${MESSAGE_COLUMNS_QUALIFIED} FROM messages
+  INNER JOIN (
+    SELECT contact_id, MAX(sent_at) AS max_sent FROM messages GROUP BY contact_id
+  ) latest ON latest.contact_id = messages.contact_id AND latest.max_sent = messages.sent_at
+  ORDER BY messages.sent_at ASC`;
 
 export const COORDINATE_INSERT = `INSERT INTO coordinates (${COORDINATE_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 

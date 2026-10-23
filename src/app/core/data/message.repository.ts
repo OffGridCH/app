@@ -5,6 +5,7 @@ import { SqliteDatabaseService } from './database.service';
 import {
   MESSAGE_COLUMNS,
   MESSAGE_INSERT,
+  MESSAGE_LAST_PER_CONTACT,
   MESSAGE_MARK_READ,
   MESSAGE_UPDATE_STATUS,
   countOf,
@@ -62,13 +63,7 @@ export class SqliteMessageRepository extends MessageRepository {
   }
 
   async lastPerContact(): Promise<Map<string, Message>> {
-    const rows = await this.db.query(
-      `SELECT ${MESSAGE_COLUMNS} FROM messages
-       INNER JOIN (
-         SELECT contact_id, MAX(sent_at) AS max_sent FROM messages GROUP BY contact_id
-       ) latest ON latest.contact_id = messages.contact_id AND latest.max_sent = messages.sent_at
-       ORDER BY messages.sent_at ASC`,
-    );
+    const rows = await this.db.query(MESSAGE_LAST_PER_CONTACT);
     const last = new Map<string, Message>();
     for (const row of rows) {
       const message = toMessage(row);

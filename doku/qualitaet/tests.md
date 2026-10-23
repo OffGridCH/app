@@ -20,8 +20,16 @@ Jede Testdatei (`*.spec.ts`) liegt neben dem Code, den sie prüft.
 | `src/app/core/app-start.service.spec.ts` | `AppStartService`: Der Demo-Seed läuft vor dem Laden der Einstellungen; die Seed-Einstellungen und drei Kontakte sowie sechs Nachrichten werden übernommen; mit `og.noseed = '1'` startet die App leer und erhält nur eine neue Install-Id. |
 | `src/app/core/data/migrations.spec.ts` | Die Migrationen sind aufsteigend und eindeutig versioniert. Migration 1 enthält die Spalten, Indizes, Fremdschlüssel-Kaskaden und Wertebereiche der Tabellen `contacts`, `messages`, `coordinates`, `handshakes` und `settings`. Laufzeitwerte werden als Parameter gebunden, und die INSERT-Statements haben passende Parameteranzahlen. |
 | `src/app/core/data/memory/memory-database.service.spec.ts` | `MemoryDatabaseService`: leere Startwerte und fehlerfreies Öffnen; das Löschen eines Kontakts entfernt wie in SQLite dessen Nachrichten und Koordinaten; `seedDemo()` erzeugt drei Kontakte, sechs Nachrichten, eine ungelesene Nachricht, den offenen Handshake „Jonas Keller“ und keine Standortdaten; `deleteAllUserData()` lässt die Einstellungen stehen. |
+| `src/app/core/data/sqlite-mapping.spec.ts` | Die SQLite-Abfragen laufen gegen eine echte SQLite-Datenbank (`node:sqlite`, Schema aus Migration v1): `MESSAGE_LAST_PER_CONTACT` liefert je Kontakt die neueste Nachricht, alle projizierten Spalten sind mit `messages.` qualifiziert und das unqualifizierte Statement scheitert schon beim Vorbereiten mit „ambiguous column name“. Geprüft werden auch `SqliteMessageRepository.lastPerContact()` (leere Datenbank, gleiches Ergebnis wie die Memory-Implementierung) sowie alle Lese- und Schreibabfragen der Kontakt-, Nachrichten-, Koordinaten-, Handshake- und Einstellungs-Repositories. |
+| `src/app/core/data/sqlite-mapping.regression.spec.ts` | Gegenprobe: Der echte `SqliteMessageRepository` läuft mit dem Statement vor der Korrekturrunde (unqualifizierte Spaltennamen) und bricht mit „ambiguous column name“ ab – mit dem alten Statement wären die Tests in `sqlite-mapping.spec.ts` rot. Mit dem Statement aus dem Produktivcode läuft `lastPerContact()` fehlerfrei durch. |
 | `src/app/core/settings/settings.service.spec.ts` | `SettingsService`: Erzeugen und Beibehalten der Install-Id, Standardwerte, Übernahme gespeicherter Werte, Speichern von Anzeigename, Hintergrundempfang und Vibration sowie das Abschliessen des Onboardings. |
 
 Die Spec-Dateien prüfen die reinen Funktionen und Services ohne Oberfläche. Die Migrationen werden dabei statisch anhand
 ihrer DDL und Parameter geprüft; das Verhalten der Repositories wird im Browser über die Memory-Implementierungen
 getestet. Tests für die Seiten kommen mit den Tickets, die die Screens bauen (T09 bis T13).
+
+!!! note "Datenbankschicht"
+
+    Die Tests der Datenbankschicht laufen gegen eine echte SQLite-Datenbank aus `node:sqlite`, dem
+    SQLite-Builtin von Node – ohne Zusatzpaket. Dafür wird Node ≥ 24.15 gebraucht, wie das Projekt ohnehin
+    verlangt (siehe [Erste Schritte](../erste-schritte.md)).
