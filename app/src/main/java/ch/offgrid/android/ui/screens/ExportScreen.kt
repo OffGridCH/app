@@ -15,14 +15,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
-import ch.offgrid.android.domain.BackupCodec
 import ch.offgrid.android.domain.BackupError
 import ch.offgrid.android.domain.BackupService
 import ch.offgrid.android.ui.LocalApp
@@ -53,7 +55,7 @@ fun BackupError.text(): String = when (this) {
     BackupError.WRITE_FAILED -> "Die Datei konnte nicht gespeichert werden."
 }
 
-/** Screen 8 "Daten exportieren": encrypted backup file, shared through the Android share sheet. */
+/** Screen 8 "Daten exportieren" (`Export.dc.html`): encrypted backup file, shared through the Android share sheet. */
 @Composable
 fun ExportScreen(nav: NavHostController) {
     val app = LocalApp.current
@@ -61,13 +63,49 @@ fun ExportScreen(nav: NavHostController) {
     val scope = rememberCoroutineScope()
     val contacts by app.messaging.contacts.collectAsStateWithLifecycle(initialValue = emptyList())
     val messageCount by app.messaging.messageCount.collectAsStateWithLifecycle(initialValue = 0)
-    var password by remember { mutableStateOf("") }
-    var repeat by remember { mutableStateOf("") }
-    var touched by remember { mutableStateOf(false) }
+    // Saved like a platform password EditText, so rotation and process death keep the input.
+    var password by rememberSaveable { mutableStateOf("") }
+    var repeat by rememberSaveable { mutableStateOf("") }
+    var passwordLeft by rememberSaveable { mutableStateOf(false) }
+    var repeatLeft by rememberSaveable { mutableStateOf(false) }
+    var submitted by rememberSaveable { mutableStateOf(false) }
+    var error by rememberSaveable { mutableStateOf<BackupError?>(null) }
     var working by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<BackupError?>(null) }
-    val tooShort = password.length < BackupCodec.MIN_PASSWORD
-    val mismatch = password != repeat
+    val errors = passwordErrors(
+        password, repeat,
+        showPassword = submitted || passwordLeft,
+        showRepeat = submitted || (repeatLeft && repeat.isNotEmpty()),
+    )
+
+    fun export() {
+        submitted = true
+        if (!passwordErrors(password, repeat, showPassword = true, showRepeat = true).none) return
+        working = true
+        error = null
+        scope.launch {
+            try {
+                val now = System.currentTimeMillis()
+                val text = app.backup.export(password, now)
+                val file = withContext(Dispatchers.IO) {
+                    File(context.cacheDir, "exports").apply { mkdirs() }.resolve(BackupService.fileName(now)).apply { writeText(text) }
+                }
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+                val send = Intent(Intent.ACTION_SEND)
+                    .setType("application/octet-stream")
+                    .putExtra(Intent.EXTRA_STREAM, uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                context.startActivity(Intent.createChooser(send, "Export teilen"))
+                nav.back()
+            } catch (_: IOException) {
+                error = BackupError.WRITE_FAILED
+            } catch (_: IllegalArgumentException) {
+                // FileProvider refuses a path outside its configured roots.
+                error = BackupError.WRITE_FAILED
+            } finally {
+                working = false
+            }
+        }
+    }
 
     Page {
         OgTopBar("Daten exportieren", onBack = { nav.back() }, backLabel = "Zurück zu den Einstellungen")
@@ -79,53 +117,39 @@ fun ExportScreen(nav: NavHostController) {
             )
             Spacer(Modifier.height(22.dp))
             OgCard {
-                InfoRow("Kontakte und Schlüssel", contacts.size.toString())
-                InfoRow("Nachrichten", messageCount.toString(), last = true)
+                InfoRow("Kontakte und Schlüssel", contacts.size.toString(), minHeight = 48.dp)
+                InfoRow("Nachrichten", messageCount.toString(), last = true, minHeight = 48.dp)
             }
             Spacer(Modifier.height(14.dp))
             OgCard(padded = true) {
-                OgTextField("Passwort", password, { password = it }, password = true,
-                    error = if (touched && tooShort) PASSWORD_TOO_SHORT else null, onBlur = { if (password.isNotEmpty()) touched = true })
-                OgTextField("Passwort wiederholen", repeat, { repeat = it }, password = true,
-                    error = if (touched && repeat.isNotEmpty() && mismatch) PASSWORD_MISMATCH else null, onBlur = { touched = true })
+                OgTextField(
+                    "Passwort", password, { password = it; error = null }, password = true,
+                    error = errors.password,
+                    onBlur = { if (password.isNotEmpty()) passwordLeft = true },
+                    imeAction = ImeAction.Next,
+                )
+                OgTextField(
+                    "Passwort wiederholen", repeat, { repeat = it; error = null }, password = true,
+                    error = errors.repeat,
+                    onBlur = { repeatLeft = true },
+                    imeAction = ImeAction.Done,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OgIconView(OgIcon.Info, Og.text3, Modifier.padding(top = 1.dp))
-                    Text("Ohne Passwort lässt sich die Datei nicht mehr öffnen. Es gibt keine Wiederherstellung.", style = OgType.help)
+                    OgIconView(OgIcon.Info, Og.text3, Modifier.padding(top = 1.dp), size = 18.dp)
+                    Text(
+                        "Ohne Passwort lässt sich die Datei nicht mehr öffnen. Es gibt keine Wiederherstellung.",
+                        style = OgType.help.copy(lineHeight = 1.45.em),
+                    )
                 }
             }
             error?.let { OgNote(it.text()) }
         }
-        Footer {
+        Footer(top = 0.dp) {
             OgButton(
                 if (working) "Wird erstellt …" else "Datei erstellen und teilen",
                 icon = OgIcon.Upload,
                 enabled = !working,
-                onClick = {
-                    touched = true
-                    if (tooShort || mismatch) return@OgButton
-                    working = true
-                    error = null
-                    scope.launch {
-                        try {
-                            val now = System.currentTimeMillis()
-                            val text = app.backup.export(password, now)
-                            val file = withContext(Dispatchers.IO) {
-                                File(context.cacheDir, "exports").apply { mkdirs() }.resolve(BackupService.fileName(now)).apply { writeText(text) }
-                            }
-                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-                            val send = Intent(Intent.ACTION_SEND)
-                                .setType("application/octet-stream")
-                                .putExtra(Intent.EXTRA_STREAM, uri)
-                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            context.startActivity(Intent.createChooser(send, "Export teilen"))
-                            nav.back()
-                        } catch (_: IOException) {
-                            error = BackupError.WRITE_FAILED
-                        } finally {
-                            working = false
-                        }
-                    }
-                },
+                onClick = ::export,
             )
         }
     }
