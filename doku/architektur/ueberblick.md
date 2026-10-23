@@ -1,10 +1,8 @@
 # Überblick
 
-Stand: **nach T01, T03** (Projektgerüst, Theme, og-Grundkomponenten, Zeitformate, Krypto-Basis, Schlüssel-Muster und
-Signal-Level). Gebaut sind das App-Gerüst, die Kern-Grundlagen (`log.ts`, `platform.ts`, `models/`), das Theme, die
-13 Grundkomponenten in `src/app/ui/` sowie die Krypto- und Format-Module unter `core/`. Die Seiten unter `features/`
-sind leere Stubs; ihr Inhalt kommt mit dem jeweiligen Ticket. Alles, was noch fehlt, trägt im Diagramm und im
-Ordnerbaum den Vermerk „geplant: Txx".
+Stand: **nach T00** (Projektgerüst und Theme). Gebaut sind das App-Gerüst, die Kern-Grundlagen (`log.ts`,
+`platform.ts`, `models/`) und das Theme. Die Seiten unter `features/` sind leere Stubs; ihr Inhalt kommt mit dem
+jeweiligen Ticket. Alles, was noch fehlt, trägt im Diagramm und im Ordnerbaum den Vermerk „geplant: Txx".
 
 ## Schichten
 
@@ -17,16 +15,15 @@ flowchart TD
     end
     subgraph Ui["Oberfläche"]
         Pages["features/<br>eine Seite pro Ordner<br>Stubs (T00)"]
-        Components["ui/<br>og- Komponenten<br>Grundkomponenten (T01)<br>geplant: T02"]
+        Components["ui/<br>og- Komponenten<br>geplant: T01, T02"]
     end
     subgraph Core["Kern – src/app/core"]
         Basis["log.ts, platform.ts, models/"]
         Start["app-start.service.ts<br>geplant: T04"]
         Data["data/<br>Datenbank und Repositories<br>geplant: T04"]
         Antenna["antenna/<br>Antennen-Port, Mock, Serial<br>geplant: T05, T06"]
-        Crypto["crypto/<br>Schlüssel, AES-GCM<br/>(T03)"]
-        Format["format/<br>Zeit- und Funkformate<br/>(T03)"]
-        Messaging["messaging/<br>Limits, Signal-Level<br/>geplant: T07"]
+        Crypto["crypto/<br>geplant: T03"]
+        Messaging["messaging/<br>geplant: T03, T07"]
         Handshake["handshake/<br>geplant: T08"]
         Backup["backup/<br>geplant: T14"]
         Location["location/<br>geplant: T17"]
@@ -41,7 +38,6 @@ flowchart TD
     Basis --> Data
     Basis --> Antenna
     Basis --> Crypto
-    Basis --> Format
     Basis --> Messaging
     Basis --> Handshake
     Basis --> Backup
@@ -67,13 +63,13 @@ src/
       app-start.service.ts    geplant: T04
       antenna/                geplant: T05, T06
       backup/                 geplant: T14
-      crypto/                 Schlüssel, AES-GCM, Schlüssel-Muster (T03)
+      crypto/                 geplant: T03
       data/                   geplant: T04
-      format/                 Zeit- und Funkformate (T03)
+      format/                 geplant: T03
       groups/                 geplant: T20
       handshake/              geplant: T08
       location/               geplant: T17
-      messaging/              Limits, Signal-Level (T03), geplant: T07
+      messaging/              geplant: T03, T07
       settings/               geplant: T04
     features/
       chat/                   geplant: T12
@@ -84,7 +80,7 @@ src/
       name/                   geplant: T09
       standort/               geplant: T18
       verbinden/              geplant: T09
-    ui/                       og-Grundkomponenten (T01), geplant: T02
+    ui/                       geplant: T01, T02
   environments/               environment.ts, environment.prod.ts
   theme/                      tokens.scss, typography.scss, global.scss
   test-setup.ts               WebCrypto für Vitest und jsdom
@@ -97,8 +93,8 @@ src/
 | Schicht | Ort | Aufgabe | Stand |
 |---|---|---|---|
 | App | `src/app/app.*.ts` | Wurzel-Komponente, Provider, Routen | fertig (T00) |
-| Oberfläche | `src/app/features/`, `src/app/ui/` | Screens und wiederverwendbare `og-`-Komponenten | Grundkomponenten fertig (T01), Zustandskomponenten ab T02, Seiten ab T09 |
-| Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Krypto, Messaging | Grundgerüst (T00), Krypto und Formate gebaut (T03) |
+| Oberfläche | `src/app/features/`, `src/app/ui/` | Screens und wiederverwendbare `og-`-Komponenten | Stubs (T00), gefüllt ab T01, T02, T09 |
+| Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Krypto, Messaging | Grundgerüst (T00), gefüllt ab T03 |
 | Typen | `src/app/core/models/` | Kontakt, Nachricht, Handshake, Antenne, Settings, Fehlercodes | fertig (T00) |
 | Theme | `src/theme/` | Design-Tokens, Schriften, globales Styling | fertig (T00) |
 
