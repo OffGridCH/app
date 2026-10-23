@@ -21,6 +21,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +92,20 @@ fun SettingsScreen(nav: NavHostController) {
     val pattern = remember(settings[Settings.OWN_PUBLIC_KEY], installId) {
         KeyPattern.fromSeed(settings[Settings.OWN_PUBLIC_KEY] ?: installId ?: "")
     }
+    // Saves in the app scope: leaving the screen while the field still has focus cancels this
+    // screen's scope, and the edit would be lost.
+    fun saveName() {
+        val value = name?.trim() ?: return
+        if (!MessageLimits.isValidName(value)) {
+            nameError = true
+        } else if (value != settings[Settings.DISPLAY_NAME]) {
+            app.scope.launch {
+                app.settings.put(Settings.DISPLAY_NAME, value)
+                runCatching { app.antenna.call("id.set_name", buildJsonObject { put("name", value) }) }
+            }
+        }
+    }
+    DisposableEffect(Unit) { onDispose { saveName() } }
     val now = rememberNow()
     val bestLevel = contacts.filter { it.state == "active" }.maxOfOrNull { Formats.signalLevel(it.lastRssi, it.lastSeenAt, now) } ?: 0
 
@@ -116,17 +131,7 @@ fun SettingsScreen(nav: NavHostController) {
                     hint = "Wird beim Hinzufügen an neue Kontakte übertragen.",
                     gap = 8.dp,
                     error = if (nameError) NAME_ERROR else null,
-                    onBlur = {
-                        val value = name.orEmpty().trim()
-                        if (!MessageLimits.isValidName(value)) {
-                            nameError = true
-                        } else if (value != settings[Settings.DISPLAY_NAME]) {
-                            scope.launch {
-                                app.settings.put(Settings.DISPLAY_NAME, value)
-                                runCatching { app.antenna.call("id.set_name", buildJsonObject { put("name", value) }) }
-                            }
-                        }
-                    },
+                    onBlur = ::saveName,
                 )
             }
 
