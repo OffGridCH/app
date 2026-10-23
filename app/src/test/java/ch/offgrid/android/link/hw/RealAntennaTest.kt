@@ -193,30 +193,34 @@ class RealAntennaTest {
         expectError("E_TOO_LONG") {
             c.call("msg.send", buildJsonObject { put("to", slot); put("type", "text"); put("text", "ä".repeat(42)) })
         }
-        val sent = c.call("msg.send", buildJsonObject { put("to", slot); put("type", "text"); put("text", "Hallo vom Hardwaretest"); put("ack", true) })
+        val sent = c.call("msg.send", buildJsonObject { put("to", slot); put("type", "text"); put("text", "Hallo vom Hardwaretest"); put("ack", true); put("hops", 0) })
         log("msg.send: $sent")
         val ref = sent.long("msg_ref")!!
         val states = mutableListOf<String>()
         // Lab radio image: sent after TxDone, then three retries and failed(timeout) without a second
-        // antenna. Team mock: sent, relayed, delivered on short timers.
-        nextEvent(c, 120_000) { e ->
+        // antenna: about 32 s at SF9 with hops 0, over 2 min with the default 3 hops (protocol 12.2 scales the
+        // timeout with 2 x hops + 2). Team mock: sent, relayed, delivered on short timers. The heartbeat
+        // keeps the board from locking (and failing the message with reason locked) while we wait.
+        val heartbeat = scope.launch { while (true) { delay(5_000); c.call("sys.ping") } }
+        val last = nextEvent(c, 120_000) { e ->
             if (e.name == "msg.status" && e.data.long("msg_ref") == ref) states += e.data.str("state")!!
             e.name == "msg.status" && e.data.long("msg_ref") == ref && e.data.str("state") in setOf("delivered", "failed")
         }
+        heartbeat.cancel()
         log("states: $states")
         assertTrue(states.firstOrNull() == "sent")
-        assertTrue(states.last() in setOf("delivered", "failed"))
+        assertTrue(last?.data?.str("state") == "delivered" || last?.data?.str("reason") == "timeout")
         // The pairing ping (empty reaction, ref 0) the app sends right after pair.complete. The team mock up
         // to ed9fd57 rejects every reaction ("target must be an object": `is<JsonObject>()` on a const view),
         // so there it is recorded, not asserted; the lab image must accept it.
-        val mock = c.call("sys.hello", hello).bool("mock") == true
+        val lab = c.call("sys.hello", hello).bool("lab_radio") == true
         try {
             val ping = c.call("msg.send", Messaging.pingArgs(slot))
             log("ping: $ping")
             assertEquals(true, ping.bool("ack_requested"))
         } catch (e: LinkCommandException) {
             log("ping rejected: ${e.error}")
-            assertTrue("lab image must accept reactions", mock && e.error.field == "target")
+            assertTrue("lab image must accept reactions", !lab && e.error.field == "target")
         }
         c.close()
     }

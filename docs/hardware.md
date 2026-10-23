@@ -1,7 +1,7 @@
 # Hardware findings: the app against a real Heltec V3
 
 Interim state of 2026-10-24, 01:45. The agent working on the link layer keeps this file current; the
-final version adds the lab radio image, the protocol comparison and the second-antenna checklist.
+final version adds the protocol comparison, the codec results and the second-antenna checklist.
 
 ## The board
 
@@ -11,7 +11,8 @@ final version adds the lab radio image, the protocol comparison and the second-a
 | `device_id` | `<board-1-id>` |
 | Attached to | lab host, `/dev/ttyUSB0` |
 | Ran when plugged in | A local OLED demo build (`feature/oled-driver` at `a23ff1b` plus uncommitted demo values, Arduino core 3.x / ESP-IDF 5.5.5). It draws the boot animation and a dashboard and prints nothing on the UART, so the app cannot talk to it. |
-| Runs now | Team firmware `OffGridCH/firmware` `main` at `ed9fd57` ("Merge pull request #3 … feature/radio-driver"), PlatformIO env `default`, reports `fw.version` `0.1.0-config-store.1`, `mock: true`, `mock_stage: 5` |
+| Tested first | Team firmware `OffGridCH/firmware` `main` at `ed9fd57` ("Merge pull request #3 … feature/radio-driver"), default PlatformIO env `heltec_wifi_lora_32_V3`, reports `fw.version` `0.1.0-config-store.1`, `mock: true`, `mock_stage: 5` |
+| Runs now | Private lab image `0.2.0-lab.1`: `ed9fd57` plus real LoRa messaging, env `lab_radio` of the lab firmware branch. Nothing was pushed to the OffGrid organisation. Back to the team image: `pio run -e heltec_wifi_lora_32_V3 -t upload` in the team repository. |
 
 **Backup.** The full 8 MB flash was read before anything was written (esptool 5.6.0, 00:39).
 
@@ -44,13 +45,15 @@ connecting never reboots the board.
 | --- | --- | --- | --- | --- | --- |
 | 1 | Reactions | `msg.send` with `type: "reaction"` and a `target` object | Rejects every reaction with `E_INVALID_ARG`: `args["target"].is<JsonObject>()` on a const ArduinoJson view is always false; it must be `is<JsonObjectConst>()` | Pairing sends a reaction as its ping, so every successful pairing was reported as failed; reactions in the chat fail | App: a failed ping no longer fails a stored pairing (`pingSent = false`). Firmware: fixed in the private lab fork only; the team repository still has the bug. |
 | 2 | First line after connect | The host may send right after opening | Answers the first `sys.hello` at once | `LineFramer` threw away the first line after opening, so every connect lost its first answer and waited for the 500 ms retry | Fixed: a first line is kept when it parses as a complete JSON object; a partial tail cannot. |
-| 3 | Radio | Messages travel over LoRa (protocol spec) | No GitHub image sends chat over the radio. `default` simulates delivery (`mock: true`); `radio_diag` exposes `radio.*` and rejects `msg.*` | Shows simulated delivery as real | A private lab image with real LoRa messaging is in progress (see below). |
+| 3 | Radio | Messages travel over LoRa (protocol spec) | No GitHub image sends chat over the radio. The default env simulates delivery (`mock: true`); `radio_diag` exposes `radio.*` and rejects `msg.*` | Shows simulated delivery as real | The private lab image sends and receives for real (see below). |
 | 4 | Authentication | X25519 + HKDF + AES-GCM token wrap | `authentication: "bypassed-envelope-shape-only"`: any token of the right shape unlocks | Performs the real handshake | Works, but the board does not verify it yet. |
 | 5 | Persistence | Identity, contacts and provisioning survive a reboot | Only the config store is in NVS; identity, contacts and the provisioned flag live in RAM | Assumes they persist | After a power cycle the app sees an unprovisioned board and must pair again. The lab image stores them in NVS. |
 | 6 | Text budget | `limits.max_text_bytes`, 83 UTF-8 bytes | 83 | Uses the value from `sys.hello` (default 83) | Matches. The designs' "153 Zeichen" is not reachable with plain UTF-8; see the codec experiment below. |
 | 7 | Boot time | App retries `sys.hello` for about 5 s | `default` has no boot animation | | The OLED driver branch (`feature/oled-driver`) plays a blocking 6.6 s boot animation in `setup()`. Merged as it is, the app would report a failed connect after every plug-in. The animation should run frame by frame from `loop()`. |
 | 8 | `sys.boot` | Sent once at boot | Sent once at boot, so a host that connects later never sees it | Does not depend on it | Matches. |
-| 9 | `msg.send` result | `bytes_on_air`, `est_airtime_ms` | 39 bytes and 268 ms for a 22-byte text at SF9/BW125 | | Matches the protocol spec (17 + 22 bytes) and the airtime formula (267.3 ms). |
+| 9 | `msg.send` result | `bytes_on_air`, `est_airtime_ms` | 39 bytes and 268 ms for a 22-byte text at SF9/BW125 | | Matches the protocol spec (17 + 22 bytes) and the airtime formula (267.3 ms). On the lab image the radio measures 274–275 ms from TX start to TxDone: the formula plus about 7 ms of PA ramp, SPI and interrupt latency. |
+| 10 | Retry timeout | Protocol 12.2: `(2 × hops + 2) × (airtime + jitter) × 2^retry` | Simulated | | Real numbers on the lab image at SF9: with the default 3 hops a lost text waits 8.5, 17, 34 and 68 s, so `failed` arrives after about 2 minutes; with 0 hops after about 32 s. The chat should show `retrying` as progress, not as an error. |
+| 11 | Lock while sending | Board locks after 15 s without heartbeat | Fails pending messages with reason `locked` | | The app must keep its heartbeat running while messages are pending, also in the background; otherwise a retrying message fails as `locked`. |
 
 ## What already works against the real board
 
@@ -75,8 +78,35 @@ OFFGRID_TCP_LINK=127.0.0.1:7755 ./gradlew testDebugUnitTest --tests '*RealAntenn
 Without `OFFGRID_TCP_LINK` the tests are skipped, so CI and other machines are unaffected. The other unit
 tests pass as before.
 
-Not verified yet: a phone over USB (none was attached to adb), and anything over the air. Real
-transmissions need the lab image; a full send, receive and ACK round trip needs a second Heltec.
+The same six tests pass against the lab image, where the send is a real transmission: `sent`, three
+`retrying` with RETRY 1 to 3 on air, then `failed` with reason `timeout`, because no second board answers.
+The pairing ping (a reaction) is accepted there.
+
+Not verified yet: a phone over USB (none was attached to adb) and a reception from a second radio.
+
+## Lab radio image (private)
+
+The lab image keeps the team's host layer and Link API and replaces the simulated delivery with protocol
+v1 on the SX1262: per-contact keys from X25519 and HKDF, AES-128-CCM with 8-byte tags, 24-bit counters
+with a 64-packet replay window, ACKs bound to the original counter, retries with RETRY + 1, keyed dedupe,
+managed flooding with SNR-weighted relay delay, LBT/CAD and a 10 % duty-cycle token bucket. Identity,
+provisioning and contacts persist in NVS (plain, not the encrypted vault of link spec 10; lab boards only).
+`sys.hello` adds `lab_radio: true`, `text_codec` and `limits.max_text_input_bytes`; `mock` stays `true`
+because authentication is still the team's shape-only check.
+
+Evidence from the board on the lab host, 2026-10-24:
+
+- `lab.selftest` on the ESP32: 15/15 checks against the protocol spec's worked examples (keys, node IDs,
+  directional keys, text packet, ACK, reaction, location, HOP_LEFT outside the MIC, tamper rejection).
+- `lab/tools/lab_check.py`, 19/19: the board pairs with the spec's Bob key; what its radio transmits is
+  decrypted in Python with Bob's key, and Bob's packets are crafted in Python and fed in with `lab.inject`.
+  Covered: real TX and measured airtime, delivery by ACK, `contact.state active`, receiving a text with the
+  board's ACK verified in Python, duplicate suppression, re-ACK of a retry, reaction, location with altitude
+  and age, a forged packet rejected, a transit packet relayed with HOP_LEFT − 1, and four transmissions with
+  RETRY 0 to 3 followed by `failed`/`timeout`.
+
+What only a second Heltec can show: reception over the air (RSSI/SNR, CRC errors), a real ACK coming back
+(`delivered` without injection), relaying between two radios, CAD seeing a busy channel, and range.
 
 ## Byte and airtime budget (first estimate)
 
