@@ -1,5 +1,6 @@
 package ch.offgrid.android.domain
 
+import ch.offgrid.android.BuildConfig
 import ch.offgrid.android.crypto.OgCrypto
 import ch.offgrid.android.crypto.TokenWrap
 import ch.offgrid.android.crypto.UnlockTokenSource
@@ -13,6 +14,7 @@ import ch.offgrid.android.link.LinkKind
 import ch.offgrid.android.link.LinkOpenException
 import ch.offgrid.android.link.LinkTimeoutException
 import ch.offgrid.android.link.OpenError
+import ch.offgrid.android.link.bool
 import ch.offgrid.android.link.double
 import ch.offgrid.android.link.int
 import ch.offgrid.android.link.obj
@@ -46,6 +48,10 @@ data class AntennaState(
     val deviceId: String? = null,
     val nodeId: String? = null,
     val maxTextBytes: Int = MessageLimits.DEFAULT_MAX_TEXT_BYTES,
+    /** TEXT codec of a lab radio image (`sys.hello.text_codec`); the team firmware always sends raw UTF-8. */
+    val textCodec: String = MessageLimits.CODEC_RAW,
+    /** UTF-8 input the antenna accepts; above [maxTextBytes] only with a codec (`limits.max_text_input_bytes`). */
+    val maxTextInputBytes: Int = MessageLimits.DEFAULT_MAX_TEXT_BYTES,
     val error: AntennaError? = null,
 ) {
     val ready: Boolean get() = phase == AntennaPhase.READY
@@ -131,9 +137,11 @@ class AntennaManager(
             val chip = hello.str("chip")?.substringBefore('-')
             _state.update {
                 it.copy(deviceId = deviceId, maxTextBytes = maxText, fwVersion = hello.obj("fw")?.str("version"),
-                    deviceLabel = chip ?: it.deviceLabel)
+                    deviceLabel = chip ?: it.deviceLabel, textCodec = hello.str("text_codec") ?: MessageLimits.CODEC_RAW,
+                    maxTextInputBytes = hello.obj("limits")?.int("max_text_input_bytes") ?: maxText)
             }
             if (!unlock(c, hello)) return fail(AntennaError.UNLOCK_FAILED)
+            if (hello.bool("lab_radio") == true) selectTextCodec(c)
             val radio = c.call("radio.get")
             val identity = c.call("id.get")
             identity.str("public_key")?.let { settings.put(Settings.OWN_PUBLIC_KEY, it) }
@@ -219,6 +227,24 @@ class AntennaManager(
         return true
     }
 
+    /**
+     * Applies the build's TEXT codec flag to a lab radio image (`lab.set`, persisted on the antenna). The
+     * antenna compresses; the app only needs the codec to count what fits (see [MessageLimits.onAirTextBytes]).
+     */
+    private suspend fun selectTextCodec(c: LinkClient) {
+        val wanted = BuildConfig.TEXT_CODEC
+        if (wanted.isEmpty() || wanted == state.value.textCodec) return
+        try {
+            val result = c.call("lab.set", buildJsonObject { put("text_codec", wanted) })
+            _state.update {
+                it.copy(textCodec = result.str("text_codec") ?: it.textCodec,
+                    maxTextInputBytes = result.int("max_text_input_bytes") ?: it.maxTextInputBytes)
+            }
+        } catch (e: LinkCommandException) {
+            log("text codec $wanted not applied: ${e.error.code}")
+        }
+    }
+
     private fun wrapArgs(hello: JsonObject, token: ByteArray, deviceId: ByteArray, name: String? = null): JsonObject {
         val sessionInfo = hello.obj("session") ?: throw LinkCommandException("sys.hello", LinkError("E_NO_SESSION", null, null))
         val wrapped = TokenWrap.wrap(
@@ -261,7 +287,8 @@ class AntennaManager(
 
     private companion object {
         const val PROTO_MAJOR = "1"
-        const val HELLO_ATTEMPTS = 10
+        // 8 s: an image that plays its OLED boot animation in setup() answers only after it ends.
+        const val HELLO_ATTEMPTS = 16
         const val HEARTBEAT_MS = 5_000L
         val HELLO_ARGS = buildJsonObject { put("app", "offgrid-android"); put("app_proto", "1.0") }
     }

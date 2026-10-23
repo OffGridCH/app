@@ -34,6 +34,28 @@ class MessageLimitsTest {
     }
 
     @Test
+    fun ogz1CountMatchesWhatTheLabAntennaSent() {
+        // 127 bytes raw; the lab image sent it as a 64-byte packet: 8 header + 1 inner + 47 + 8 tag (2026-10-24).
+        val text = "Wir sind bei der Hütte oben, das Wetter wird schlechter. Kommt bitte nicht mehr hoch, " +
+            "wir treffen uns um 16:30 beim Parkplatz."
+        assertEquals(127, MessageLimits.onAirTextBytes(text, MessageLimits.CODEC_RAW, 83))
+        assertEquals(47, MessageLimits.onAirTextBytes(text, MessageLimits.CODEC_OGZ1, 160))
+        val lab = AntennaState(textCodec = MessageLimits.CODEC_OGZ1, maxTextInputBytes = 160)
+        assertTrue(MessageLimits.canSend(text, lab))
+        assertFalse(MessageLimits.canSend(text, AntennaState()))
+    }
+
+    @Test
+    fun ogz1NeverCountsMoreThanRawAndRespectsTheInputLimit() {
+        assertEquals(2, MessageLimits.onAirTextBytes("ok", MessageLimits.CODEC_OGZ1, 160))
+        assertEquals(0, MessageLimits.onAirTextBytes("", MessageLimits.CODEC_OGZ1, 160))
+        // Random hex does not compress below 83 bytes, and 161 bytes are over the antenna's input limit.
+        val hex = "0123456789abcdef".repeat(10)
+        assertFalse(MessageLimits.canSend(hex, AntennaState(textCodec = MessageLimits.CODEC_OGZ1, maxTextInputBytes = 160)))
+        assertEquals(161, MessageLimits.onAirTextBytes(hex + "a", MessageLimits.CODEC_OGZ1, 160))
+    }
+
+    @Test
     fun namesAreOneTo24Bytes() {
         assertTrue(MessageLimits.isValidName("Anna Meier"))
         assertTrue(MessageLimits.isValidName("a".repeat(24)))

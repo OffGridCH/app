@@ -1,6 +1,7 @@
 package ch.offgrid.android.domain
 
 import ch.offgrid.android.crypto.OgCrypto
+import ch.offgrid.android.link.codec.OgzCodec
 
 /**
  * Size limits from the link and protocol specs. The radio limit is in **bytes** of UTF-8, not
@@ -19,6 +20,26 @@ object MessageLimits {
 
     /** True when the trimmed text is non-empty and fits into one radio packet. */
     fun canSend(text: String, maxBytes: Int): Boolean = text.isNotBlank() && utf8Bytes(text) <= maxBytes
+
+    /** `sys.hello.text_codec` values of the lab radio image. */
+    const val CODEC_RAW = "raw"
+    const val CODEC_OGZ1 = "ogz1"
+
+    /**
+     * Bytes [text] takes in the TEXT body on air, to compare with `AntennaState.maxTextBytes`. With `ogz1`
+     * the antenna sends the OGZ1 encoding whenever it is shorter (protocol 8.1, inner flag bit 2), so the
+     * same 83 bytes hold about twice the text. Above [maxInputBytes] the antenna refuses the text, and the
+     * raw size is returned so the count shows it as too long.
+     */
+    fun onAirTextBytes(text: String, codec: String, maxInputBytes: Int): Int {
+        val raw = text.toByteArray(Charsets.UTF_8)
+        if (codec != CODEC_OGZ1 || raw.size > maxInputBytes || raw.size < 2) return raw.size
+        return OgzCodec.compress(raw, capacity = raw.size - 1)?.size ?: raw.size
+    }
+
+    /** [canSend] for the connected antenna, including its TEXT codec. */
+    fun canSend(text: String, antenna: AntennaState): Boolean =
+        text.isNotBlank() && onAirTextBytes(text, antenna.textCodec, antenna.maxTextInputBytes) <= antenna.maxTextBytes
 
     fun isValidName(name: String): Boolean {
         val trimmed = name.trim()
