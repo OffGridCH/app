@@ -1,0 +1,109 @@
+@mixin og-type-display {
+  font-family: var(--og-font);
+  font-size: 32px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+@mixin og-type-app-title {
+  font-family: var(--og-font);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+@mixin og-type-hero {
+  font-family: var(--og-font);
+  font-size: 24px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+@mixin og-type-empty-title {
+  font-family: var(--og-font);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+@mixin og-type-page-title {
+  font-family: var(--og-font);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+@mixin og-type-chat-name {
+  font-family: var(--og-font);
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 650;
+}
+
+@mixin og-type-body-strong {
+  font-family: var(--og-font);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+@mixin og-type-body {
+  font-family: var(--og-font);
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+@mixin og-type-body-2 {
+  font-family: var(--og-font);
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--og-text-2);
+}
+
+@mixin og-type-row {
+  font-family: var(--og-font);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+@mixin og-type-preview {
+  font-family: var(--og-font);
+  font-size: 14px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@mixin og-type-help {
+  font-family: var(--og-font);
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 400;
+  color: var(--og-text-3);
+}
+
+@mixin og-type-meta {
+  font-family: var(--og-font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--og-text-3);
+}
+
+@mixin og-type-section {
+  font-family: var(--og-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--og-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+@mixin og-type-value {
+  font-family: var(--og-font-mono);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--og-text);
+}

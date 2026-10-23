@@ -1,0 +1,45 @@
+@use './tokens.scss';
+
+@import '@ionic/angular/css/core.css';
+@import '@ionic/angular/css/normalize.css';
+@import '@ionic/angular/css/structure.css';
+@import '@ionic/angular/css/typography.css';
+@import '@ionic/angular/css/display.css';
+@import '@ionic/angular/css/padding.css';
+@import '@ionic/angular/css/float-elements.css';
+@import '@ionic/angular/css/text-alignment.css';
+@import '@ionic/angular/css/text-transformation.css';
+@import '@ionic/angular/css/flex-utils.css';
+
+:root {
+  --ion-background-color: var(--og-bg);
+  --ion-text-color: var(--og-text);
+  --ion-font-family: var(--og-font);
+}
+
+body {
+  background: var(--og-bg);
+  color: var(--og-text);
+  font-family: var(--og-font);
+}
+
+ion-content {
+  --background: var(--og-bg);
+}
+
+ion-header,
+ion-footer {
+  background: var(--og-bg);
+}
+
+.og-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
