@@ -37,7 +37,7 @@ Hinweis steht, ist im Code dieses Branches vorhanden.
 | UI-Grundkomponenten (Icons, Buttons, Karten, Eingabefeld, Schalter) | fertig | T01 |
 | UI-Zustandskomponenten (Avatar, Signalbalken, Banner, Schrittliste, Blase, Composer, QR) | geplant | T02 |
 | Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level | fertig | T03 |
-| Datenbank, Repositories, App-Start | geplant | T04 |
+| Datenbank, Repositories, Settings, App-Start | fertig | T04 |
 | Antennen-Abstraktion, Frame-Codec, Mock-Antenne | geplant | T05 |
 | Natives USB-Serial-Plugin für Android | geplant | T06 |
 | Nachrichten senden und empfangen | geplant | T07 |
