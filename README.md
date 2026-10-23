@@ -192,23 +192,27 @@ image and what only a second board can show. It is kept by the agent working on 
 
 ## Screenshots
 
-Captured on the emulator (Pixel-sized, API 35) with the simulated antenna, in
-[`docs/screenshots`](docs/screenshots):
+Captured on 2026-10-24 on the emulator (1080 x 2400, 440 dpi, API 35) with the simulated
+antenna and the debug build, in [`docs/screenshots`](docs/screenshots). Side-by-side images
+(design left, app right) for every screen with a design PNG are in
+[`docs/compare`](docs/compare).
 
 | File | Design |
 |---|---|
 | `00-splash` | Logo |
 | `01-antenne-verbinden`, `01b-antenne-verbinden-fehler` | Antenne verbinden (found, and no antenna) |
-| `02-wie-heisst-du` | Name step (no design image; from the screen spec) |
-| `03-kontakte-leer`, `04-kontakte` | kontakte-leer, Kontakte |
+| `02-wie-heisst-du`, `02b-mitteilungen-erlauben` | Name step (no design image; from the screen spec), notification permission |
+| `03-kontakte-leer`, `04-kontakte`, `04b-kontakte-antenne-getrennt` | kontakte-leer, Kontakte |
 | `05-kontakt-hinzufuegen`, `05a-code-scannen`, `05b-code-gescannt` | kontakt-hinzufuegen |
 | `06-handshake-abgeschlossen` | Handshake abgeschlossen |
-| `07-chat`, `08-chat-standort` | Chat, chat-standort |
+| `07-chat`, `07b-reaktion-waehlen`, `07c-reaktion` | Chat (reactions have no design image) |
+| `08-chat-standort` | chat-standort |
 | `09-standort-senden`, `10-standort-ansehen` | Standort senden, Standort ansehen |
 | `11-chat-antenne-getrennt` | chat-antenne-getrennt |
-| `12-einstellungen`, `12b-einstellungen-unten` | Einstellungen |
+| `12-einstellungen`, `12b-einstellungen-unten`, `12c-alle-daten-loeschen` | Einstellungen |
 | `13-daten-exportieren`, `14-daten-importieren` | Daten exportieren, Daten importieren |
 | `15-neue-gruppe`, `16-gruppenchat` | Neue Gruppe, Gruppenchat (optional) |
+| `17-benachrichtigung` | Message notification (no design image) |
 | `90-testmenue` | Debug test menu (not in the design) |
 
 ## Licenses
