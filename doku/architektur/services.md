@@ -1,34 +1,89 @@
 # Services
 
-Die Services liegen in `src/app/core/`. Sie haben keine Oberfläche, sondern liefern Daten an die Seiten. Die
-Verschlüsselung nutzt nur WebCrypto (`crypto.subtle`, `crypto.getRandomValues`) – es gibt keine Krypto-Bibliothek.
+Die Services liegen in `src/app/core/`. Sie haben keine Oberfläche, sondern liefern Daten an die Seiten. Die App verschlüsselt keine
+Nachrichten (das macht die Antenne); für das Entsperren der Antenne nutzt sie nur WebCrypto (`crypto.subtle`, `crypto.getRandomValues`)
+und ein eigenes X25519 – es gibt keine Krypto-Bibliothek.
 
-## CryptoService
+## AntennaPort
 
-Datei: `src/app/core/crypto/crypto.service.ts`. Ein Singleton (`providedIn: 'root'`).
-
-| Name | Typ | Beschreibung |
-|---|---|---|
-| `newKey()` | `string` | 16 Zufallsbytes als 32 Hex-Zeichen in Kleinbuchstaben. |
-| `tag(keyHex)` | `Promise<string>` | Erste 4 Bytes von SHA-256 über die 16 Rohbytes, als 8 Hex-Zeichen. Das Ergebnis wird in einer `Map` gecacht. |
-| `encrypt(keyHex, plain, aad)` | `Promise<EncryptedData>` | AES-GCM 128 Bit mit zufälligem IV (12 Bytes) und AAD. Liefert `{ iv, data }`. |
-| `decrypt(keyHex, iv, data, aad)` | `Promise<Uint8Array>` | Entschlüsselt. Wirft bei falschem Schlüssel oder manipulierten Daten. |
-| `randomHex(bytes)` | `string` | Zufallsbytes als Hex-Text, z. B. 4 Bytes für eine `wireId`. |
-
-Der Service hält keine Signals: Er wird aufgerufen, das Ergebnis wird awaited. Der Tag eines Schlüssels ist die
-Kennung, über die ein empfangener Frame dem richtigen Kontakt zugeordnet wird.
-
-## KeyPatternService
-
-Datei: `src/app/core/crypto/key-pattern.service.ts`. Ein Singleton (`providedIn: 'root'`).
+Datei: `src/app/core/antenna/antenna-port.ts`. Ein Singleton (`providedIn: 'root'`). Die Antenne aus Sicht der App: Verbindung, Zustand,
+Befehle und Ereignisse. Details in [Antenne](../funktionen/antenne.md).
 
 | Name | Typ | Beschreibung |
 |---|---|---|
-| `forContact(contact)` | `Promise<boolean[]>` | Muster eines Kontakts: die beiden Schlüssel sortiert, aneinandergehängt → SHA-256 → 25 Zellen. |
-| `forInstall(installId)` | `Promise<boolean[]>` | Eigenes Muster: die `install_id` → SHA-256 → 25 Zellen. |
+| `state` | `Signal<AntennaState>` | `disconnected`, `unprovisioned`, `locked` oder `unlocked`. |
+| `connecting` | `Signal<boolean>` | `true`, solange `connect()` läuft. |
+| `connected` | `Signal<boolean>` | Verbunden, in jedem Gerätezustand. |
+| `device` | `Signal<DeviceInfo \| null>` | Gerätedaten aus `sys.hello` (Name, Chip, `deviceId`, Firmware, Protokoll). |
+| `identity` | `Signal<{ nodeId, name } \| null>` | Eigene Kennung, solange entsperrt. |
+| `limits` | `Signal<DeviceLimits>` | Grenzen des Geräts; Standard 2048 / 32 / 83 / 8, bis `sys.hello` geantwortet hat. |
+| `error` | `Signal<AntennaErrorCode \| null>` | Letzter Fehler der Verbindung oder des Entsperrens. |
+| `events` | `Observable<DeviceEvent>` | Typisierte Ereignisse: `sys.boot`, `sec.state`, `msg.received`, `msg.status`, `contact.state`. |
+| `connect()` | `Promise<void>` | Leitung öffnen, `sys.hello`, ein gesperrtes Gerät von selbst entsperren, Heartbeat starten. |
+| `disconnect()` | `Promise<void>` | Verbindung beenden. |
+| `provision(name)` | `Promise<boolean>` | Frisches Gerät einrichten (`sec.provision`). |
+| `unlock()` | `Promise<boolean>` | Gesperrtes Gerät entsperren (`sec.unlock`). |
+| `lock()` | `Promise<void>` | Sofort sperren (`sec.lock`). |
+| `request(cmd, args?)` | `Promise<JsonObject>` | Ein Befehl der Host-API. Wirft `DeviceError` mit dem Fehlercode des Geräts. |
 
-Die Ergebnisse werden pro Eingabe zwischengespeichert. Wie das Muster aussieht, steht in
-[Kontakte & Handshake](../funktionen/kontakte-handshake.md).
+## SerialClient
+
+Datei: `src/app/core/antenna/serial-client.ts`. Eine Klasse (kein Service). Spricht JSON Lines: setzt Zeilen zusammen, vergibt `id`s, hält höchstens
+4 Anfragen in Flight, prüft die Zeilenlänge (2048 Bytes) und die Zeitlimits (2 s, 5 s für `sec.*`, `pair.complete`, `contact.delete`), wiederholt
+`sys.hello` alle 500 ms und sendet alle 5 s `sys.ping`. Er kennt weder USB noch einzelne Befehle.
+
+## SerialTransport
+
+Datei: `src/app/core/antenna/serial-transport.ts`. Abstrakte Klasse und DI-Token: die Leitung zur Antenne (Text hinein, Text heraus).
+`MockSerialTransport` hängt das simulierte Gerät `MockDevice` an; `UnavailableSerialTransport` ist der Platzhalter auf Android bis T06.
+
+## KeystoreService
+
+Datei: `src/app/core/keystore/keystore.service.ts`. Abstrakte Klasse und DI-Token: das Entsperr-Geheimnis `K_phone`.
+
+| Name | Typ | Beschreibung |
+|---|---|---|
+| `unlockToken(deviceId)` | `Promise<Uint8Array>` | `HMAC-SHA256(K_phone, "og-unlock-v1" ‖ device_id_bytes)`, 32 Bytes, pro Gerät. |
+| `createUnlockEnvelope(session, deviceId)` | `Promise<{ appEphPub, wrappedToken }>` | Neuer Einmal-Schlüssel und das eingepackte Token (60 Bytes) für `sec.provision` und `sec.unlock`. |
+
+`BrowserKeystoreService` hält einen zufälligen Schlüssel im Arbeitsspeicher; `AndroidKeystoreService` rechnet den HMAC über das native
+Plugin `OffgridKeystore` (T06). X25519 steckt in `x25519.ts`, HKDF und AES-GCM in `unlock-wrap.ts` (WebCrypto).
+
+## MessagingService
+
+Datei: `src/app/core/messaging/messaging.service.ts`. Ein Singleton (`providedIn: 'root'`). Senden und Empfangen über die Host-API; die App
+verschlüsselt nichts. Details in [Nachrichten](../funktionen/nachrichten.md).
+
+| Name | Typ | Beschreibung |
+|---|---|---|
+| `maxContentBytes` | `Signal<number>` | Textlimit des Geräts (`limits.maxTextBytes`), unverändert; 83. |
+| `reactions` | `Observable<ReactionEvent>` | Eingehende Reaktionen (werden nicht gespeichert). |
+| `sendText(contactId, text)` | `Promise<void>` | Teilt den Text an `maxContentBytes()` Bytes; jedes Stück ist eine eigene Nachricht. |
+| `sendLocation(contactId, fix)` | `Promise<void>` | Standort als Nachricht (`type: "geo"`). |
+| `sendReaction(contactId, target, emoji)` | `Promise<boolean>` | Reaktion senden; `emoji = null` nimmt sie zurück. |
+| `retry(messageId)` | `Promise<void>` | Gescheiterte Nachricht noch einmal senden. |
+| `cancel(messageId)` | `Promise<void>` | Nachricht abbrechen (`msg.cancel`). |
+| `markRead(contactId)` | `Promise<void>` | Eingehende Nachrichten eines Kontakts als gelesen markieren. |
+
+## HandshakeService
+
+Datei: `src/app/core/handshake/handshake.service.ts`. Ein Singleton (`providedIn: 'root'`). Das Pairing macht das Gerät; der Dienst
+spiegelt die Kontakte. Details in [Kontakte & Handshake](../funktionen/kontakte-handshake.md).
+
+| Name | Typ | Beschreibung |
+|---|---|---|
+| `qrText` | `Signal<string \| null>` | Text für den eigenen QR-Code. |
+| `qrExpiresAt` | `Signal<number \| null>` | Ablaufzeit des Codes (ms seit 1970). |
+| `error` | `Signal<HandshakeErrorCode \| null>` | Letzter Fehler. |
+| `completedContactId` | `Signal<number \| null>` | Platz des gerade hinzugefügten Kontakts. |
+| `begin()` | `Promise<string \| null>` | `pair.begin`: liefert den QR-Text. |
+| `cancel()` | `Promise<void>` | `pair.cancel`. |
+| `complete(qrText, options?)` | `Promise<Contact \| null>` | `pair.complete`: legt den Kontakt (`pending`, mit `fingerprint`) an. |
+| `syncContacts()` | `Promise<void>` | Alle Kontakte vom Gerät holen (`contact.list`) und lokal speichern. Läuft bei jedem Entsperren. |
+| `refreshContact(contactId)` | `Promise<Contact \| null>` | Einen Kontakt holen (`contact.get`). |
+| `rename(contactId, name)` | `Promise<boolean>` | `contact.rename` (1–24 Bytes). |
+| `remove(contactId)` | `Promise<boolean>` | `contact.delete` und lokal samt Verlauf. |
+| `clearCompleted()` | `void` | `completedContactId` zurücksetzen. |
 
 ## DatabaseService
 
@@ -39,7 +94,7 @@ je nach Plattform dieselbe Schnittstelle verwendet.
 |---|---|---|
 | `open()` | `Promise<void>` | Datenbank öffnen und offene Migrationen ausführen. |
 | `replaceAll(data)` | `Promise<void>` | Alle Nutzdaten ersetzen; die Einstellungen bleiben erhalten. |
-| `deleteAllUserData()` | `Promise<void>` | Kontakte, Nachrichten, Koordinaten und Handshakes löschen; die Einstellungen bleiben erhalten. |
+| `deleteAllUserData()` | `Promise<void>` | Kontakte, Nachrichten und Koordinaten löschen; die Einstellungen bleiben erhalten. |
 
 ### SqliteDatabaseService
 
@@ -64,7 +119,7 @@ Memory-Repositories. `open()` hat im Browser nichts zu öffnen.
 | `open()` | `Promise<void>` | No-op im Browser. |
 | `replaceAll(data)` | `Promise<void>` | Nutzdaten ersetzen und `display_name` speichern. |
 | `deleteAllUserData()` | `Promise<void>` | Nutzdaten löschen; die Einstellungen bleiben erhalten. |
-| `seedDemo()` | `Promise<void>` | Browser mit den Demo-Daten aus `memory/seed.ts` füllen. |
+| `seedDemo()` | `Promise<void>` | Browser mit den Demo-Daten aus `memory/seed.ts` füllen (`DEMO_CONTACTS`, dieselben Kontakte kennt das Mock-Gerät). |
 
 ## SettingsService
 
@@ -87,7 +142,7 @@ kommen aus dem `SettingsRepository`; die Signale sind der schnelle Lesezugriff.
 ## DataChangedService
 
 Datei: `src/app/core/data/data-changed.service.ts`. Ein Singleton (`providedIn: 'root'`). Der Service meldet
-Änderungen an Kontakten, Handshakes oder ganzen Datenbeständen.
+Änderungen an Kontakten, Nachrichten oder ganzen Datenbeständen.
 
 | Name | Typ | Beschreibung |
 |---|---|---|
@@ -101,7 +156,7 @@ Erstellen der Wurzelkomponente auf.
 
 | Name | Typ | Beschreibung |
 |---|---|---|
-| `init()` | `Promise<void>` | Datenbank und Einstellungen starten und auf Android Statusleiste und Splashscreen vorbereiten. |
+| `init()` | `Promise<void>` | Datenbank und Einstellungen starten, die Antenne im Hintergrund verbinden und auf Android Statusleiste und Splashscreen vorbereiten. |
 
 Die Schritte laufen in dieser Reihenfolge:
 
@@ -109,11 +164,12 @@ Die Schritte laufen in dieser Reihenfolge:
 2. Im Browser ruft der Dienst `MemoryDatabaseService.seedDemo()` auf. Der Schritt entfällt bei
    `localStorage.getItem('og.noseed') === '1'`.
 3. `SettingsService.load()` lädt die Einstellungen und legt eine fehlende Install-Id an.
-4. Nur nativ setzt der Dienst den Statusleistenstil auf `Dark` und die definierte Hintergrundfarbe.
-5. Nur nativ blendet der Dienst den Splashscreen aus.
+4. `MessagingService` und `HandshakeService` werden erzeugt (sie hören auf die Antenne), dann startet `AntennaPort.connect()` im Hintergrund.
+   Der Aufruf wird nicht abgewartet: Fehler stehen in `AntennaPort.error`. Ein gesperrtes Gerät entsperrt der Port selbst.
+5. Nur nativ setzt der Dienst den Statusleistenstil auf `Dark` und die definierte Hintergrundfarbe.
+6. Nur nativ blendet der Dienst den Splashscreen aus.
 
-Der Antennenstart und die Startrouten-Berechnung gehören nicht zu T04. Fehler beim Start werden mit `log.error`
-protokolliert.
+Die Startrouten-Berechnung gehört nicht dazu. Fehler beim Start werden mit `log.error` protokolliert.
 
 ## Repositories
 
@@ -122,28 +178,35 @@ SQLite-Implementierung in derselben Datei und eine Memory-Implementierung unter 
 
 ### ContactRepository
 
+Die Kontakte gehören der Antenne; die App spiegelt sie (ohne Schlüssel).
+
 | Name | Rückgabe | Beschreibung |
 |---|---|---|
-| `all()` | `Promise<Contact[]>` | Alle Kontakte, älteste zuerst. |
-| `byId(id)` | `Promise<Contact \| null>` | Ein Kontakt nach Id. |
-| `byReceivingKeyTag(tag, tagOf)` | `Promise<Contact \| null>` | Kontakt, dessen Empfangsschlüssel den gesuchten Tag ergibt. Lädt alle Kontakte und vergleicht `await tagOf(c.receivingKey)` mit dem Tag. |
-| `insert(contact)` | `Promise<void>` | Kontakt einfügen. |
-| `updateNames(id, displayName, firstName, lastName)` | `Promise<void>` | Namen ändern und `updated_at` setzen. |
-| `updateSignal(id, rssi, seenAt)` | `Promise<void>` | Letzte Signalstärke und Empfangszeit setzen. |
-| `delete(id)` | `Promise<void>` | Kontakt löschen; Nachrichten und Koordinaten des Kontakts fallen mit weg. |
+| `all()` | `Promise<Contact[]>` | Alle Kontakte nach Platz (`contactId`). |
+| `byId(contactId)` | `Promise<Contact \| null>` | Ein Kontakt nach Platz. |
+| `upsert(contact)` | `Promise<void>` | Kontakt einfügen oder aktualisieren; der Verlauf des Kontakts bleibt dabei erhalten. |
+| `updateName(contactId, name)` | `Promise<void>` | Namen ändern. |
+| `updateLink(contactId, rssi, snr)` | `Promise<void>` | Signalwerte des letzten empfangenen Pakets. |
+| `setState(contactId, state)` | `Promise<void>` | Zustand ändern (`pending` → `active`). |
+| `delete(contactId)` | `Promise<void>` | Kontakt löschen; Nachrichten und Koordinaten des Kontakts fallen mit weg. |
 | `count()` | `Promise<number>` | Anzahl der Kontakte. |
 
 ### MessageRepository
 
 | Name | Rückgabe | Beschreibung |
 |---|---|---|
+| `byId(id)` | `Promise<Message \| null>` | Eine Nachricht nach Id. |
 | `forContact(contactId)` | `Promise<Message[]>` | Nachrichten eines Kontakts, älteste zuerst. |
-| `lastPerContact()` | `Promise<Map<string, Message>>` | Letzte Nachricht je Kontakt. |
-| `unreadPerContact()` | `Promise<Map<string, number>>` | Anzahl ungelesener eingehender Nachrichten je Kontakt. |
-| `queued()` | `Promise<Message[]>` | Ausgehende Nachrichten mit Status 0, älteste zuerst. |
-| `byWireId(contactId, wireId)` | `Promise<Message \| null>` | Nachricht nach Kontakt und Funk-Id. |
+| `lastPerContact()` | `Promise<Map<number, Message>>` | Letzte Nachricht je Kontakt. |
+| `unreadPerContact()` | `Promise<Map<number, number>>` | Anzahl ungelesener eingehender Nachrichten je Kontakt. |
+| `queued()` | `Promise<Message[]>` | Ausgehende Nachrichten, die noch nicht beim Gerät sind (Status 0, kein `msgRef`), älteste zuerst. |
+| `byMsgRef(msgRef)` | `Promise<Message \| null>` | Offene ausgehende Nachricht mit diesem Handle des Geräts. |
+| `byCtr(contactId, direction, ctr)` | `Promise<Message \| null>` | Nachricht nach Kontakt, Richtung und Zähler. |
 | `insert(message)` | `Promise<void>` | Nachricht einfügen. |
 | `setStatus(id, status)` | `Promise<void>` | Status ändern und `updated_at` setzen. |
+| `assignRef(id, ctr, msgRef, status)` | `Promise<void>` | Zähler und Handle aus der Antwort auf `msg.send` eintragen. |
+| `requeue(id)` | `Promise<void>` | Gescheiterte Nachricht ohne Zähler und Handle wieder in die Warteschlange legen. |
+| `failPending()` | `Promise<number>` | Nach einem Neustart des Geräts alles als gescheitert markieren, was dort wartete. |
 | `markRead(contactId, at)` | `Promise<void>` | Alle ungelesenen eingehenden Nachrichten des Kontakts als gelesen markieren. |
 | `count()` | `Promise<number>` | Anzahl der Nachrichten. |
 
@@ -156,15 +219,6 @@ SQLite-Implementierung in derselben Datei und eine Memory-Implementierung unter 
 | `latestForMessages(messageIds)` | `Promise<Map<string, Coordinate>>` | Neueste Koordinate je Nachricht. |
 | `messageIdForShare(contactId, shareId)` | `Promise<string \| null>` | Nachricht-Id zu einer Freigabe-Id. |
 | `count()` | `Promise<number>` | Anzahl der Koordinaten. |
-
-### HandshakeRepository
-
-| Name | Rückgabe | Beschreibung |
-|---|---|---|
-| `insert(handshake)` | `Promise<void>` | Handshake einfügen. |
-| `open()` | `Promise<Handshake[]>` | Handshakes im Status `waiting` oder `sent`, älteste zuerst. |
-| `doneShowers()` | `Promise<Handshake[]>` | Fertige Handshakes mit Rolle `shower`. |
-| `update(handshake)` | `Promise<void>` | Handshake ändern und `updated_at` setzen. |
 
 ### SettingsRepository
 
@@ -179,8 +233,8 @@ Die Memory-Repositories bieten zusätzlich `clear()` und `insertMany(rows)`. Die
 
 ## Plattform-Weiche
 
-`src/app/app.config.ts` stellt die Datenbank und alle Repositories als `dataProviders` bereit. `useExisting` bindet das
-abstrakte Token an eine konkrete, in `root` registrierte Instanz.
+`src/app/app.config.ts` stellt die Datenbank und alle Repositories als `dataProviders` bereit, die Leitung zur Antenne und den
+Entsperr-Schlüssel als `antennaProviders`. `useExisting` bindet das abstrakte Token an eine konkrete, in `root` registrierte Instanz.
 
 | Token | Browser | Android |
 |---|---|---|
@@ -188,8 +242,9 @@ abstrakte Token an eine konkrete, in `root` registrierte Instanz.
 | `ContactRepository` | `MemoryContactRepository` | `SqliteContactRepository` |
 | `MessageRepository` | `MemoryMessageRepository` | `SqliteMessageRepository` |
 | `CoordinateRepository` | `MemoryCoordinateRepository` | `SqliteCoordinateRepository` |
-| `HandshakeRepository` | `MemoryHandshakeRepository` | `SqliteHandshakeRepository` |
 | `SettingsRepository` | `MemorySettingsRepository` | `SqliteSettingsRepository` |
+| `SerialTransport` | `MockSerialTransport` | `UnavailableSerialTransport` (bis T06) |
+| `KeystoreService` | `BrowserKeystoreService` | `AndroidKeystoreService` |
 
 ## Hilfsmodule (keine Services)
 
@@ -199,7 +254,10 @@ abstrakte Token an eine konkrete, in `root` registrierte Instanz.
 | `src/app/core/crypto/base64.ts` | `toBase64(bytes)`, `fromBase64(base64)` | Bytes als Base64-Text. `fromBase64` wirft bei ungültigem Base64. |
 | `src/app/core/format/time.ts` | `formatTime`, `formatListTime`, `formatLastSeen`, `formatDay` | Zeittexte in der Zeitzone `Europe/Zurich`. |
 | `src/app/core/format/radio.ts` | `formatMHz(freqHz)` | Frequenz in Hz als MHz-Text, z. B. `868100000` → „868“. |
-| `src/app/core/messaging/limits.ts` | `contentBytes`, `maxContentBytes`, `isValidDisplayName` | UTF-8-Bytelänge von Texten und Anzeigenamen; Grenzwerte aus dem Gerätevertrag „OffGrid Link“. |
+| `src/app/core/messaging/limits.ts` | `contentBytes`, `maxContentBytes`, `isValidDisplayName`, `splitText` | UTF-8-Bytelänge von Texten und Anzeigenamen, das gemeldete Textlimit und das Teilen langer Texte. |
+| `src/app/core/messaging/reactions.ts` | `REACTION_EMOJIS`, `isReactionEmoji` | Emoji-Tabelle der Reaktionen (Offgrid Protocol, Appendix B). |
+| `src/app/core/antenna/device-parse.ts` | `parseHello`, `parseContact`, `parseEvent`, … | Prüft Antworten und Ereignisse des Geräts und macht daraus Typen. |
+| `src/app/core/keystore/unlock-wrap.ts`, `x25519.ts` | `wrapToken`, `unwrapToken`, `x25519` | Einpacken des Entsperr-Tokens (WebCrypto) und X25519 (RFC 7748). |
 | `src/app/core/messaging/signal.ts` | `signalLevel`, `signalLabel` | Signal-Level eines Kontakts und der Text dazu. |
 
 Die Formate und die Signalstärke sind in [Nachrichten](../funktionen/nachrichten.md) beschrieben.
@@ -209,7 +267,10 @@ Die Formate und die Signalstärke sind in [Nachrichten](../funktionen/nachrichte
 | Aufrufer | Nutzt |
 |---|---|
 | `AppComponent` | `AppStartService` |
-| `AppStartService` | `DatabaseService`, `SettingsService` und im Browser `MemoryDatabaseService` |
+| `AppStartService` | `DatabaseService`, `SettingsService`, `AntennaPort`, `MessagingService`, `HandshakeService` und im Browser `MemoryDatabaseService` |
+| `AntennaPort` | `SerialTransport`, `KeystoreService`, `SerialClient` |
+| `MessagingService` | `AntennaPort`, `ContactRepository`, `MessageRepository`, `CoordinateRepository`, `HandshakeService`, `DataChangedService` |
+| `HandshakeService` | `AntennaPort`, `ContactRepository`, `DataChangedService` |
 | `SettingsService` | `SettingsRepository` |
 | SQLite-Repositories | `SqliteDatabaseService` |
 | `MemoryDatabaseService` | alle Memory-Repositories |

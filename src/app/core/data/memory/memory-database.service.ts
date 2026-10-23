@@ -1,10 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 
-import { CryptoService } from '../../crypto/crypto.service';
 import { DatabaseService, type DatabaseData } from '../database.service';
 import { MemoryContactRepository } from './memory-contact.repository';
 import { MemoryCoordinateRepository } from './memory-coordinate.repository';
-import { MemoryHandshakeRepository } from './memory-handshake.repository';
 import { MemoryMessageRepository } from './memory-message.repository';
 import { MemorySettingsRepository } from './memory-settings.repository';
 import { createDemoData } from './seed';
@@ -15,9 +13,7 @@ export class MemoryDatabaseService extends DatabaseService {
   private readonly contacts = inject(MemoryContactRepository);
   private readonly messages = inject(MemoryMessageRepository);
   private readonly coordinates = inject(MemoryCoordinateRepository);
-  private readonly handshakes = inject(MemoryHandshakeRepository);
   private readonly settings = inject(MemorySettingsRepository);
-  private readonly cryptoService = inject(CryptoService);
 
   async open(): Promise<void> {
     // Im Browser gibt es keine Datei, die geöffnet werden müsste.
@@ -28,7 +24,6 @@ export class MemoryDatabaseService extends DatabaseService {
     this.contacts.insertMany(data.contacts);
     this.messages.insertMany(data.messages);
     this.coordinates.insertMany(data.coordinates);
-    this.handshakes.insertMany(data.handshakes);
     await this.settings.set('display_name', data.displayName);
   }
 
@@ -38,11 +33,10 @@ export class MemoryDatabaseService extends DatabaseService {
 
   /** Füllt die Datenbank mit den Demo-Daten (nur im Browser, nie in Tests). */
   async seedDemo(): Promise<void> {
-    const demo = createDemoData(this.cryptoService);
+    const demo = createDemoData();
     this.clearUserData();
     this.contacts.insertMany(demo.contacts);
     this.messages.insertMany(demo.messages);
-    this.handshakes.insertMany(demo.handshakes);
     this.settings.insertMany(demo.settings);
   }
 
@@ -50,6 +44,5 @@ export class MemoryDatabaseService extends DatabaseService {
     this.contacts.clear();
     this.messages.clear();
     this.coordinates.clear();
-    this.handshakes.clear();
   }
 }

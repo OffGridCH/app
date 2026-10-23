@@ -3,6 +3,11 @@ name: offgrid-groups
 description: Optionaler Gruppenchat für OffGrid (nur Ticket T20) – Gruppenschlüssel, Einladung per Funk, Gruppen-Frames, Datenbank-Migration v2, GroupService und Gruppen-Screens. Nur laden, wenn ein Ticket es ausdrücklich verlangt.
 ---
 
+> **VERALTET seit T23 – nicht umsetzen, ohne den Entwurf neu zu entscheiden.** Dieser Skill beschreibt Gruppen für das frühere Funkmodem
+> (App-seitige Funkpakete, App-seitige Verschlüsselung, Sendeaufträge der alten Antennen-Schnittstelle). Mit dem Vertrag „Offgrid Host Interface v1“
+> macht das Gerät Funk und Krypto, und die Spezifikationen stellen Gruppenchats „out of scope“ für v1. Vor T20 mit dem Firmware-Team klären,
+> ob Gruppen aus Einzelnachrichten entstehen oder T20 entfällt; danach den Skill neu schreiben (T23 hat ihn bewusst nicht umgeschrieben).
+
 # Gruppenchat (optional, ganz am Schluss)
 
 ## 1. Prinzip
@@ -112,8 +117,9 @@ mit denselben Methoden plus `clear()`/`insertMany()`.
 ## 4. GroupService (`core/groups/group.service.ts`)
 
 Darf `MessagingService` und `HandshakeService` **nicht** injizieren. Bekommt Frames über das Token
-`GROUP_FRAME_HANDLER` in `core/messaging/group-frame-handler.ts` (gleiches Muster wie `HANDSHAKE_FRAME_HANDLER`:
-`providedIn: 'root'`-Factory = no-op; `app.config.ts` setzt `useExisting: GroupService`).
+`GROUP_FRAME_HANDLER` in `core/messaging/group-frame-handler.ts` (`providedIn: 'root'`-Factory = no-op; `app.config.ts` setzt `useExisting: GroupService`).
+> **T23-Hinweis:** Die Spezifikationen (Host Interface §13, Protocol §1) stellen Gruppenchats „out of scope“ für v1; die Host-API kennt keine
+> `gki`/`gmsg`-Pakete. Dieser Skill ist der alte Entwurf für das Funkmodem und vor T20 neu zu entscheiden (Gruppen aus Einzelnachrichten oder entfällt).
 
 - `groups: Signal<GroupListItem[]>` – `{ group, memberCount, lastMessage, unread }`, sortiert nach letzter Aktivität.
 - `messages(groupId): Signal<GroupMessage[]>`
@@ -123,7 +129,7 @@ Darf `MessagingService` und `HandshakeService` **nicht** injizieren. Bekommt Fra
   `GroupErrorCode = 'group-name-invalid' | 'group-no-members' | 'group-too-many' | 'group-too-large' | 'group-duplicate-names'`.
 - `create` prüft: Name 1–40 Zeichen; 1–8 Kontakte; keine zwei gleichen `display_name` unter den Gewählten und keiner gleich
   meinem Namen (sonst `group-duplicate-names`).
-- Gruppen-Avatar: Muster aus SHA-256(`group_key`) (gleiches Verfahren wie `KeyPatternService`), Darstellung siehe §5.
+- Gruppen-Avatar: Raster aus SHA-256(`group_key`), Darstellung siehe §5 (Quelle der Zellwerte wie bei `og-avatar`, offen in T02).
 
 ## 5. Screens (Referenzen `docs/design/screens/GruppeErstellen.dc.html`, `GruppenChat.dc.html`)
 

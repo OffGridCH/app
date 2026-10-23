@@ -1,51 +1,49 @@
 import { Injectable, inject } from '@angular/core';
 
-import type { Contact } from '../models/contact';
+import type { Contact, ContactState } from '../models/contact';
 import { SqliteDatabaseService } from './database.service';
 import {
   CONTACT_COLUMNS,
   CONTACT_DELETE,
-  CONTACT_INSERT,
-  CONTACT_UPDATE_NAMES,
-  CONTACT_UPDATE_SIGNAL,
+  CONTACT_UPDATE_LINK,
+  CONTACT_UPDATE_NAME,
+  CONTACT_UPDATE_STATE,
+  CONTACT_UPSERT,
   contactValues,
   countOf,
-  nowIso,
   toContact,
 } from './sqlite-mapping';
 
 /**
  * Kontakte lesen und schreiben.
  *
+ * Die Kontakte gehören dem Gerät; die App spiegelt sie (`contact.list`/`contact.get`),
+ * damit Verlauf und Anzeige auch ohne Gerät da sind.
+ *
  * Abstrakte Klasse, damit sie als DI-Token dienen kann: nativ die SQLite-,
  * im Browser die Memory-Implementierung.
  */
 export abstract class ContactRepository {
-  /** Alle Kontakte, älteste zuerst. */
+  /** Alle Kontakte nach Platz (`contact_id`). */
   abstract all(): Promise<Contact[]>;
 
-  /** Ein Kontakt nach Id oder `null`. */
-  abstract byId(id: string): Promise<Contact | null>;
+  /** Ein Kontakt nach Platz oder `null`. */
+  abstract byId(contactId: number): Promise<Contact | null>;
 
-  /** Ein Kontakt, dessen Empfangsschlüssel zum angegebenen Tag passt. */
-  abstract byReceivingKeyTag(tag: string, tagOf: (key: string) => Promise<string>): Promise<Contact | null>;
+  /** Kontakt einfügen oder aktualisieren. Der Verlauf des Kontakts bleibt dabei erhalten. */
+  abstract upsert(contact: Contact): Promise<void>;
 
-  /** Neuer Kontakt. */
-  abstract insert(contact: Contact): Promise<void>;
+  /** Namen ändern. */
+  abstract updateName(contactId: number, name: string): Promise<void>;
 
-  /** Anzeigename und Vor-/Nachname eines Kontakts ändern. */
-  abstract updateNames(
-    id: string,
-    displayName: string,
-    firstName: string | null,
-    lastName: string | null,
-  ): Promise<void>;
+  /** Signalwerte des letzten empfangenen Pakets. */
+  abstract updateLink(contactId: number, rssi: number | null, snr: number | null): Promise<void>;
 
-  /** Signalstärke und Zeitpunkt des letzten Empfangs aktualisieren. */
-  abstract updateSignal(id: string, rssi: number, seenAt: string): Promise<void>;
+  /** Zustand ändern (`pending` → `active`). */
+  abstract setState(contactId: number, state: ContactState): Promise<void>;
 
   /** Kontakt löschen (Nachrichten und Koordinaten mit ihm fallen weg). */
-  abstract delete(id: string): Promise<void>;
+  abstract delete(contactId: number): Promise<void>;
 
   /** Anzahl der Kontakte. */
   abstract count(): Promise<number>;
@@ -57,39 +55,33 @@ export class SqliteContactRepository extends ContactRepository {
   private readonly db = inject(SqliteDatabaseService);
 
   async all(): Promise<Contact[]> {
-    const rows = await this.db.query(`SELECT ${CONTACT_COLUMNS} FROM contacts ORDER BY created_at ASC`);
+    const rows = await this.db.query(`SELECT ${CONTACT_COLUMNS} FROM contacts ORDER BY contact_id ASC`);
     return rows.map(toContact);
   }
 
-  async byId(id: string): Promise<Contact | null> {
-    const rows = await this.db.query(`SELECT ${CONTACT_COLUMNS} FROM contacts WHERE id = ?`, [id]);
+  async byId(contactId: number): Promise<Contact | null> {
+    const rows = await this.db.query(`SELECT ${CONTACT_COLUMNS} FROM contacts WHERE contact_id = ?`, [contactId]);
     return rows.length > 0 ? toContact(rows[0]) : null;
   }
 
-  async byReceivingKeyTag(tag: string, tagOf: (key: string) => Promise<string>): Promise<Contact | null> {
-    const contacts = await this.all();
-    for (const contact of contacts) {
-      if ((await tagOf(contact.receivingKey)) === tag) {
-        return contact;
-      }
-    }
-    return null;
+  async upsert(contact: Contact): Promise<void> {
+    await this.db.run(CONTACT_UPSERT, contactValues(contact));
   }
 
-  async insert(contact: Contact): Promise<void> {
-    await this.db.run(CONTACT_INSERT, contactValues(contact));
+  async updateName(contactId: number, name: string): Promise<void> {
+    await this.db.run(CONTACT_UPDATE_NAME, [name, contactId]);
   }
 
-  async updateNames(id: string, displayName: string, firstName: string | null, lastName: string | null): Promise<void> {
-    await this.db.run(CONTACT_UPDATE_NAMES, [displayName, firstName, lastName, nowIso(), id]);
+  async updateLink(contactId: number, rssi: number | null, snr: number | null): Promise<void> {
+    await this.db.run(CONTACT_UPDATE_LINK, [rssi, snr, contactId]);
   }
 
-  async updateSignal(id: string, rssi: number, seenAt: string): Promise<void> {
-    await this.db.run(CONTACT_UPDATE_SIGNAL, [rssi, seenAt, nowIso(), id]);
+  async setState(contactId: number, state: ContactState): Promise<void> {
+    await this.db.run(CONTACT_UPDATE_STATE, [state, contactId]);
   }
 
-  async delete(id: string): Promise<void> {
-    await this.db.run(CONTACT_DELETE, [id]);
+  async delete(contactId: number): Promise<void> {
+    await this.db.run(CONTACT_DELETE, [contactId]);
   }
 
   async count(): Promise<number> {

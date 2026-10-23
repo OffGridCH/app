@@ -1,77 +1,102 @@
 ---
 name: offgrid-crypto-handshake
-description: Schlüssel, Verschlüsselung, QR-Handshake-Ablauf (beide Rollen), Schlüssel-Muster (Profilbild) und verschlüsseltes Backup der OffGrid-App. Laden bei core/crypto, core/handshake, core/backup und bei den Seiten Handshake, Kontakt benennen, Export, Import.
+description: Entsperr-Geheimnis im Android Keystore (Token und Einpacken für das Gerät), QR-Handshake über die Host-API (pair.begin/pair.complete), Fingerabdruck und verschlüsseltes Backup der OffGrid-App. Laden bei core/keystore, core/handshake, core/backup und bei den Seiten Handshake, Kontakt benennen, Export, Import.
 ---
 
-# Krypto, Handshake, Backup
+# Entsperr-Geheimnis, Handshake, Backup
 
-Nur WebCrypto (`crypto.subtle`, `crypto.getRandomValues`). Keine Bibliotheken.
+> Verbindliche Quelle: Offgrid Host Interface v1 (§6 Sicherheit, §7.4 Pairing). **Das Gerät** besitzt Identitätsschlüssel,
+> Kontaktschlüssel, Nonces, Zähler und Replay-Fenster und verschlüsselt jede Nachricht selbst. Die App verschlüsselt
+> **keine** Nachrichten und kennt **keine** Kontaktschlüssel. Das Einzige, was die App geheim hält, ist das
+> Entsperr-Geheimnis `K_phone` im Android Keystore.
+> Nur WebCrypto (`crypto.subtle`, `crypto.getRandomValues`) und ein eigenes X25519 (`core/keystore/x25519.ts`). Keine Bibliotheken.
 
-## 1. CryptoService (`core/crypto/crypto.service.ts`)
+## 1. Entsperr-Token und Einpacken (`core/keystore/`)
 
-| Methode | Verhalten |
-|---|---|
-| `newKey(): string` | 16 Zufallsbytes → 32 Zeichen **Kleinbuchstaben-Hex** (passt zu `CHAR(32)` im ERD) |
-| `tag(keyHex): Promise<string>` | SHA-256 der 16 Rohbytes, erste 4 Bytes als 8 Hex-Zeichen. Ergebnis cachen (Map). |
-| `encrypt(keyHex, plain: Uint8Array, aad: Uint8Array)` | AES-GCM 128 Bit, IV 12 Zufallsbytes, Tag 128 Bit → `{ iv, data }` |
-| `decrypt(keyHex, iv, data, aad)` | wirft bei Fehler |
-| `randomHex(bytes): string` | z. B. `wireId` (4 Bytes) |
+`KeystoreService` (abstrakte Klasse, DI-Token) hält `K_phone`. Der Schlüssel verlässt den Schlüsselspeicher nie; die App darf nur
+`HMAC-SHA256` damit rechnen lassen. Implementierungen:
 
-Hilfsfunktionen in `hex.ts` (`toHex`, `fromHex`) und `base64.ts` (`toBase64`, `fromBase64`) – mit Tests.
+| Klasse | Wo | Schlüssel |
+|---|---|---|
+| `AndroidKeystoreService` | Android | nicht exportierbarer HMAC-SHA256-Schlüssel im nativen Keystore (Alias `offgrid_unlock`), über das Plugin `OffgridKeystore` (T06) |
+| `BrowserKeystoreService` | Browser, Tests, Demo | zufälliger HMAC-Schlüssel im Arbeitsspeicher; **kein Schutz**, nur Ersatz |
 
-## 2. Rollen der Schlüssel pro Kontakt
+Das Plugin `OffgridKeystore` kennt nur `hmac({ data: base64 }) → { mac: base64 }`. X25519, HKDF und AES-GCM laufen in TypeScript.
 
-- `sending_key`: damit verschlüssele **ich** Frames an diesen Kontakt.
-- `receiving_key`: damit verschlüsselt **der Kontakt** Frames an mich. Eingehende Frames werden über `tag(receiving_key)` zugeordnet.
+Ablauf (`KeystoreService.createUnlockEnvelope(session, deviceId)`):
 
-## 3. Handshake-Ablauf
-
-Begriffe: **A** zeigt den QR-Code (Tab „Mein Code“), **B** scannt (Tab „Code scannen“).
-
-1. **A** `startShowing()`: `K_A = newKey()`. Handshake speichern: `role 'shower'`, `local_key K_A`, `state 'waiting'`.
-   QR-Text: `JSON.stringify({ v: 1, k: K_A, n: <mein Anzeigename> })`. Ein neuer Aufruf bricht offene `shower`-Handshakes ab
-   (`state 'cancelled'`).
-2. **B** `scanned(qrText)`: JSON parsen und prüfen (`v === 1`, `k` = 32 Hex, `n` erfüllt `isValidDisplayName` aus `core/messaging/limits.ts`); sonst Fehler `invalid-qr`.
-   `K_B = newKey()`. Handshake speichern: `role 'scanner'`, `local_key K_B`, `remote_key K_A`, `peer_name n`, `state 'sent'`.
-   Frame `hs` mit Schlüssel **K_A**, Klartext `{ k: K_B, n: <mein Anzeigename> }` → senden.
-   Ist die Antenne nicht `ready`: Fehler `antenna-not-ready` (Seite zeigt Hinweis), Handshake bleibt `sent` und wird bei
-   `ready` erneut gesendet – **nur** Handshakes, die in dieser App-Sitzung per `scanned()` entstanden sind
-   (IDs in einem `Set` im Service merken). Ältere `sent`-Handshakes (z. B. aus dem Demo-Seed) werden nie automatisch gesendet.
-3. **A** empfängt `hs`: offenen `shower`-Handshake suchen, dessen `tag(local_key)` dem Frame-Tag entspricht; entschlüsseln.
-   Kontakt anlegen: `sending_key = K_A`, `receiving_key = K_B`, `display_name = n` (von B), `handshake_at = jetzt`.
-   Handshake `state 'done'`, `contact_id` setzen. Frame `hsa` mit Schlüssel **K_A**, Klartext `{ ok: 1 }` senden.
-   `completedContactId` setzen → Seite navigiert zu `kontakte/neu/fertig/:id`. `DataChangedService.notify()`.
-   Passt ein `hs` zu keinem offenen, aber zu einem Handshake aus `HandshakeRepository.doneShowers()` (gleicher Tag,
-   entschlüsselbar): **nur** `hsa` erneut senden
-   (B hat das erste `hsa` verpasst). Kein zweiter Kontakt.
-4. **B** empfängt `hsa`: offenen `scanner`-Handshake suchen, dessen `tag(remote_key)` dem Frame-Tag entspricht; entschlüsseln.
-   Kontakt anlegen: `sending_key = K_B`, `receiving_key = K_A`, `display_name = peer_name`, `handshake_at = jetzt`.
-   Handshake `state 'done'`. `completedContactId` setzen → Navigation wie oben. `DataChangedService.notify()`.
-
-`startShowing()`, `scanned()`, `cancel()` und `clearCompleted()` setzen `completedContactId` auf null.
-Die Seite „Kontakt benennen“ ruft beim Öffnen `clearCompleted()` auf.
-
-Ergebnis: A sendet mit K_A, B empfängt mit K_A; B sendet mit K_B, A empfängt mit K_B.
-
-`HandshakeView` (für die Seite):
-```ts
-{ role: 'shower' | 'scanner'; step: 1 | 2 | 3; qrText?: string; peerName?: string; error?: HandshakeErrorCode }
 ```
-- shower: step 1 = Code bereit (done), step 2 = Gegenüber scannt (active), step 3 = Antwort per Funk empfangen (todo).
-- scanner nach Scan: step 1 = Code gescannt (done), step 2 = Schlüssel per Funk gesendet (active bis `txdone ok`, dann done),
-  step 3 = Bestätigung empfangen (active nach `txdone`).
-`HandshakeErrorCode = 'invalid-qr' | 'antenna-not-ready' | 'scan-cancelled' | 'scanner-unavailable'`
+unlock_token = HMAC-SHA256(K_phone, "og-unlock-v1" || device_id_bytes)                       32 Bytes, pro Gerät
+app_eph      = neues X25519-Schlüsselpaar (einmalig)
+shared       = X25519(app_eph_priv, device_eph_pub)                                           aus sys.hello
+wrap_key     = HKDF-SHA256(ikm = shared, salt = nonce, info = "og-unlock-wrap-v1" || device_id_bytes, L = 32)
+wrapped      = iv (12, zufällig) || AES-256-GCM(wrap_key, iv, plaintext = unlock_token, aad = device_id_bytes)
+```
 
-## 4. Schlüssel-Muster (`KeyPatternService`)
+- `device_id_bytes` sind die **6 Rohbytes** der 12 Hex-Zeichen aus `sys.hello`.
+- `wrapped_token` (Base64) hat **60 Bytes**: 12 IV, 32 Chiffretext, 16 Tag. `app_eph_pub` (Base64) hat 32 Bytes.
+- `sys.hello` liefert pro Sitzung `session { device_eph_pub, nonce }`. Die Sitzung ist **einmalig**: nach **jedem**
+  `sec.provision`/`sec.unlock`, auch nach einem Fehlschlag, ein neues `sys.hello`. Der Einmal-Schlüssel `app_eph` und der IV
+  werden **bei jedem Versuch neu** erzeugt.
+- Das Token geht nie unverpackt über das Kabel; die Einmal-Schlüssel schützen vor Mitlesen und Wiederholen.
+- Ohne Android-Keystore (Browser) rechnet `BrowserKeystoreService` genauso, nur mit einem Schlüssel im Arbeitsspeicher.
 
-Gleiches Muster auf beiden Handys → Menschen können vergleichen, ob der Austausch stimmt.
+**X25519** (`x25519.ts`): RFC 7748 mit `BigInt`, damit es auf jedem WebView läuft. Ein Punkt kleiner Ordnung (Ergebnis 0) ist ein Fehler.
 
-- Kontakt: Eingabe = die beiden Schlüssel **sortiert** (String-Vergleich), aneinandergehängt, als UTF-8 → SHA-256 → 32 Bytes.
-- Eigenes Muster (Einstellungen, Leerzustand): Eingabe = `install_id` als UTF-8 → SHA-256.
-- 5×5 Raster, spiegelsymmetrisch: für Zeile `y` 0–4 und Spalte `x` 0–2: `an = (bytes[y*3 + x] & 1) === 1`.
-  Spalte 3 = Spalte 1, Spalte 4 = Spalte 0. Ergebnis `boolean[25]` zeilenweise.
-- Ausnahme: hat ein Muster weniger als 5 „an“-Zellen, wird zusätzlich die Mittelzelle (Index 12) und Zeile 2 Spalte 1/3 gesetzt
-  (damit nie ein fast leeres Bild entsteht).
+**Pflichttest:** Mit `device_id` `7CDFA100ABCD`, `K_phone` `b16d81c5…5185` und den festen Einmal-Werten des Vertrags
+(§11.1) muss `wrapped_token` genau
+`cHFyc3R1dnd4eXp73iix4tUwvI3SCLdQkDcf6Ipj4SeWMvHCxsuoTYQbFZG8FDO6Y7fb7GfNujVODYXb` sein (`unlock-wrap.spec.ts`).
+Das Gerät-Gegenstück `unwrapToken` gibt es nur für den Browser-Mock und die Tests.
+
+## 2. Wer hält was
+
+| Ding | Wo |
+|---|---|
+| `K_phone` | Android Keystore, nicht exportierbar |
+| Identitäts-Schlüsselpaar, Kontaktschlüssel (`k_out`, `k_in`), Zähler, Replay-Fenster | Gerät (Tresor, mit dem Token entschlüsselt, nur im RAM) |
+| Kontaktliste (Name, `node_id`, `public_key`, `fingerprint`, Zähler, Signal) | Gerät; die App spiegelt sie lokal ohne Schlüssel |
+| Nachrichtenverlauf | App (SQLite), Klartext |
+
+Wer das Handy verliert (Schlüssel weg), kann das Gerät nur noch zurücksetzen (`sys.factory_reset`, mit PRG-Taste am Gerät).
+Das ist gewollt. Beim Zurücksetzen verliert das Gerät alle Schlüssel und Kontakte; der lokale Verlauf bleibt, ist aber keinem
+Kontakt mehr zuzuordnen (Plätze werden neu vergeben).
+
+## 3. Handshake-Ablauf (`HandshakeService`, `pair.*`)
+
+Beide Personen zeigen ihren QR-Code **und** scannen den des anderen. Das Pairing macht das Gerät.
+
+1. `begin()` → `pair.begin`. Ergebnis `qr` ist der **Text für den QR-Code** (Base64 von `"OG1" ‖ public_key (32) ‖ salt (16) ‖ name`),
+   `expires_s` = 300. Es gibt nur ein offenes Pairing; ein neues ersetzt das alte. `cancel()` → `pair.cancel`.
+   Den eigenen Code **nicht erneuern**, nachdem das Gegenüber ihn gescannt hat und bevor man selbst gescannt hat.
+2. `complete(qrText, { name?, replace? })` → `pair.complete`. Vorher prüft die App nur, ob der Text nach einem OffGrid-Code aussieht
+   (`looksLikeOffgridQr`: gültiges Base64, mindestens 51 Bytes, beginnt mit `OG1`); sonst `invalid-qr`. Alles Weitere prüft das Gerät.
+   Das Gerät leitet das gemeinsame Geheimnis und beide Richtungsschlüssel ab und legt den Kontakt als `pending` an.
+   Ergebnis: der Kontakt samt `fingerprint`. Die App speichert ihn (ohne Schlüssel) und setzt `completedContactId`;
+   die Seite navigiert zu „Kontakt benennen“.
+3. Der Kontakt bleibt `pending`, bis das erste gültige Paket des Gegenübers eintrifft; dann meldet das Gerät `contact.state` →
+   `active`. Solange nichts vom Gegenüber ankommt (z. B. weil es nicht gescannt hat), bleibt er `pending`.
+4. `rename(contactId, name)` → `contact.rename` (1–24 Bytes). `remove(contactId)` → `contact.delete` (`confirm: true`) und lokal samt Verlauf.
+
+Kontakte spiegeln: `syncContacts()` holt alle Kontakte mit `contact.list` (Seiten zu 10) und speichert sie; sie läuft bei jedem
+Entsperren. `refreshContact(contactId)` holt einen einzelnen (`contact.get`), z. B. wenn eine Nachricht von einem unbekannten
+Platz kommt. Hat ein Platz inzwischen einen anderen `public_key`, gehört der alte Verlauf nicht mehr zu ihm und wird gelöscht.
+
+Fehlercodes der Seite (`HandshakeErrorCode`): `invalid-qr`, `antenna-not-ready`, `scan-cancelled`, `scanner-unavailable`, `no-pairing`
+(Gerät: `E_NO_PAIRING`), `self-pair` (`E_SELF_PAIR`), `contact-exists` (`E_CONTACT_EXISTS`), `storage-full` (`E_STORAGE_FULL`),
+`pairing-failed` (alles andere).
+
+`HandshakeService` hält: `qrText`, `qrExpiresAt`, `error`, `completedContactId`. `startShowing`/`scanned` der alten Fassung
+gibt es nicht mehr. Schritte der Seite „Handshake“ (Skill `offgrid-screens`) ergeben sich aus diesen Signals:
+Code bereit = `qrText` gesetzt; Gegenüber hat gescannt und ich scanne = `completedContactId` gesetzt.
+
+## 4. Fingerabdruck (statt Schlüssel-Muster)
+
+Der vom Gerät gelieferte `fingerprint` ersetzt das frühere Vergleichsbild. Er besteht aus **drei Vierergruppen** (z. B. „0501 3010 7790“)
+und ist auf beiden Handys **gleich**, wenn der Austausch nicht verfälscht wurde. Berechnung (auf dem Gerät):
+`SHA256("og1-fp" ‖ pub_low ‖ pub_high)`, Schlüssel bytweise sortiert; die ersten 8 Bytes als Big-Endian-Zahl modulo 10¹².
+Die App **zeigt** ihn nur an (Seite „Kontakt benennen“, Kontaktdetails) und bittet beide Personen, ihn zu vergleichen. Sie berechnet
+ihn nie selbst (ausser im Browser-Mock, damit er sich wie auf dem Gerät verhält). Er ist optional: wer nicht vergleicht, bleibt
+unbemerkt anfällig für einen gefälschten QR-Code.
 
 ## 5. Backup (Export/Import) – `BackupService`
 
@@ -82,7 +107,9 @@ Klartext-Inhalt (JSON):
   "coordinates": [ /* Coordinate */ ],
   "groups": [], "groupMembers": [], "groupMessages": [] }   // Gruppen-Felder erst ab T20, beim Import optional
 ```
-Handshakes und Settings ausser `displayName` werden **nicht** exportiert.
+Kontakte werden **ohne Schlüssel** exportiert (die Schlüssel besitzt das Gerät). Ein Backup stellt also Verlauf und Anzeige
+wieder her, nicht die Fähigkeit, mit den Kontakten zu schreiben: dafür braucht es dasselbe Gerät. Settings ausser `displayName` werden
+**nicht** exportiert. Die genaue Anpassung von Export und Import an den neuen Kontakt-Aufbau gehört zu T14.
 
 Verschlüsselung: PBKDF2-SHA-256, 210 000 Iterationen, Salt 16 Bytes → AES-256-GCM, IV 12 Bytes.
 Datei (JSON, UTF-8), Name `offgrid-backup-YYYY-MM-DD.ogx`:
@@ -106,4 +133,6 @@ Erfolg → `DatabaseService.replaceAll(...)`, `DataChangedService.notify()`, dan
 ## 6. Ehrlich bleiben
 
 - Die App verspricht nirgends „sicher“ oder „Ende-zu-Ende“. Texte nur aus Skill `offgrid-screens`.
-- Bekannte Grenze (nur Doku, nicht UI): Wer den QR-Code fotografiert, kann den Handshake mitlesen.
+- Bekannte Grenze (nur Doku, nicht UI): Wer den QR-Code fotografiert und die Gegenseite sofort selbst scannt, kann sich als diese
+  Person ausgeben; der Fingerabdruck-Vergleich deckt das auf. Zwischen Handy und Gerät liegen Nachrichten im Klartext auf dem USB-Kabel.
+- Aktiver Mann-in-der-Mitte auf dem Kabel beim Entsperren ist nicht abgedeckt (Vertrag §6.9).

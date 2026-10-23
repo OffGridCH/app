@@ -13,8 +13,11 @@ export type MessageKind = 'text' | 'location';
 
 export interface Message {
   id: string;
-  contactId: string;
-  wireId: string;
+  contactId: number;
+  /** Zähler dieser Nachricht in der Unterhaltung (0 bis 16777215); bis `msg.send` antwortet `null`. */
+  ctr: number | null;
+  /** Lokaler Handle des Geräts für Status-Ereignisse, nur bis zum nächsten Neustart des Geräts gültig. */
+  msgRef: number | null;
   content: string;
   direction: Direction;
   kind: MessageKind;

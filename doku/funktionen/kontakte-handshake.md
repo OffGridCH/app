@@ -1,37 +1,68 @@
 # Kontakte & Handshake
 
-## Schlüssel-Muster
+Stand: **nach T23**. Das Pairing macht die **Antenne**: Sie erzeugt die Schlüssel, leitet das gemeinsame Geheimnis ab und führt die Kontaktliste. Die App zeigt
+den QR-Code, scannt den des Gegenübers und spiegelt die Kontakte (ohne Schlüssel).
 
-Zwei Personen treffen sich und scannen gegenseitig ihre QR-Codes. Jedes Handy berechnet daraus ein Muster. Ist das
-Muster auf beiden Handys gleich, war der Austausch der Schlüssel erfolgreich. Das Muster verrät nichts über die
-Schlüssel selbst – es ist nur ein Vergleichsbild.
+## Ablauf
 
-Berechnung in `src/app/core/crypto/key-pattern.service.ts` (`KeyPatternService`):
+Zwei Personen treffen sich. **Beide** zeigen ihren QR-Code und scannen den des anderen.
 
-| Muster | Eingabe | Schritt |
-|---|---|---|
-| eines Kontakts | die beiden Schlüssel des Kontakts, **sortiert** und aneinandergehängt | SHA-256 über die UTF-8-Bytes |
-| eigenes Muster (Einstellungen) | die `install_id` | SHA-256 über die UTF-8-Bytes |
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as App A
+    participant AD as Antenne A
+    participant BD as Antenne B
+    participant B as App B
 
-Weil die Schlüssel sortiert werden, macht es keinen Unterschied, wer welchen Schlüssel zuerst erzeugt hat: Beide
-Handys kommen zum selben Muster.
-
-Aus dem SHA-256 entsteht ein **5×5-Raster mit 25 Zellen** (`boolean[]`, zeilenweise). Das Muster ist
-**spiegelsymmetrisch**: In `src/app/core/crypto/key-pattern.service.ts` steht
-
-```ts
-const on = (bytes[y * HALF_COLUMNS + x] & 1) === 1;
+    A->>AD: pair.begin
+    AD-->>A: qr (Base64 von "OG1", Public Key, Salz, Name)
+    B->>BD: pair.begin
+    BD-->>B: qr
+    Note over A,B: A zeigt ihren Code, B scannt ihn, dann umgekehrt
+    A->>AD: pair.complete (Code von B)
+    AD-->>A: Kontakt (pending, fingerprint)
+    B->>BD: pair.complete (Code von A)
+    BD-->>B: Kontakt (pending, fingerprint)
+    Note over A,B: Beide vergleichen den Fingerabdruck (optional)
+    AD-->>A: Ereignis contact.state (active), sobald das erste Paket von B ankommt
 ```
 
-`HALF_COLUMNS` ist 3: Für jede Zeile `y` und Spalte `x` von 0 bis 2 wird so eine Zelle gesetzt. Spalte 3 spiegelt
-Spalte 1, Spalte 4 spiegelt Spalte 0. Durch die Spiegelung sieht das Bild auf beiden Handys gleich aus.
+- `HandshakeService.begin()` ruft `pair.begin` und liefert den **Text für den QR-Code**: Base64 von `"OG1" ‖ Public Key (32) ‖ Salz (16) ‖ Name`. Er läuft
+  nach 300 s ab. Es gibt nur ein offenes Pairing; ein neues ersetzt das alte. Den eigenen Code nicht erneuern, nachdem er gescannt wurde und bevor man selbst gescannt
+  hat: das Salz muss zum Code passen, den das Gegenüber hat.
+- `HandshakeService.complete(qrText)` prüft nur, ob der Text nach einem OffGrid-Code aussieht (gültiges Base64, mindestens 51 Bytes, beginnt mit `OG1`), und ruft
+  `pair.complete`. Der Rest ist Sache der Antenne. Ergebnis: der Kontakt mit `fingerprint`, Zustand `pending`.
+- Der Kontakt wird `active`, sobald das erste gültige Paket des Gegenübers eintrifft (Ereignis `contact.state`).
 
-Hat ein Muster weniger als 5 „an“-Zellen, setzt der Service zusätzlich die Mittelzelle (Index 12) und die Zellen 11
-und 13 (Zeile 2, Spalte 1 und 3). So entsteht nie ein fast leeres Bild.
+| Fehler | Antenne | Bedeutung |
+|---|---|---|
+| `invalid-qr` | `E_INVALID_QR` | kein OffGrid-Code oder kaputt |
+| `no-pairing` | `E_NO_PAIRING` | der eigene Code ist abgelaufen oder wurde nicht geholt |
+| `self-pair` | `E_SELF_PAIR` | der eigene Code wurde gescannt |
+| `contact-exists` | `E_CONTACT_EXISTS` | dieser Schlüssel ist schon Kontakt (mit `replace: true` ersetzen) |
+| `storage-full` | `E_STORAGE_FULL` | alle 32 Plätze belegt |
+| `antenna-not-ready` | – | die Antenne ist nicht entsperrt |
+| `pairing-failed` | alles andere | |
 
-Die gleichen Eingaben liefern immer das gleiche Muster; die Ergebnisse werden pro Eingabe zwischengespeichert.
+## Fingerabdruck
+
+Der Fingerabdruck ersetzt das frühere Vergleichsbild (Schlüssel-Muster). Er besteht aus **drei Vierergruppen** (z. B. „0501 3010 7790“) und ist auf beiden Handys
+gleich, wenn der Austausch nicht verfälscht wurde. Die Antenne berechnet ihn: `SHA256("og1-fp" ‖ pub_low ‖ pub_high)` mit bytweise sortierten Schlüsseln, die
+ersten 8 Bytes als Zahl modulo 10¹². Die App zeigt ihn nur an. Der Vergleich ist freiwillig; wer ihn auslässt, bleibt gegen einen gefälschten QR-Code ungeschützt.
+
+## Kontakte spiegeln
+
+| Methode | Antenne | Wann |
+|---|---|---|
+| `syncContacts()` | `contact.list` (Seiten zu 10) | bei jedem Entsperren |
+| `refreshContact(id)` | `contact.get` | wenn eine Nachricht von einem unbekannten Platz kommt |
+| `rename(id, name)` | `contact.rename` | Name 1–24 Bytes |
+| `remove(id)` | `contact.delete` mit `confirm: true` | löscht Schlüssel und Zähler auf der Antenne und lokal den Verlauf |
+
+Ein Kontakt hat auf der Antenne einen **Platz** (`contact_id`, 1 bis 32). Hat ein Platz inzwischen einen anderen öffentlichen Schlüssel (Antenne zurückgesetzt, Platz neu
+vergeben), gehört der alte Verlauf nicht mehr dazu und wird mit dem alten Kontakt gelöscht. Kontaktschlüssel kennt die App nie: sie sind nie Teil eines Kontakt-Objekts.
 
 !!! info "Geplant"
 
-    Der QR-Handshake selbst (A zeigt seinen Code, B scannt, beide tauschen die Schlüssel per Funk) folgt mit T08,
-    die Screens mit T11.
+    Die Seiten „Kontakt hinzufügen“ und „Kontakt benennen“ folgen mit T11 (QR-Anzeige, Scanner). Die Zellwerte des Profilbilds (`og-avatar`) werden mit T02 festgelegt.

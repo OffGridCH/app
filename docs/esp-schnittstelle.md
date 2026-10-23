@@ -1,73 +1,98 @@
-# OffGrid – Schnittstelle App ↔ Antenne (Vorschlag v1)
+# OffGrid – Schnittstelle App ↔ Antenne (Offgrid Link v1)
 
-Zum Abstimmen zwischen App (Frontend) und Antennen-Firmware (ESP32 + LoRa 868 MHz).
-Die App behandelt die Antenne als **reines Funkmodem**: Sie gibt fertige, verschlüsselte Pakete zum Senden und
-bekommt empfangene Pakete samt Signalstärke zurück. Verschlüsselung, Kontakte und Zustellbestätigungen macht die App.
+Diese Seite ersetzt den früheren Vorschlag („Funkmodem“). **Verbindlich** sind die drei Spezifikationen des Firmware-Teams
+im Firmware-Repo `OffGridCH/firmware`:
 
-## 1. Verbindung
-
-- USB-C, USB-CDC oder USB-UART (CP210x/CH340) – bitte angeben, welcher Chip/Modus.
-- 115200 Baud, 8N1. Die App setzt DTR/RTS auf `true` nach dem Öffnen.
-- **Bitte prüfen:** Darf DTR/RTS einen Reset des ESP auslösen? Wenn ja, muss die Firmware nach dem Boot sofort
-  auf `hello` reagieren können.
-
-## 2. Format
-
-- Eine Nachricht = **eine Zeile JSON**, abgeschlossen mit `\n`. Nur ASCII. Max. 512 Zeichen pro Zeile.
-- Unbekannte Felder werden ignoriert (vorwärtskompatibel).
-- Binärdaten (Funkpakete) als **Base64** im Feld `p`.
-
-## 3. Befehle App → Antenne
-
-| t | Felder | Erwartete Antwort |
+| Dokument | Datei | Inhalt |
 |---|---|---|
-| `hello` | `proto: 1` | `info` innerhalb von 3 s (die App versucht es bis zu 3× – reicht für einen Neustart durch DTR) |
-| `tx` | `id` (8 Hex-Zeichen), `p` (Base64, max. `max` Bytes nach Dekodierung) | `txdone` mit derselben `id`, wenn gefunkt (Ziel < 10 s) |
-| `ping` | – | `pong` |
+| Offgrid Host Interface v1 | `docs/offgrid-link.md` | Serial-API Android ⇄ Heltec V3: Rahmen, Befehle, Ereignisse, Fehlercodes, Limits, Provisioning und Entsperren |
+| Offgrid Protocol v1 | `docs/offgrid-protocol.md` | Funk-Protokoll zwischen den Geräten (Paketformat, Verschlüsselung, Mesh). Das **Gerät** setzt es um; die App baut es nicht |
+| Firmware Architecture v1 | `docs/offgrid-firmware-architecture_v1.md` | Modulaufteilung des Geräts |
 
-## 4. Meldungen Antenne → App
+Bei Widerspruch gilt die Spezifikation. Diese Seite fasst nur zusammen, was die App davon braucht, und nennt die Stellen im App-Code.
+Die App-Skills (`.kilo/skills/offgrid-antenna-protocol`, `offgrid-crypto-handshake`) beschreiben die Umsetzung in der App.
 
-| t | Felder | Bedeutung |
-|---|---|---|
-| `info` | `proto` (1), `fw` (z. B. `"1.0.0"`), `freq` (Hz, z. B. `868100000`), `max` (max. Paketgrösse in Bytes) | Antwort auf `hello` |
-| `txdone` | `id`, `ok` (bool), `err` (`"busy"` \| `"too_long"` \| `"radio"`) | Paket gefunkt bzw. nicht |
-| `rx` | `p` (Base64), `rssi` (dBm, Integer), `snr` (dB, Zahl) | Jedes empfangene LoRa-Paket, ungefiltert |
-| `pong` | – | Antwort auf `ping` |
-| `log` | `msg` | Debug-Ausgabe (optional) |
+## 1. Aufgabenteilung
 
-**Wichtig:** Ausser diesen Zeilen bitte **nichts** auf die Serial-Schnittstelle schreiben (kein `Serial.println("Booting…")`),
-oder nur als `{"t":"log","msg":"…"}`.
-
-## 5. Beispiel
-
-```
-→ {"t":"hello","proto":1}
-← {"t":"info","proto":1,"fw":"1.0.0","freq":868100000,"max":222}
-→ {"t":"tx","id":"a1b2c3d4","p":"EQx4..."}
-← {"t":"txdone","id":"a1b2c3d4","ok":true}
-← {"t":"rx","p":"EQx4...","rssi":-92,"snr":7.25}
-→ {"t":"ping"}
-← {"t":"pong"}
-```
-
-## 6. Verhalten
-
-- Die App sendet alle 5 s `ping`. Kommt 15 s lang keine Zeile, gilt die Antenne als getrennt.
-- `tx` während die Antenne sendet: in eine Warteschlange legen (bevorzugt) oder `txdone ok:false err:"busy"`.
-- Empfangene Pakete **alle** weitergeben (auch eigene Echos sind ok – die App filtert).
-
-## 7. Zu klären (bitte ausfüllen)
-
-| Frage | Antwort |
+| Das Gerät (Heltec V3) | Die App |
 |---|---|
-| Max. LoRa-Payload in Bytes (`max`) | |
-| Spreading Factor / Bandbreite / Coding Rate | |
-| Duty-Cycle-Begrenzung (868 MHz: 1 %) – wie gehandhabt? | |
-| USB-Chip / CDC? Reset bei DTR? | |
-| Firmware-Versionsschema | |
-| Wer testet die Gegenstelle (zweites Gerät) wann? | |
+| Identitätsschlüssel, Kontaktschlüssel, Verschlüsselung, Nonces, Zähler, Replay-Fenster | zeigt Oberfläche, speichert den Nachrichtenverlauf |
+| Kontaktliste (Name, `node_id`, `public_key`, `fingerprint`, Zähler, Signal) | spiegelt die Kontakte lokal, ohne Schlüssel |
+| Funk, Mesh, Wiederholungen, Quittungen | schickt Klartext mit `msg.send`, bekommt `msg.received` und `msg.status` |
+| Tresor in Flash, nur mit dem Entsperr-Token lesbar | hält das Entsperr-Geheimnis `K_phone` im Android Keystore |
 
-## 8. Was die App ins Paket `p` packt (nur zur Info)
+## 2. Verbindung und Rahmen
 
-`[1 Byte Version/Typ][4 Byte Empfänger-Tag][12 Byte IV][verschlüsselte Daten + 16 Byte Auth-Tag]` –
-Mindestgrösse 33 Bytes. Die Antenne muss den Inhalt nicht verstehen.
+| Wert | Spezifikation |
+|---|---|
+| Link | USB-Serial, 115200 Baud, 8N1, kein Flow Control |
+| DTR/RTS | die App setzt beide **sofort nach dem Öffnen auf low**, sonst setzt sich der ESP32 zurück |
+| Format | JSON Lines: ein JSON-Objekt pro Zeile, UTF-8, mit `\n` abgeschlossen (ein `\r` davor wird toleriert) |
+| Zeilenlänge | höchstens **2048 Bytes** inklusive LF, in beide Richtungen |
+| Anfrage | `{"id":…,"cmd":"namespace.verb","args":{…}}` |
+| Antwort | `{"id":…,"ok":true,"result":{…}}` oder `{"id":…,"ok":false,"error":{"code","message","field"?}}` |
+| Ereignis | `{"evt":…,"t":…,"data":{…}}`; wird nie beantwortet |
+| Anfragen in Flight | höchstens 4 |
+| Zeitlimit | 2 s; 5 s für `sec.*`, `pair.complete`, `contact.delete` |
+| Boot | die App ignoriert Zeilen ohne führendes `{`, verwirft alles bis zum ersten `\n` nach dem Öffnen und wiederholt `sys.hello` alle 500 ms |
+| Heartbeat | die App sendet alle 5 s `sys.ping`; ohne gültige Zeile sperrt sich das Gerät nach 15 s selbst |
+
+## 3. Zustände
+
+`unprovisioned` (frisch, kein Tresor) → `sec.provision` → `unlocked`. `locked` (Tresor da, verschlüsselt) → `sec.unlock` → `unlocked`.
+Ein Neustart führt immer zu `locked`. Welcher Befehl in welchem Zustand geht, steht in Host Interface §5.1.
+
+## 4. Befehle und Ereignisse, die die App benutzt
+
+| Gruppe | Befehle |
+|---|---|
+| `sys.*` | `sys.hello`, `sys.status`, `sys.ping`, `sys.reboot` |
+| `sec.*` | `sec.provision`, `sec.unlock`, `sec.lock` |
+| `id.*` | `id.get`, `id.set_name` |
+| `pair.*` | `pair.begin`, `pair.cancel`, `pair.complete` |
+| `contact.*` | `contact.list`, `contact.get`, `contact.rename`, `contact.delete` |
+| `msg.*` | `msg.send` (`text`, `reaction`, `geo`), `msg.cancel`, `msg.pending` |
+| `radio.*`, `mesh.*`, `led.*` | `radio.get`, `radio.set`, `mesh.get`, `mesh.set`, `led.get`, `led.set` (nur als Dienst, noch ohne Oberfläche) |
+
+Die App wertet die Ereignisse `sys.boot`, `sec.state`, `msg.received`, `msg.status` und `contact.state` aus.
+**Nicht benutzt:** `sys.factory_reset`, `sys.set_log_level`, `sec.rotate_token`, `sec.get_policy`, `sec.set_policy`, `radio.stats`, `led.test`,
+`dbg.*`, die Ereignisse `rf.tx`, `rf.rx`, `log`, `error`.
+
+## 5. Zahlen
+
+| Wert | Zahl |
+|---|---|
+| Text pro Nachricht | **83 Bytes** (`limits.max_text_bytes`; längere Texte teilt die App) |
+| Namen (eigener Name, Kontaktname) | 1–24 Bytes UTF-8 |
+| Kontakte | 32 |
+| Warteschlange im Gerät | 8 (nur RAM) |
+| `contact.list` | höchstens 10 je Seite |
+| Auto-Lock | 15 s |
+| Pairing läuft ab | 300 s |
+| Entsperr-Token / `wrapped_token` | 32 Bytes / 60 Bytes |
+| Fehlversuche beim Entsperren | nach 3 in Folge 2 s Sperre, doppelt, höchstens 60 s |
+
+## 6. Entsperren (Kurzfassung)
+
+1. `sys.hello` liefert `device_id`, `session { device_eph_pub, nonce }` und den Zustand.
+2. Die App rechnet `unlock_token = HMAC-SHA256(K_phone, "og-unlock-v1" ‖ device_id_bytes)` mit dem Schlüssel aus dem Android Keystore.
+3. Sie packt das Token ein: X25519 mit `device_eph_pub`, HKDF-SHA256 (`salt = nonce`, `info = "og-unlock-wrap-v1" ‖ device_id_bytes`),
+   AES-256-GCM (`aad = device_id_bytes`) → `wrapped_token` = IV (12) ‖ Chiffretext (32) ‖ Tag (16) = 60 Bytes.
+4. `sec.provision` (frisches Gerät, mit `name`) oder `sec.unlock`. Die Sitzung ist einmalig: nach jedem Versuch ein neues `sys.hello`.
+
+Der Testvektor (`device_id` `7CDFA100ABCD`) steht in Host Interface §11.1; die App prüft ihn in `src/app/core/keystore/unlock-wrap.spec.ts`.
+
+## 7. Pairing (Kurzfassung)
+
+`pair.begin` liefert `qr` = Base64 von `"OG1" ‖ public_key (32) ‖ salt (16) ‖ name`; die App zeigt diesen Text als QR-Code. Beide Personen scannen
+den Code des anderen und rufen `pair.complete`. Das Gerät antwortet mit dem Kontakt (`state: pending`, `fingerprint`); nach dem ersten gültigen
+Paket des Gegenübers meldet es `contact.state` → `active`. Der Fingerabdruck ist auf beiden Handys gleich, wenn nichts verfälscht wurde.
+
+## 8. Offene Punkte an das Firmware-Team
+
+Die frühere Fragenliste (Payload, SF/BW/CR, Duty-Cycle, USB-Chip) ist durch die Spezifikationen beantwortet. Offen aus Sicht der App:
+
+| Frage | Grund |
+|---|---|
+| Kann `geo` Live-Updates zu **einer** Nachricht kennzeichnen (Freigabe-Id, Ende)? | Live-Standort (T19) braucht das; Host Interface §7.5 kennt es nicht |
+| Gruppenchat (T20): Die Spezifikationen stellen Gruppen „out of scope“ (Host Interface §13, Protocol §1). Soll die App Gruppen aus Einzelnachrichten bauen, oder entfällt T20? | Gruppenchat wurde für das alte Funkmodem entworfen |
