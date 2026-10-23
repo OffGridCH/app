@@ -1,5 +1,22 @@
 # Änderungen
 
+## T04 – Datenbank, Repositories, Settings, App-Start
+*2026-10-24*
+
+- Auf Android speichert die App Kontakte, Nachrichten, Koordinaten, Handshakes und Einstellungen in der SQLite-Datenbank
+  `offgrid`. Migration 1 legt das Schema fest; `PRAGMA user_version` steuert spätere Migrationen.
+- Im Browser arbeiten dieselben Repositories auf Daten im Arbeitsspeicher. Die Plattform-Weiche in `app.config.ts`
+  wählt SQLite oder Memory und stellt für jede Variante dieselbe Instanz bereit.
+- Kontakte, Nachrichten, Koordinaten, Handshakes und Einstellungen haben jeweils ein abstraktes Repository sowie eine
+  SQLite- und eine Memory-Implementierung. Das Löschen eines Kontakts entfernt in beiden Varianten seine Nachrichten
+  und Koordinaten.
+- Der Browser startet mit drei Demo-Kontakten, sechs Nachrichten und dem offenen Handshake „Jonas Keller“. Mit
+  `localStorage og.noseed = '1'` startet er leer. `DataChangedService` meldet Datenänderungen über eine Version.
+- `SettingsService` stellt Anzeigename, Install-Id, Hintergrundempfang, Vibration und Onboarding-Status bereit. Die
+  Install-Id wird beim ersten Start erzeugt und danach weiterverwendet.
+- Der App-Start öffnet die Datenbank, lädt die Einstellungen und bereitet auf Android Statusleiste und Splashscreen
+  vor. Der Antennenstart folgt mit T05.
+
 ## T03 – Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level
 *2026-10-23*
 

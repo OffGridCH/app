@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { IonApp, IonRouterOutlet } from '@ionic/angular';
+
+import { AppStartService } from './core/app-start.service';
 
 @Component({
   selector: 'app-root',
@@ -7,4 +9,10 @@ import { IonApp, IonRouterOutlet } from '@ionic/angular';
   imports: [IonApp, IonRouterOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AppComponent {}
+export class AppComponent {
+  private readonly appStart = inject(AppStartService);
+
+  constructor() {
+    void this.appStart.init();
+  }
+}
