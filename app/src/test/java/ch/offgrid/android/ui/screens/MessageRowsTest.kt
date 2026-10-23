@@ -12,9 +12,9 @@ class MessageRowsTest {
     private fun at(day: Int, hour: Int) = LocalDateTime.of(2026, 10, day, hour, 0).atZone(zone).toInstant().toEpochMilli()
     private val now = at(24, 12)
 
-    private fun msg(id: Long, direction: String, sentAt: Long, sender: Long? = null) = MessageEntity(
+    private fun msg(id: Long, direction: String, sentAt: Long, sender: Long? = null, status: Int = MessageStatus.DELIVERED) = MessageEntity(
         id = id, contactId = 1, direction = direction, kind = "text", text = "m$id",
-        status = MessageStatus.DELIVERED, sentAt = sentAt, senderContactId = sender,
+        status = status, sentAt = sentAt, senderContactId = sender,
     )
 
     private fun List<MessageRow>.msgs() = filterIsInstance<MessageRow.Msg>().associateBy { it.message.id }
@@ -62,5 +62,11 @@ class MessageRowsTest {
             now,
         ).msgs()
         assertEquals(listOf(true, false, true, false, true), (1L..5L).map { rows.getValue(it).showSender })
+    }
+
+    @Test
+    fun noTuckedCornerAfterAFailedBubble() {
+        val rows = messageRows(listOf(msg(1, "out", at(24, 8), status = MessageStatus.FAILED), msg(2, "out", at(24, 9))), now).msgs()
+        assertEquals(false, rows.getValue(2).continued)
     }
 }
