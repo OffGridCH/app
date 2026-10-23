@@ -47,7 +47,7 @@ export interface OgSegmentedOption {
       display: flex;
       align-items: center;
       justify-content: center;
-      height: 44px;
+      height: var(--og-touch);
       padding: 0 8px;
       border: none;
       border-radius: var(--og-r-md);

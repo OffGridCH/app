@@ -15,11 +15,11 @@ export type OgSectionLabelInset = 'card' | 'list';
 
     .og-section-label {
       @include og-type-section;
-      padding: 26px 28px 8px 28px;
+      padding: var(--og-section-gap) 28px 8px 28px;
     }
 
     .og-section-label--list {
-      padding: 26px 20px 8px 20px;
+      padding: var(--og-section-gap) var(--og-gutter-title) 8px var(--og-gutter-title);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

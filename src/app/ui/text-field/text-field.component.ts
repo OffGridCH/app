@@ -5,6 +5,9 @@ export type OgTextFieldType = 'text' | 'password';
 
 @Component({
   selector: 'og-text-field',
+  host: {
+    '[attr.id]': 'null',
+  },
   template: `
     <div class="og-text-field">
       <label class="og-text-field__label" [attr.for]="id()">

@@ -1,3 +1,4 @@
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
@@ -17,6 +18,14 @@ import {
   OgTopbarComponent,
 } from './index';
 
+@Component({
+  selector: 'app-text-field-test-host',
+  imports: [OgTextFieldComponent],
+  template: '<og-text-field id="name" label="Anzeigename" />',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+class TextFieldHostComponent {}
+
 /**
  * Prüft die Grundkomponenten aus T01: der Barrel `src/app/ui/index.ts` muss fehlerfrei auflösen
  * und die Komponenten müssen die im Ticket geforderten Tags und ARIA-Attribute liefern.
@@ -24,6 +33,7 @@ import {
 describe('UI-Basis (src/app/ui)', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
+      imports: [TextFieldHostComponent],
       providers: [provideRouter([])],
     });
   });
@@ -158,18 +168,33 @@ describe('UI-Basis (src/app/ui)', () => {
 
   it('og-text-field bindet den Wert in beide Richtungen', async () => {
     const fixture = TestBed.createComponent(OgTextFieldComponent);
-    fixture.componentRef.setInput('id', 'name');
+    fixture.componentRef.setInput('id', 'value-name');
     fixture.componentRef.setInput('label', 'Anzeigename');
     fixture.detectChanges();
 
     const input = fixture.nativeElement.querySelector('input') as HTMLInputElement;
     const label = fixture.nativeElement.querySelector('label') as HTMLLabelElement;
-    expect(label.getAttribute('for')).toBe('name');
+    expect(label.getAttribute('for')).toBe('value-name');
 
     input.value = 'OffGrid';
     input.dispatchEvent(new Event('input'));
     await fixture.whenStable();
     expect(fixture.componentInstance.value()).toBe('OffGrid');
+  });
+
+  it('og-text-field verwendet eine statische Host-ID nur für das Input', () => {
+    const fixture = TestBed.createComponent(TextFieldHostComponent);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement.querySelector('og-text-field') as HTMLElement;
+    const input = fixture.nativeElement.querySelector('input') as HTMLInputElement;
+    const label = fixture.nativeElement.querySelector('label') as HTMLLabelElement;
+    const elementsWithId = document.querySelectorAll('[id="name"]');
+
+    expect(host.getAttribute('id')).toBeNull();
+    expect(elementsWithId).toHaveLength(1);
+    expect(elementsWithId[0]).toBe(input);
+    expect(label.control).toBe(input);
   });
 
   it('og-icon rendert das gewählte Icon mit der Standardgrösse', async () => {

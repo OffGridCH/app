@@ -12,7 +12,9 @@ import { ChangeDetectionStrategy, Component, input, model } from '@angular/core'
       [attr.aria-labelledby]="labelledBy()"
       (click)="toggle()"
     >
-      <span class="og-switch__knob"></span>
+      <span class="og-switch__track">
+        <span class="og-switch__knob"></span>
+      </span>
     </button>
   `,
   styles: `
@@ -25,17 +27,27 @@ import { ChangeDetectionStrategy, Component, input, model } from '@angular/core'
       display: flex;
       align-items: center;
       width: 52px;
+      height: var(--og-touch);
+      box-sizing: border-box;
+      padding: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .og-switch__track {
+      display: flex;
+      align-items: center;
+      width: 52px;
       height: 32px;
       box-sizing: border-box;
       padding: 3px;
-      border: none;
       border-radius: var(--og-r-pill);
       background: var(--og-signal-off);
-      cursor: pointer;
       transition: background 150ms ease;
     }
 
-    .og-switch--on {
+    .og-switch--on .og-switch__track {
       background: var(--og-accent);
       justify-content: flex-end;
     }
