@@ -1,56 +1,60 @@
 # Status of the native Android app (branch `app-finish`)
 
-Snapshot for the 02:00 team sync on 2026-10-24. The branch builds; the debug APK is at
-`app/build/outputs/apk/debug/app-debug.apk` (install with `adb install -r <apk>`). Everything
-runs against the simulated antenna on the emulator; a real Heltec is the hardware agent's lane
-on `main`, which is merged in (last merge: `381869c`, TCP bridge to a real Heltec).
+Snapshot for the 02:00 team sync on 2026-10-24. The branch builds and passes
+`./gradlew testDebugUnitTest lint assembleDebug assembleRelease` (lint: 0 errors). APKs:
+
+- Debug: `app/build/outputs/apk/debug/app-debug.apk`
+- Release-style, signed with the SDK debug key: `app/build/outputs/apk/release/app-release.apk`
+
+Install with `adb install -r <apk>`; details in the [README](README.md). Everything runs against
+the simulated antenna on the emulator; a real Heltec is the hardware agent's lane on `main`,
+which is merged in (last merge: `f2f28cd`, lab radio image results).
 
 ## Done
 
-- **Shared components** match the HTML designs more closely and animate their state changes:
-  buttons, switches (whole row toggles), segmented control (sliding highlight), badges, step
-  list, signal bars, status dot, banners and notes (announced by TalkBack). Spinners and pulses
-  stand still when the system animation scale is 0 (reduced motion).
-- **Chat**: bubbles grouped like `Main.dc.html` (8 dp gap where the direction changes, the
-  second outgoing bubble in a row tucks its top corner in), status changes cross-fade
-  (queued dashed → sent solid → failed red), new bubbles animate into place. Reactions open
-  with a real long press (a tap no longer does) and the own reaction shows under the bubble.
-  Sheets slide up with a fading scrim. Bearing arrows turn the short way round.
+- **Shared components** match the HTML designs and animate their state changes: buttons,
+  switches (whole row toggles), segmented control (sliding highlight), badges, step list, signal
+  bars, status dot, banners and notes (announced by TalkBack). Spinners, ripples and pulses stand
+  still when animations are off.
+- **Chat**: bubbles grouped like `Main.dc.html`, status changes cross-fade (queued dashed, sent
+  solid, failed red), new bubbles animate in, reactions by long press with the own reaction under
+  the bubble, sheets slide up over a fading scrim, bearing arrows turn the short way.
   Comparison: [`docs/compare/07-chat.png`](docs/compare/07-chat.png) (design left, app right).
-- **Antenne verbinden**: ring colours from the HTML, 16 sp intro, a ripple while searching
-  (off with reduced motion); debug builds switch to the simulated antenna with a long press
-  on the hero. [`docs/compare/01-antenne-verbinden.png`](docs/compare/01-antenne-verbinden.png)
-- **Wie heisst du?**: Done on the keyboard submits, names are capitalised.
-- **Kontakte**: type sizes from `Kontakte.dc.html`; a pending contact opens "Kontakt
-  hinzufügen" like the design link. [`docs/compare/04-kontakte.png`](docs/compare/04-kontakte.png)
-- **Release hygiene**: the test menu (long press on "OffGrid") exists only in debug builds.
-- Tests: new unit tests for the message row grouping (5/5 pass), existing suite unchanged.
-
-Older full-screen captures of every screen are in [`docs/screenshots`](docs/screenshots);
-they are refreshed at the end.
+- **Antenne verbinden**: the 3D render of the antenna as the hero, ring colours from the HTML, a
+  ripple while searching. [`docs/compare/01-antenne-verbinden.png`](docs/compare/01-antenne-verbinden.png)
+- **Wie heisst du?**: Done on the keyboard submits, names are capitalised, the notification
+  permission is asked once at "Los gehts".
+- **Kontakte**: type sizes from `Kontakte.dc.html`, a pending contact opens "Kontakt
+  hinzufügen", the status line wraps as a unit at large font sizes.
+  [`docs/compare/04-kontakte.png`](docs/compare/04-kontakte.png)
+- **Kontakt hinzufügen, Handshake abgeschlossen**: pairing survives rotation, scanner brackets
+  and texts per `Handshake.dc.html`, error states, debug-only helper buttons.
+- **Einstellungen, Daten exportieren/importieren, Standort senden/ansehen, Gruppen**: HTML values,
+  error states, notification permission when background receive is switched on.
+- **Notifications**: one per conversation, none for the open chat, private on the lock screen,
+  a tap opens the chat (also from a cold start).
+- **Screen transitions**: shared-axis slide and fade.
+- **Quality**: font scale 200 %, 360 dp and 480 dp wide, landscape, TalkBack labels; test menu
+  and debug buttons only in debug builds.
+- **Tests**: 26 new unit tests (message grouping, notifications and deep links, pairing UI
+  state, backup forms, new group); the whole suite passes.
 
 ## In progress
 
-- Kontakt hinzufügen and Handshake abgeschlossen: pairing that survives rotation, scanner
-  brackets and texts per `Handshake.dc.html`, debug-only helper buttons, error states
-  (subagent, separate worktree).
-- Einstellungen, Daten exportieren/importieren, Standort ansehen, Gruppen: HTML values,
-  notification permission when background receive is switched on, error states (subagent).
-- Message notifications with a deep link into the chat, notification permission at
-  "Los gehts", screen transitions.
-- The 3D render of the real antenna (`offgrid-antenna-3d/renders`) as the connect hero, once
-  the renders are final.
-- Font scale 200 %, 360 dp and large phones, TalkBack pass, lint, release-style APK signed
-  with the debug key, refreshed screenshots and README.
+- Refreshing `docs/screenshots` with the final state of every screen, more `docs/compare` images.
+- Final report.
 
 ## Open decisions for Artur
 
 1. **83 bytes or 153 characters per radio message.** The app shows the antenna's
-   `maxTextBytes` (83 with the current firmware); the designs show "153 Zeichen".
-2. **PostHog key.** Analytics stays with the closed event list and opt-out as built; no key
-   was created. The key goes into `local.properties` once decided. There is no in-app
-   opt-out toggle in the designs.
+   `maxTextBytes` (83 with the current firmware); the designs show "153 Zeichen", the group
+   design "120 Zeichen".
+2. **PostHog key.** Analytics stays with the closed event list as built; no key was created.
+   The key goes into `local.properties`. There is no in-app opt-out toggle in the designs.
 3. **Groups.** Built as a preview against proposed `group.*` firmware commands that the
-   firmware does not have yet; keep as preview, hide, or drop.
+   firmware does not have; keep as preview, hide, or drop. The "Gruppe erstellen" button in the
+   contact list header is not in `Kontakte.png`.
 4. **Composer placeholder.** `Chat.png` shows "Nachricht an Anna", `chat-standort.png`
-   "Nachricht an Anna Meier". The app follows the screens skill (`<display_name>`).
+   "Nachricht an Anna Meier". The app follows the screens skill (display name).
+5. **Release key.** The release-style APK is signed with the debug key; a store release needs a
+   real key.
