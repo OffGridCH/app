@@ -6,7 +6,7 @@ description: Verbindliches Design-System der OffGrid-App – Tokens, Schriften, 
 # OffGrid Design-System
 
 Look: dunkles Graphit, ein einziger Akzent **Eisblau**, klare Grotesk-Schrift, technische Meta-Infos in Mono.
-Wiedererkennung: **Signalbalken** (Empfang und Zustellstatus) und **Schlüssel-Muster** als Profilbild.
+Wiedererkennung: **Signalbalken** (Empfang und Zustellstatus) und das **Raster-Profilbild** (`og-avatar`).
 Es gibt nur ein dunkles Theme.
 
 Referenz-Markup mit exakten Werten: `docs/design/screens/*.dc.html` (aus dem Design-Canvas). Diese Dateien sind
@@ -111,7 +111,7 @@ Inputs: `label`, `value` (optional), `last` (bool). Min-Höhe `--og-row-min`, pa
 Trennlinie unten 1px `--og-line` ausser `last`. Label im Stil `row` in `--og-text-2`, Wert im Stil `value`.
 `<ng-content>` ersetzt den Wert, wenn vorhanden (z. B. Signalbalken).
 
-### og-avatar (Schlüssel-Muster)
+### og-avatar (Profilbild)
 Inputs: `pattern: boolean[]` (25 Werte, Zeilen von oben, links nach rechts), `size: 40|48|56|72|96`,
 `variant: 'normal' | 'pending' | 'square'` (`square` nur T20: Gruppen – Radius 12 bei 40, 14 bei 48, Zellen in `--og-accent`).
 - Kreis, Grund `--og-surface`, Rahmen 1px `--og-border`, darin 5×5-Raster zentriert.
@@ -119,7 +119,8 @@ Inputs: `pattern: boolean[]` (25 Werte, Zeilen von oben, links nach rechts), `si
 - Zelle an: Grund `--og-text-2`; Zelle aus: transparent.
 - `pending`: kein Raster, Kreis-Rahmen 1.5px **gestrichelt** `--og-dashed`, kein Grund.
 - `aria-hidden="true"` (der Name steht immer daneben).
-- Das Muster wird **nicht** hier berechnet, sondern von `KeyPatternService` geliefert (Skill `offgrid-crypto-handshake`).
+- Das Raster wird **nicht** hier berechnet. Das Raster wird nicht mehr aus Schlüsseln abgeleitet; die Quelle der Zellwerte (z. B. aus `node_id` oder `fingerprint`)
+  ist **offen und wird in T02 entschieden**. Der vom Gerät gelieferte `fingerprint` ersetzt das frühere Vergleichsbild (Skill `offgrid-crypto-handshake` §4).
 
 ### og-signal-bars
 Inputs: `level: 0|1|2|3|4`, `size: 'md' | 'sm'`, `label` (Pflicht, → `role="img" aria-label`).

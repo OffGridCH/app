@@ -1,4 +1,4 @@
-import { contentBytes, isValidDisplayName, maxContentBytes } from './limits';
+import { contentBytes, isValidDisplayName, maxContentBytes, splitText } from './limits';
 
 describe('contentBytes', () => {
   it('zählt Umlaute als 2 Bytes', () => {
@@ -27,23 +27,61 @@ describe('contentBytes', () => {
 });
 
 describe('maxContentBytes', () => {
-  it('deckelt beim Geräte-Textlimit von 83 Bytes', () => {
-    expect(maxContentBytes(222)).toBe(83);
-    expect(maxContentBytes(255)).toBe(83);
-    expect(maxContentBytes(249)).toBe(83);
+  it('gibt das gemeldete Textlimit unverändert zurück (83 → 83)', () => {
+    expect(maxContentBytes(83)).toBe(83);
   });
 
-  it('rechnet bei kleineren Frames mit 33 Bytes Frame-Overhead', () => {
-    expect(maxContentBytes(100)).toBe(67);
+  it('gibt ein anderes gemeldetes Limit unverändert zurück', () => {
+    expect(maxContentBytes(100)).toBe(100);
+    expect(maxContentBytes(40)).toBe(40);
+    expect(maxContentBytes(222)).toBe(222);
+  });
+});
+
+describe('splitText', () => {
+  it('lässt einen kurzen Text als einen Teil', () => {
+    expect(splitText('Hallo', 83)).toEqual(['Hallo']);
   });
 
-  it('respektiert das Gerätelimit und den Frame-Overhead für jede Frame-Grösse', () => {
-    for (const max of [100, 150, 222, 249, 255]) {
-      const limit = maxContentBytes(max);
+  it('ergibt bei leerem oder nur aus Leerzeichen bestehendem Text keine Teile', () => {
+    expect(splitText('', 83)).toEqual([]);
+    expect(splitText('   ', 83)).toEqual([]);
+  });
 
-      expect(limit).toBe(Math.min(83, max - 33));
-      expect(limit + 33).toBeLessThanOrEqual(max);
+  it('nimmt genau 83 Bytes in einem Teil an', () => {
+    expect(splitText('a'.repeat(83), 83)).toEqual(['a'.repeat(83)]);
+  });
+
+  it('teilt 84 Bytes in zwei Teile', () => {
+    expect(splitText('a'.repeat(84), 83)).toEqual(['a'.repeat(83), 'a']);
+  });
+
+  it('hält jeden Teil unter dem Limit und verliert nichts', () => {
+    const text = 'Wir sind bei der Hütte und kommen in etwa 20 Minuten. '.repeat(6).trim();
+    const parts = splitText(text, 83);
+
+    expect(parts.length).toBeGreaterThan(1);
+    for (const part of parts) {
+      expect(contentBytes(part)).toBeLessThanOrEqual(83);
     }
+    expect(parts.join('')).toBe(text);
+  });
+
+  it('trennt nie mitten in einem Zeichen', () => {
+    const parts = splitText('ä'.repeat(50), 83);
+
+    expect(parts).toEqual(['ä'.repeat(41), 'ä'.repeat(9)]);
+    expect(contentBytes(parts[0])).toBe(82);
+  });
+
+  it('lässt Emoji ganz', () => {
+    const parts = splitText(`${'a'.repeat(80)}👍🏽`, 83);
+
+    expect(parts).toEqual(['a'.repeat(80), '👍🏽']);
+  });
+
+  it('beachtet ein kleineres gemeldetes Limit', () => {
+    expect(splitText('abcdef', 4)).toEqual(['abcd', 'ef']);
   });
 });
 

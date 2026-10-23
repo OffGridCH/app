@@ -3,27 +3,24 @@ import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacito
 
 import { log } from '../log';
 import type { Contact, Coordinate } from '../models/contact';
-import type { Handshake } from '../models/handshake';
 import type { Message } from '../models/message';
 import { MIGRATIONS } from './migrations';
 import {
   CONTACT_INSERT,
   COORDINATE_INSERT,
-  HANDSHAKE_INSERT,
   MESSAGE_INSERT,
   SETTING_UPSERT,
   contactValues,
   coordinateValues,
-  handshakeValues,
   messageValues,
   type SqlValue,
 } from './sqlite-mapping';
 
-/** Alle Nutzdaten der Datenbank (Import/Export). */ export interface DatabaseData {
+/** Alle Nutzdaten der Datenbank (Import/Export). */
+export interface DatabaseData {
   contacts: Contact[];
   messages: Message[];
   coordinates: Coordinate[];
-  handshakes: Handshake[];
   displayName: string;
 }
 
@@ -49,7 +46,7 @@ export abstract class DatabaseService {
   /** Ersetzt alle Nutzdaten (Import). Die Settings bleiben erhalten. */
   abstract replaceAll(data: DatabaseData): Promise<void>;
 
-  /** Löscht Kontakte, Nachrichten, Koordinaten und Handshakes. Die Settings bleiben erhalten. */
+  /** Löscht Kontakte, Nachrichten und Koordinaten. Die Settings bleiben erhalten. */
   abstract deleteAllUserData(): Promise<void>;
 }
 
@@ -86,11 +83,9 @@ export class SqliteDatabaseService extends DatabaseService {
       { statement: 'DELETE FROM coordinates' },
       { statement: 'DELETE FROM messages' },
       { statement: 'DELETE FROM contacts' },
-      { statement: 'DELETE FROM handshakes' },
       ...data.contacts.map((contact) => ({ statement: CONTACT_INSERT, values: contactValues(contact) })),
       ...data.messages.map((message) => ({ statement: MESSAGE_INSERT, values: messageValues(message) })),
       ...data.coordinates.map((coordinate) => ({ statement: COORDINATE_INSERT, values: coordinateValues(coordinate) })),
-      ...data.handshakes.map((handshake) => ({ statement: HANDSHAKE_INSERT, values: handshakeValues(handshake) })),
       { statement: SETTING_UPSERT, values: ['display_name', data.displayName] },
     ];
     await db.executeTransaction(tasks);
@@ -102,7 +97,6 @@ export class SqliteDatabaseService extends DatabaseService {
       { statement: 'DELETE FROM coordinates' },
       { statement: 'DELETE FROM messages' },
       { statement: 'DELETE FROM contacts' },
-      { statement: 'DELETE FROM handshakes' },
     ];
     await db.executeTransaction(tasks);
   }

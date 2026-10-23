@@ -1,10 +1,13 @@
 # Überblick
 
-Stand: **nach T01, T03** (Projektgerüst, Theme, og-Grundkomponenten, Zeitformate, Krypto-Basis, Schlüssel-Muster und
-Signal-Level). Gebaut sind das App-Gerüst, die Kern-Grundlagen (`log.ts`, `platform.ts`, `models/`), das Theme, die
-13 Grundkomponenten in `src/app/ui/` sowie die Krypto- und Format-Module unter `core/`. Die Seiten unter `features/`
-sind leere Stubs; ihr Inhalt kommt mit dem jeweiligen Ticket. Alles, was noch fehlt, trägt im Diagramm und im
+Stand: **nach T01, T03, T04, T23** (Projektgerüst, Theme, og-Grundkomponenten, Zeitformate, Datenbank, Host-API zur Antenne). Gebaut sind
+das App-Gerüst, die Kern-Grundlagen (`log.ts`, `platform.ts`, `models/`), das Theme, die 13 Grundkomponenten in `src/app/ui/`, die
+Daten-Schicht, der Serial-Client mit Antennen-Port und Mock-Gerät, der Entsperr-Schlüssel sowie die Nachrichten- und Kontaktdienste.
+Die Seiten unter `features/` sind leere Stubs; ihr Inhalt kommt mit dem jeweiligen Ticket. Alles, was noch fehlt, trägt im Diagramm und im
 Ordnerbaum den Vermerk „geplant: Txx".
+
+**Aufgabenteilung:** Die Antenne (Heltec V3) besitzt Identität, Kontaktschlüssel, Verschlüsselung, Zähler und Kontaktliste. Die App ist
+Oberfläche und Verlaufsspeicher; sie schickt Klartext über die Host-API und hält nur das Entsperr-Geheimnis im Android Keystore.
 
 ## Schichten
 
@@ -21,13 +24,14 @@ flowchart TD
     end
     subgraph Core["Kern – src/app/core"]
         Basis["log.ts, platform.ts, models/"]
-        Start["app-start.service.ts<br>geplant: T04"]
-        Data["data/<br>Datenbank und Repositories<br>geplant: T04"]
-        Antenna["antenna/<br>Antennen-Port, Mock, Serial<br>geplant: T05, T06"]
-        Crypto["crypto/<br>Schlüssel, AES-GCM<br/>(T03)"]
+        Start["app-start.service.ts<br>(T04)"]
+        Data["data/<br>Datenbank und Repositories<br>(T04)"]
+        Antenna["antenna/<br>Serial-Client, Antennen-Port, Mock-Gerät<br>(T23), geplant: T06"]
+        Keystore["keystore/<br>Entsperr-Token, X25519<br>(T23), geplant: T06"]
+        Crypto["crypto/<br>Hex und Base64<br/>(T03)"]
         Format["format/<br>Zeit- und Funkformate<br/>(T03)"]
-        Messaging["messaging/<br>Limits, Signal-Level<br/>geplant: T07"]
-        Handshake["handshake/<br>geplant: T08"]
+        Messaging["messaging/<br>Nachrichten, Limits, Signal-Level<br/>(T03, T23)"]
+        Handshake["handshake/<br>Kontakte, Pairing<br>(T23), geplant: T11"]
         Backup["backup/<br>geplant: T14"]
         Location["location/<br>geplant: T17"]
         Groups["groups/<br>geplant: T20"]
@@ -40,6 +44,7 @@ flowchart TD
     Basis --> Start
     Basis --> Data
     Basis --> Antenna
+    Basis --> Keystore
     Basis --> Crypto
     Basis --> Format
     Basis --> Messaging
@@ -63,18 +68,19 @@ src/
     core/
       log.ts                  log.debug/info/warn/error
       platform.ts             isNative(), STATUS_BAR_COLOR
-      models/                 antenna, contact, errors, handshake, message, settings
-      app-start.service.ts    geplant: T04
-      antenna/                geplant: T05, T06
+      models/                 antenna, contact, device, errors, handshake, message, settings
+      app-start.service.ts    Datenbank, Einstellungen, Antenne starten (T04, T23)
+      antenna/                Serial-Client, Antennen-Port, Mock-Gerät (T23), USB-Plugin geplant: T06
       backup/                 geplant: T14
-      crypto/                 Schlüssel, AES-GCM, Schlüssel-Muster (T03)
-      data/                   geplant: T04
+      crypto/                 Hex, Base64 (T03)
+      data/                   Datenbank und Repositories (T04, T23)
       format/                 Zeit- und Funkformate (T03)
       groups/                 geplant: T20
-      handshake/              geplant: T08
+      handshake/              Kontakte spiegeln, Pairing (T23), Scanner geplant: T11
+      keystore/               Entsperr-Token, X25519, Wrap (T23), natives Plugin geplant: T06
       location/               geplant: T17
-      messaging/              Limits, Signal-Level (T03), geplant: T07
-      settings/               geplant: T04
+      messaging/              Limits, Signal-Level (T03), Nachrichten, Reaktionen (T23)
+      settings/               Einstellungen (T04)
     features/
       chat/                   geplant: T12
       einstellungen/          geplant: T13, T14
@@ -98,8 +104,8 @@ src/
 |---|---|---|---|
 | App | `src/app/app.*.ts` | Wurzel-Komponente, Provider, Routen | fertig (T00) |
 | Oberfläche | `src/app/features/`, `src/app/ui/` | Screens und wiederverwendbare `og-`-Komponenten | Grundkomponenten fertig (T01), Zustandskomponenten ab T02, Seiten ab T09 |
-| Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Krypto, Messaging | Grundgerüst (T00), Krypto und Formate gebaut (T03) |
-| Typen | `src/app/core/models/` | Kontakt, Nachricht, Handshake, Antenne, Settings, Fehlercodes | fertig (T00) |
+| Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Entsperr-Schlüssel, Messaging | Grundgerüst (T00), Formate (T03), Daten (T04), Antenne und Nachrichten (T23) |
+| Typen | `src/app/core/models/` | Kontakt, Nachricht, Antenne, Gerät (Host-API), Handshake-Fehler, Settings, Fehlercodes | fertig (T00, T23) |
 | Theme | `src/theme/` | Design-Tokens, Schriften, globales Styling | fertig (T00) |
 
 ## Plattform-Weiche
@@ -107,17 +113,19 @@ src/
 `src/app/core/platform.ts` liefert `isNative()` über `Capacitor.isNativePlatform()`:
 
 - **Im Browser** (`npm start`): `isNative()` ist `false`. Es gibt kein Android und keine Antenne.
-- **Auf Android**: `isNative()` ist `true`. Statusleiste und Splash-Screen setzt der App-Start (geplant: T04).
+- **Auf Android**: `isNative()` ist `true`. Statusleiste und Splash-Screen setzt der App-Start.
 
-Die Weiche auf der Provider-Ebene ist noch nicht gebaut. Geplant ist:
+Die Weiche liegt in `app.config.ts` auf Provider-Ebene und betrifft nur die Leitung zur Antenne, den Entsperr-Schlüssel und die Daten:
 
-| Browser | Android |
-|---|---|
-| `MockAntennaService` | `SerialAntennaService` (T05, T06) |
-| `MemoryDatabaseService` und Memory-Repositories | SQLite-Repositories (T04) |
+| Token | Browser | Android |
+|---|---|---|
+| `SerialTransport` | `MockSerialTransport` (simuliertes Gerät) | `UsbSerialTransport` (T06); bis dahin `UnavailableSerialTransport` |
+| `KeystoreService` | `BrowserKeystoreService` (Schlüssel im Arbeitsspeicher) | `AndroidKeystoreService` (T06 liefert das native Plugin) |
+| `DatabaseService` und Repositories | Memory-Implementierungen | SQLite-Implementierungen |
 
-Zusätzlich gilt: Ist `localStorage.getItem('og.mock') === '1'`, wird auch auf Android die Mock-Antenne benutzt. Das
-Einstellen und Zurücksetzen passiert nur über die Entwickler-Konsole, es gibt dafür keine Oberfläche.
+`AntennaPort`, `SerialClient`, `MessagingService` und `HandshakeService` sind für beide Plattformen dieselben Klassen. Zusätzlich gilt: Ist
+`localStorage.getItem('og.mock') === '1'`, laufen auch auf Android das simulierte Gerät und der Arbeitsspeicher-Schlüssel (Vorführen ohne
+Hardware). Das Einstellen und Zurücksetzen passiert nur über die Entwickler-Konsole, es gibt dafür keine Oberfläche.
 
 ## Konventionen
 

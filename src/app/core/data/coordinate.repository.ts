@@ -21,7 +21,7 @@ export abstract class CoordinateRepository {
   abstract latestForMessages(messageIds: string[]): Promise<Map<string, Coordinate>>;
 
   /** Die Nachricht-Id zu einer Freigabe-Id oder `null`. */
-  abstract messageIdForShare(contactId: string, shareId: string): Promise<string | null>;
+  abstract messageIdForShare(contactId: number, shareId: string): Promise<string | null>;
 
   /** Anzahl der Koordinaten. */
   abstract count(): Promise<number>;
@@ -68,7 +68,7 @@ export class SqliteCoordinateRepository extends CoordinateRepository {
     return latest;
   }
 
-  async messageIdForShare(contactId: string, shareId: string): Promise<string | null> {
+  async messageIdForShare(contactId: number, shareId: string): Promise<string | null> {
     const rows = await this.db.query(
       'SELECT message_id FROM coordinates WHERE contact_id = ? AND share_id = ? ORDER BY recorded_at ASC LIMIT 1',
       [contactId, shareId],

@@ -1,24 +1,33 @@
 ---
 name: offgrid-antenna-protocol
-description: Kommunikation App ↔ ESP32-Antenne – USB-Serial-Plugin (Android), NDJSON-Serial-Protokoll, Zustandsautomat von AntennaPort, LoRa-Paketformat (Frame-Codec), Signalstärke und Mock-Antenne für den Browser. Laden bei allem in core/antenna, core/messaging/frame.ts oder beim nativen USB-Plugin.
+description: Kommunikation App ↔ ESP32-Antenne nach Offgrid Host Interface v1 – USB-Serial-Plugin (Android), JSON-Lines-Protokoll, Zustandsautomat von AntennaPort (unprovisioned/locked/unlocked), Befehle, Ereignisse, Fehlercodes, Limits und Mock-Gerät für den Browser. Laden bei allem in core/antenna, core/messaging und beim nativen USB-Plugin.
 ---
 
-# Antenne: Serial-Protokoll, Frames, Mock
+# Antenne: Host-API v1, Zustände, Mock
 
-> Status: **Vorschlag v1**, mit dem Firmware-Verantwortlichen abzustimmen (`docs/esp-schnittstelle.md`).
-> Alles hängt an `AntennaPort` – wenn sich das Protokoll ändert, ändern sich nur `serial-antenna.service.ts` und `ndjson.ts`.
+> Verbindliche Quelle: **Offgrid Host Interface v1** (`firmware/docs/offgrid-link.md` im Firmware-Repo), dazu
+> **Offgrid Protocol v1** (Funk) und **Firmware Architecture v1**. Bei Widerspruch gilt die Spezifikation.
+> Die App baut **kein** Funkpaket und verschlüsselt **keine** Nachrichten: Das Gerät besitzt Identität, Kontaktschlüssel,
+> Nonces, Zähler, Replay-Fenster und Kontaktliste. Die App ist UI- und Verlaufs-Client.
 
 ## 1. Schichten
 
 ```
-UI ── MessagingService / HandshakeService ── frame.ts (LoRa-Paket bauen/lesen, verschlüsselt)
-                                    │
-                              AntennaPort (abstrakt)
-                     ┌──────────────┴──────────────┐
-          SerialAntennaService                MockAntennaService (Browser)
-                     │
-              ndjson.ts (Zeilen)  ── UsbSerial (lokales Capacitor-Plugin, Java) ── USB-C ── ESP32
+UI ── MessagingService / HandshakeService
+                │
+           AntennaPort            Zustand, Befehle (request), Ereignisse (events), Entsperren
+                │
+           SerialClient           JSON Lines: Zeilen, ids, Zeitlimits, Heartbeat
+                │
+         SerialTransport (abstrakt)
+      ┌─────────┴──────────┐
+ UsbSerialTransport     MockSerialTransport ── MockDevice (simuliertes Gerät, Browser)
+ (T06, Android)
+      │
+ UsbSerial (lokales Capacitor-Plugin, Java) ── USB-C ── Heltec V3
 ```
+
+`KeystoreService` (Skill `offgrid-crypto-handshake`) liefert das Entsperr-Token; `AntennaPort` benutzt es beim Entsperren.
 
 ## 2. Natives Plugin `UsbSerial` (T06)
 
@@ -28,14 +37,16 @@ UI ── MessagingService / HandshakeService ── frame.ts (LoRa-Paket bauen/
   in `android/app/build.gradle` `implementation 'com.github.mik3y:usb-serial-for-android:3.9.0'`.
   Lässt sich die Version nicht auflösen: neueste `3.x` von JitPack nehmen und unter OFFENE FRAGEN melden.
 - Treiber: `UsbSerialProber.getDefaultProber()`, zusätzlich `CdcAcmSerialDriver` für ESP32-S3 mit nativem USB.
-- Parameter: 115200 Baud, 8 Datenbits, 1 Stoppbit, keine Parität. DTR und RTS auf `true` nach dem Öffnen.
+- Parameter: **115200 Baud, 8N1, kein Flow Control**. **DTR und RTS sofort nach dem Öffnen auf `false` (low)** – sonst
+  setzt der ESP32 sich beim Öffnen zurück. Kommt trotzdem ein Neustart, meldet das Gerät `sys.boot`.
 - Berechtigung: `UsbManager.requestPermission` mit `PendingIntent` (explizites Intent mit eigener Action
   `ch.offgrid.app.USB_PERMISSION` und `setPackage(getContext().getPackageName())`, `FLAG_MUTABLE` ab API 31).
 - BroadcastReceiver für diese Action **und** für `UsbManager.ACTION_USB_DEVICE_DETACHED` registrieren mit
   `ContextCompat.registerReceiver(getContext(), receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)` (Pflicht ab Android 14).
   Detached für das verbundene Gerät → Event `detached`. In `handleOnDestroy()` abmelden.
 - Reject-Code `NO_DRIVER` (kein passender Treiber) wird in der App als `no-device` behandelt.
-- Lesen über `SerialInputOutputManager`, Daten als String (ASCII) an JS.
+- Lesen über `SerialInputOutputManager`. Die Bytes sind **UTF-8**: Der Transport dekodiert mit einem `TextDecoder`
+  (`stream: true`), damit Mehrbyte-Zeichen über Chunk-Grenzen hinweg ganz bleiben, und gibt Text an JS.
 
 JS-Schnittstelle (`core/antenna/usb-serial.plugin.ts`, mit `registerPlugin<UsbSerialPlugin>('UsbSerial')`):
 
@@ -44,7 +55,7 @@ interface UsbSerialPlugin {
   listDevices(): Promise<{ devices: { deviceId: number; vendorId: number; productId: number; name: string }[] }>;
   connect(opts: { deviceId: number; baudRate: number }): Promise<void>;   // fragt Berechtigung an; reject-Codes:
                                                                           // 'PERMISSION_DENIED' | 'OPEN_FAILED' | 'NO_DRIVER'
-  write(opts: { data: string }): Promise<void>;                           // ASCII, inkl. '\n'
+  write(opts: { data: string }): Promise<void>;                           // UTF-8, inkl. '\n'
   disconnect(): Promise<void>;
   addListener(event: 'data', cb: (e: { data: string }) => void): Promise<PluginListenerHandle>;
   addListener(event: 'detached', cb: () => void): Promise<PluginListenerHandle>;
@@ -52,156 +63,276 @@ interface UsbSerialPlugin {
 }
 ```
 
-## 3. Serial-Protokoll (NDJSON)
+`UsbSerialTransport` (`core/antenna/usb-serial.transport.ts`, T06) implementiert `SerialTransport` auf diesem Plugin und
+ersetzt `UnavailableSerialTransport` in `app.config.ts`. Reject-Codes → `TransportError`: `PERMISSION_DENIED` →
+`permission-denied`, `OPEN_FAILED` → `open-failed`, `NO_DRIVER` und kein Gerät → `no-device`.
 
-- Jede Nachricht ist **eine Zeile** JSON, abgeschlossen mit `\n`. Nur ASCII. Maximal 512 Zeichen pro Zeile.
-- `ndjson.ts`: puffert eingehende Chunks, trennt an `\n`, ignoriert leere Zeilen und Zeilen, die kein gültiges JSON
-  mit Feld `t` sind (→ `log.warn`).
+## 3. Rahmen: JSON Lines (`SerialClient`)
 
-### App → ESP
+- Eine Zeile = ein JSON-Objekt, UTF-8, abgeschlossen mit `\n` (LF). Das Gerät toleriert ein `\r` davor, die App auch.
+- **Höchstens 2048 Bytes pro Zeile inklusive LF**, in beide Richtungen. Zu lange eingehende Zeilen werden bis zum
+  nächsten LF verworfen; eine zu lange Anfrage wird gar nicht erst gesendet (`E_LINE_TOO_LONG`).
+- **Zeilen ohne führendes `{` verwerfen** (Boot-Text des ESP32-ROM, verirrte Debug-Ausgaben).
+- **Nach dem Öffnen alles bis zum ersten `\n` verwerfen** (die App kann mitten in einer Zeile einsteigen). Das Gerät
+  sendet beim Start ein leeres `\n`.
+- Kein JSON mit Zeilenumbruch im String, kein Pretty-Printing.
 
-| t | Felder | Wann |
-|---|---|---|
-| `hello` | `proto: 1` | direkt nach dem Öffnen |
-| `tx` | `id`: 8 Hex-Zeichen (Sendeauftrag), `p`: Base64 des Frames | Paket senden |
-| `ping` | – | alle 5 s, solange verbunden |
+Drei Arten von Zeilen:
 
-### ESP → App
-
-| t | Felder | Bedeutung |
-|---|---|---|
-| `info` | `proto`, `fw` (String), `freq` (Hz), `max` (max. Frame-Bytes) | Antwort auf `hello` |
-| `txdone` | `id`, `ok` (bool), `err?` (`busy`\|`too_long`\|`radio`) | Paket wurde gefunkt (oder nicht) |
-| `rx` | `p` (Base64), `rssi` (dBm, int), `snr` (float) | Paket empfangen |
-| `pong` | – | Antwort auf `ping` |
-| `log` | `msg` | nur `log.debug` |
-
-Beispiele:
-```
-→ {"t":"hello","proto":1}
-← {"t":"info","proto":1,"fw":"1.0.0","freq":868100000,"max":222}
-→ {"t":"tx","id":"a1b2c3d4","p":"Ea1b2c3d4..."}
-← {"t":"txdone","id":"a1b2c3d4","ok":true}
-← {"t":"rx","p":"Eb9...","rssi":-92,"snr":7.25}
+```json
+{"id":12,"cmd":"msg.send","args":{"to":1,"type":"text","text":"Hello!"}}
+{"id":12,"ok":true,"result":{"msg_ref":1,"state":"queued"}}
+{"id":12,"ok":false,"error":{"code":"E_TOO_LONG","message":"text is 91 bytes, max is 83","field":"text"}}
+{"evt":"msg.received","t":152340,"data":{"from":1,"type":"text","text":"Hello!"}}
 ```
 
-## 4. Zustandsautomat `SerialAntennaService`
+Regeln:
 
-`connect()`:
-0. Läuft schon (`searching`, `device-found`, `connecting`, `ready`) → sofort zurück.
-1. `state = 'searching'`, `listDevices()`. Kein Gerät → `state = 'disconnected'`, `error = 'no-device'`, Ende.
-2. `state = 'device-found'` (erstes Gerät, `deviceName` setzen), dann `state = 'connecting'`, `connect({deviceId, baudRate: 115200})`.
-   Reject → `state = 'error'`, `error` = `'permission-denied'` (PERMISSION_DENIED) bzw. `'open-failed'` (OPEN_FAILED)
-   bzw. `'no-device'` (NO_DRIVER).
-3. `hello` senden; auf `info` max. 3 s warten. Keine Antwort → `hello` erneut senden, **insgesamt 3 Versuche**
-   (deckt einen ESP32-Neustart durch DTR/RTS beim Öffnen ab). Nach dem 3. Versuch ohne `info` → `state='error'`, `error='no-info'`.
-   `info.proto !== 1` → `state='error'`, `error='proto-mismatch'`.
-4. `info` speichern, `state = 'ready'`, `error = null`, Heartbeat starten.
-
-Heartbeat: alle 5 s `ping`. Kommt 15 s lang **keine** Zeile vom ESP → `disconnect()`, `state='disconnected'`, `error='lost'`.
-Event `detached` → gleich. `disconnect()` → `state='disconnected'`, `error=null`.
-
-`transmit(frame)`: nur wenn `state==='ready'`, sonst `throw new Error('not-ready')` (Aufrufer prüfen `state` vorher, das ist ein Programmierfehler). Erzeugt `id` (4 Zufallsbytes hex),
-schreibt `tx`-Zeile, gibt `id` zurück. Kommt innerhalb 10 s kein `txdone` mit dieser `id` → eigenes Event
-`{ type: 'txdone', id, ok: false, err: 'timeout' }`.
-
-`events` (Observable `AntennaEvent`):
-```ts
-type AntennaEvent =
-  | { type: 'rx'; frame: Uint8Array; rssi: number; snr: number }
-  | { type: 'txdone'; id: string; ok: boolean; err?: string };
-```
-
-`AntennaErrorCode = 'no-device' | 'permission-denied' | 'open-failed' | 'no-info' | 'proto-mismatch' | 'lost'`
-
-## 5. LoRa-Frame (`core/messaging/frame.ts`)
-
-Binär, Gesamtlänge ≤ `info.max` (Default 222, wenn `info` fehlt).
-
-| Byte | Inhalt |
+| Regel | Wert |
 |---|---|
-| 0 | `(version << 4) | type` – version = 1; type: 1 = `msg`, 2 = `ack`, 3 = `hs`, 4 = `hsa`, 5 = `loc` (ab T17), 6 = `gki`, 7 = `gmsg` (nur T20) |
-| 1–4 | `tag` = erste 4 Bytes von SHA-256(Schlüssel, mit dem verschlüsselt wurde; 16 Rohbytes) |
-| 5–16 | IV (12 Zufallsbytes) |
-| 17–… | AES-128-GCM-Ciphertext inkl. 16 Byte Auth-Tag; **AAD = Bytes 0–4** |
+| `id` | ganze Zahl, eindeutig und monoton steigend (der Client zählt ab 1) |
+| Antwort | **genau eine** pro Anfrage, gleiche `id`. Ereignisse (`evt`) werden **nie** beantwortet |
+| Reihenfolge | Das Gerät führt Befehle strikt in der Reihenfolge des Eingangs aus |
+| Anfragen in Flight | **höchstens 4**; weitere warten im Client |
+| Zeitlimit | **2 s**; **5 s** für `sec.*`, `pair.complete`, `contact.delete`. Danach `E_TIMEOUT` (nur lokal) |
+| Unbekannte Felder | ignorieren |
+| `error.message` | nur für Logs, nie auswerten. `error.code` und `error.field` sind stabil |
+| Zeit | `t` ist die Betriebszeit des Geräts in ms. **Das Gerät hat keine Uhr**: die App stempelt Nachrichten selbst |
+| Daten | Rohbytes Base64 (Standard-Alphabet, mit Padding); Node-ID 4 Hex-Zeichen gross; Device-ID 12 Hex gross; `contact_id` 1–32; `ctr` 0–16777215; Emoji als Zeichen; fehlender Wert `null` |
+| `*.set` | beliebige Teilmenge, alles-oder-nichts, Ergebnis ist die ganze neue Konfiguration; `persist` (Standard `true`) |
 
-Klartext ist UTF-8-JSON:
+**Verbinden** (`SerialClient.hello`): Nach dem Öffnen `sys.hello` senden und **alle 500 ms wiederholen**, bis eine
+Antwort kommt (Boot-Rennen: Befehle während des Starts gehen verloren). Die erste Antwort gewinnt. Nach 10 Versuchen
+ohne Antwort: Fehler `no-hello`. Antwortet das Gerät mit einem Fehler, bricht der Aufruf sofort ab.
 
-| type | Klartext |
-|---|---|
-| `msg` | `{"i":"<wireId 8 hex>","b":"<Text>","t":<Unix-Sekunden>}` |
-| `ack` | `{"i":"<wireId>"}` |
-| `hs` | `{"k":"<32 hex>","n":"<Anzeigename>"}` |
-| `hsa` | `{"ok":1}` |
-| `loc` | `{"i":"<wireId>","la":<Breite, 6 Nachkommastellen>,"lo":<Länge, 6 NK>,"ac":<Genauigkeit m, ganzzahlig>,"t":<Unix-Sek. der Messung>}` – optional (nur T19) `"s":"<shareId 8 hex>","e":<Ende Unix-Sek.>` |
-| `gki` | nur T20, siehe Skill `offgrid-groups` |
-| `gmsg` | nur T20, siehe Skill `offgrid-groups` |
+**Heartbeat:** alle **5 s `sys.ping`**. Jede gültige Zeile der App zählt dem Gerät als Lebenszeichen; bleibt sie
+`lock_timeout_s` aus (Standard **15 s**), sperrt es sich. Zwei Pings in Folge ohne Antwort → Verbindung gilt als verloren.
 
-`loc` wird wie `msg` mit dem `sendingKey` des Kontakts verschlüsselt, über den Tag des `receivingKey` zugeordnet
-und mit einem normalen `ack` (gleiche `wireId`) bestätigt. Grösse ca. 105 Bytes – passt immer.
+## 4. Zustandsautomat `AntennaPort`
 
-API:
+`state`: `disconnected` · `unprovisioned` · `locked` · `unlocked`.
+
+| Zustand | Bedeutung | Funk |
+|---|---|---|
+| `disconnected` | keine Verbindung | – |
+| `unprovisioned` | frisches Gerät, keine Identität, kein Tresor | aus |
+| `locked` | Tresor da, aber verschlüsselt; kein Schlüssel im RAM | aus |
+| `unlocked` | Tresor entschlüsselt, Gerät arbeitet | an |
+
+Übergänge: `connect()` → `sys.hello` → Zustand des Geräts. Ist es `locked`, entsperrt der Port **von selbst** mit dem
+Token aus dem Schlüsselspeicher. `unprovisioned` → `provision(name)` → `unlocked`. `unlocked` → `lock()` oder
+Auto-Lock → `locked` (Ereignis `sec.state` mit Grund `lock` / `heartbeat_timeout`). Ein Neustart (`sys.boot`) oder ein
+Auto-Lock führt zu `locked`; der Port holt ein neues `sys.hello` und entsperrt wieder. Nach `lock()` entsperrt er **nicht**
+von selbst. Kabel ziehen oder zwei verpasste Heartbeats → `disconnected` mit Fehler `lost`.
+
+Befehle nach Zustand:
+
+| Befehl | unprovisioned | locked | unlocked |
+|---|:-:|:-:|:-:|
+| `sys.hello`, `sys.status`, `sys.ping`, `sys.reboot`, `sys.factory_reset`, `sys.set_log_level` | ✅ | ✅ | ✅ |
+| `sec.provision` | ✅ | ❌ | ❌ |
+| `sec.unlock` | ❌ | ✅ | ❌ |
+| `sec.lock`, `sec.rotate_token`, `sec.get_policy`, `sec.set_policy` | ❌ | ❌ | ✅ |
+| `id.*`, `pair.*`, `contact.*`, `msg.*` | ❌ | ❌ | ✅ |
+| `radio.get`, `mesh.get`, `led.get` | ✅ | ✅ | ✅ |
+| `radio.set`, `radio.stats`, `mesh.set`, `led.set`, `led.test`, `dbg.rf_trace` | ❌ | ❌ | ✅ |
+
+API (Signals nur lesen):
+
 ```ts
-encodeFrame(type: FrameType, keyHex: string, plain: object, max = 222): Promise<Uint8Array>
-peekFrame(bytes: Uint8Array): { version: number; type: FrameType; tag: string } | null   // ohne Entschlüsseln
-decodeFrame(bytes: Uint8Array, keyHex: string): Promise<object>                             // wirft bei falschem Schlüssel
+state: Signal<AntennaState>;           connecting: Signal<boolean>;        error: Signal<AntennaErrorCode | null>;
+device: Signal<DeviceInfo | null>;     identity: Signal<{ nodeId; name } | null>;
+limits: Signal<DeviceLimits>;          // Standard {2048, 32, 83, 8}, bis sys.hello geantwortet hat
+events: Observable<DeviceEvent>;       // typisiert: sys.boot, sec.state, msg.received, msg.status, contact.state
+connect(); disconnect(); provision(name): Promise<boolean>; unlock(): Promise<boolean>; lock();
+request(cmd, args?): Promise<JsonObject>;      // wirft DeviceError { code, message, field }
 ```
-Frames mit `version !== 1`, unbekanntem `type` oder Länge < 33 Bytes werden verworfen (`log.warn`).
-`encodeFrame` wirft `Error('too-long')`, wenn der fertige Frame länger als `max` ist (max als 4. Parameter, Default 222).
 
-**Längen (`core/messaging/limits.ts`):**
-- `contentBytes(text) = new TextEncoder().encode(JSON.stringify(text)).length - 2` (zählt JSON-Escapes mit).
-- `maxContentBytes(max) = Math.min(180, max - 69)` (69 = 33 Frame-Overhead + 36 JSON-Hülle ohne Text).
-  `MessagingService.maxContentBytes` ist das als `computed` aus `info().max ?? 222`.
-- Anzeigename: höchstens 40 Zeichen **und** `contentBytes(name) <= 60` (damit `hs`-Frames immer passen).
-  Prüffunktion `isValidDisplayName(name)` (trim, 1–40 Zeichen, ≤ 60 Bytes).
+`AntennaErrorCode = 'no-device' | 'permission-denied' | 'open-failed' | 'no-hello' | 'proto-mismatch' | 'lost' | 'unlock-failed' | 'rate-limited' | 'keystore-failed'`
 
-## 6. Empfangen und Senden (in `MessagingService`)
+### Sitzung und Entsperren
 
-Empfang `rx`:
-1. `peekFrame`. Für `msg`/`ack`/`loc`: Kontakt suchen, dessen `receivingKey` den `tag` hat. Keiner → verwerfen.
-2. Entschlüsseln. Fehler → verwerfen.
-3. `contacts.updateSignal(id, rssi, now)`.
-4. `msg` / `loc` (Details zu `loc` im Skill `offgrid-location` §3): Duplikat (`byWireId`) → nur erneut `ack` senden. Sonst Nachricht speichern (`direction 'in'`, `status 2`,
-   `rssi`, `sent_at` = jetzt) und `ack` senden (verschlüsselt mit `contact.sendingKey`). Vibration, falls Einstellung an.
-5. `ack`: eigene Nachricht mit dieser `wireId` auf `Delivered` setzen (egal ob Queued/Sent/Failed).
-6. `hs`/`hsa`: an `HandshakeService.onFrame(bytes, rssi)`.
+`sys.hello` liefert `session { device_eph_pub, nonce }`. Die Sitzung ist **einmalig**: jeder Versuch mit `sec.provision`
+oder `sec.unlock`, ob erfolgreich oder nicht, verbraucht sie. Nach jedem Versuch braucht es ein neues `sys.hello`.
+Das Token und sein Einpacken beschreibt der Skill `offgrid-crypto-handshake` §1. Falsches Token, falsches Gerät und
+kaputter Umschlag ergeben alle `E_UNLOCK_FAILED`; nach 3 Fehlversuchen in Folge `E_RATE_LIMITED` (2 s, danach doppelt,
+höchstens 60 s). Kein Löschen bei Fehlversuchen.
 
-Senden `send(contactId, text)`:
-1. Text trimmen; leer → nichts. Bytes > `maxContentBytes` → nichts (UI verhindert das).
-2. Nachricht speichern: `wireId` = 4 Zufallsbytes hex, `status Queued`, `sent_at` = jetzt.
-3. Wenn `state === 'ready'`: Frame bauen, `transmit`, Zuordnung `txId → messageId` merken.
-   Frame je nach `kind`: `'text'` → `msg` aus `content`; `'location'` → `loc` aus `CoordinateRepository.latestForMessage(id)`
-   (gilt genauso beim Leeren der Warteschlange und bei `retry`).
-4. `txdone ok` → `Sent`, **nur wenn** Status noch `Queued`. `txdone !ok` → `Failed`, **nur wenn** Status noch `Queued`.
-   (Ein Status geht nie zurück; einzige Ausnahme: `retry` setzt `Failed` → `Queued`.)
-5. Wechsel auf `ready` → alle `queued()` der Reihe nach senden (je 250 ms Abstand).
-`retry(id)`: Status auf `Queued` setzen, dann wie Schritt 3.
+## 5. Befehle
 
-## 7. Signalstärke
+### `sys.*`
 
-Pro Kontakt: `last_rssi` + `last_seen_at` aus dem letzten empfangenen Frame dieses Kontakts.
-Level (für `og-signal-bars`): `last_seen_at` älter als 15 min oder null → 0. Sonst
-`rssi ≥ -80` → 4, `≥ -95` → 3, `≥ -105` → 2, `≥ -115` → 1, sonst 0.
-Die Funktion heisst `signalLevel(rssi, seenAt, now)` in `core/messaging/signal.ts` und ist zu testen.
-Antenne allgemein (Einstellungen, Chat-Header ohne Kontaktdaten): Level des Kontakts mit dem jüngsten `last_seen_at`.
+| Befehl | Args | Ergebnis |
+|---|---|---|
+| `sys.hello` | `app`, `app_proto` (`"1.0"`) | `device`, `chip`, `device_id`, `fw {version, build}`, `proto`, `state`, `session {device_eph_pub, nonce}`, `limits {max_line, max_contacts, max_text_bytes, pending_queue}` |
+| `sys.status` | – | `state`, `uptime_ms`, `reset_reason`, `heap_free`, `battery_mv`, `radio {running, relay_only}`, `security`; nur entsperrt zusätzlich `queue {pending, capacity}`, `contacts {used, capacity}` |
+| `sys.ping` | – | `uptime_ms` |
+| `sys.reboot` | – | antwortet, startet neu, kommt `locked` zurück, dann `sys.boot` |
+| `sys.factory_reset` | `confirm: "ERASE"` | `armed`, `expires_s`; danach 3 s PRG-Taste am Gerät halten |
 
-## 8. Mock-Antenne (`MockAntennaService`, Browser)
+### `sec.*`
 
-Darf `ContactRepository`, `HandshakeRepository`, `CryptoService` und `frame.ts` nutzen, um realistische Frames zu bauen.
-- `connect()`: `searching` (400 ms) → `device-found` (400 ms, `deviceName = 'Mock-Antenne'`) → `connecting` (600 ms) → `ready`,
-  `info = { proto: 1, fw: 'mock-1.0.0', freq: 868100000, max: 222 }`.
-- `transmit`: nach 300 ms `txdone ok:true` (ausser `failNext` gesetzt → `ok:false, err:'radio'`).
-  - War es ein `msg`-Frame: nach weiteren 1500 ms ein `rx`-Frame `ack` mit dieser `wireId`, verschlüsselt mit dem
-    `receivingKey` des Kontakts, `rssi: -92`, `snr: 7.25`.
-  - War es ein `hs`-Frame: nach 2000 ms ein `rx`-Frame `hsa`, verschlüsselt mit dem `remote_key` des offenen
-    Handshakes (Rolle `scanner`), `rssi: -88`.
-- Entwickler-Hooks auf `window.ogMock` (nur im Mock). Typisierung in `core/antenna/og-mock.d.ts` mit
-  `declare global { interface Window { ogMock?: OgMock } }` und `interface OgMock` mit den Methoden unten.
-  - `receive(displayName: string, text: string)` – simuliert eingehende Nachricht dieses Kontakts.
-  - `completeShowing(peerName = 'Demo-Kontakt')` – simuliert, dass jemand meinen angezeigten QR gescannt hat (`hs`-Frame).
-  - `drop()` – simuliert Trennung (`state='disconnected'`, `error='lost'`). `restore()` – erneut `connect()`.
-  - `failNext()` – nächster `txdone` schlägt fehl.
-  - `receiveLocation(displayName: string, latitude = 47.05812, longitude = 8.31998, accuracy = 12)` (ab T17) –
-    simuliert einen eingehenden `loc`-Frame dieses Kontakts.
-  - Ein gesendeter `loc`-Frame wird wie `msg` nach 1500 ms mit `ack` bestätigt.
+`sec.provision` (`app_eph_pub`, `wrapped_token`, `name?`) → `node_id`, `public_key`, `name`, `state`.
+`sec.unlock` (`app_eph_pub`, `wrapped_token`) → `state`, `node_id`, `name`, `contacts`, `radio`.
+`sec.lock` → `{state: "locked"}`. Daneben `sec.rotate_token`, `sec.get_policy`, `sec.set_policy` (`lock_timeout_s` 0–3600, Standard 15) –
+vorerst nicht benutzt.
+
+### `id.*`
+
+`id.get` → `node_id`, `public_key`, `name`. `id.set_name` (`name` 1–24 Bytes UTF-8).
+
+### `pair.*` und `contact.*`
+
+| Befehl | Args | Ergebnis |
+|---|---|---|
+| `pair.begin` | – | `qr`, `qr_bytes`, `expires_s` (300). `qr` = Base64 von `"OG1" ‖ public_key (32) ‖ salt (16) ‖ name`. **Diesen Text als QR-Code zeigen** |
+| `pair.cancel` | – | `cancelled: true` |
+| `pair.complete` | `qr`, `name?`, `replace?` | `contact`, `warnings` (`node_id_collision`). Fehler `E_NO_PAIRING`, `E_INVALID_QR`, `E_SELF_PAIR`, `E_CONTACT_EXISTS`, `E_STORAGE_FULL` |
+| `contact.list` | `offset` (0), `limit` (10, höchstens 10) | `total`, `offset`, `contacts[]` |
+| `contact.get` | `contact_id` | `contact` oder `E_NO_SUCH_CONTACT` |
+| `contact.rename` | `contact_id`, `name` (≤ 24 Bytes) | `contact` |
+| `contact.delete` | `contact_id`, `confirm: true` | löscht Schlüssel, Zähler, Replay-Zustand; wartende Nachrichten scheitern mit `contact_deleted` |
+
+Kontakt-Objekt: `contact_id` (Platz 1–32, stabil), `name`, `node_id`, `public_key`, `state` (`pending` bis das erste gültige
+Paket des Gegenübers eintrifft, dann `active`), `fingerprint` (drei Vierergruppen, z. B. „0501 3010 7790“), `tx_ctr`,
+`rx_highest_ctr`, `last_rssi`, `last_snr` (`null` wenn noch nichts empfangen). **Schlüssel sind nie Teil des Objekts.**
+`pair.begin` nicht zwischen „wurde gescannt“ und „scannt selbst“ erneuern: das Salz muss zum Code passen, den das
+Gegenüber hat.
+
+**Fingerabdruck:** `SHA256("og1-fp" ‖ pub_low ‖ pub_high)` mit bytweise sortierten Schlüsseln; die ersten 8 Bytes als
+Big-Endian-Zahl modulo 10¹², in drei Gruppen zu vier Ziffern. Beide Handys zeigen dieselben Ziffern, wenn nichts
+verfälscht wurde.
+
+### `msg.*`
+
+`msg.send` – gemeinsam: `to` (= `contact_id`), `type` (`text` | `reaction` | `geo`), `ack?` (Standard aus `mesh.ack_default`),
+`hops?` (0–7, Standard `mesh.hop_default`).
+
+| Typ | Args |
+|---|---|
+| `text` | `text` – UTF-8, höchstens `limits.max_text_bytes` **Bytes** (83). Länger → `E_TOO_LONG`; die App teilt vorher |
+| `reaction` | `target {author: "me"\|"peer", ref}`, `emoji` (Emoji aus der Tabelle oder `null` = entfernen). `author: "me"`: die Ziel-Nachricht habe **ich** geschrieben; `ref` = `ctr & 0xFFFF` |
+| `geo` | `lat`, `lon`, `alt_m?`, `age_s?` (0–2550) |
+
+Ergebnis: `msg_ref` (lokaler Handle für Statusereignisse, gilt nur bis zum nächsten Gerätestart), `ctr` (Zähler dieser
+Nachricht in der Unterhaltung), `ack_requested`, `hops`, `state: "queued"`, `bytes_on_air`, `est_airtime_ms`.
+Fehler: `E_NO_SUCH_CONTACT`, `E_TOO_LONG`, `E_QUEUE_FULL`, `E_INVALID_ARG`, `E_LOCKED`.
+`msg.cancel` (`msg_ref`) → `{state: "cancelled"}`. `msg.pending` → `pending[] {msg_ref, to, type, ctr, state, retry}`.
+Die Warteschlange liegt nur im RAM: nach einem Neustart ist alles Unfertige verloren; die App behandelt alles, was bei
+`sys.boot` noch aussteht, als gescheitert.
+
+Emoji-Tabelle der Reaktionen (Offgrid Protocol Appendix B): `👍` `❤️` `😂` `😮` `😢` `🙏`; `null` entfernt die eigene Reaktion.
+In `core/messaging/reactions.ts`.
+
+### `radio.*`, `mesh.*`, `led.*`
+
+Nur als Dienst durchgereicht (`AntennaPort.request`), **noch ohne Oberfläche**.
+
+- `radio.get` (jeder Zustand), `radio.set` (entsperrt): `freq_mhz` 150–960 (869.525), `bw_khz` 62.5/125/250/500 (125), `sf` 5–12 (9),
+  `cr` 5–8 (5), `tx_power_dbm` −9–22 (14), `preamble` 6–64 (8), `sync_word` 0–255 (79), `preset` (`lab_default`, `fast`, `long_range`).
+  Ergebnis mit `est_airtime_ms_23b`, `max_text_bytes`, `warnings` (`outside_eu868`, `above_eu868_power_limit`, `reserved_sync_word`, `mesh_incompatible`).
+  `radio.stats` zählt Pakete.
+- `mesh.get`/`mesh.set`: `hop_default` (3), `relay_enabled` (true), `relay_when_locked` (false), `cad_enabled` (true), `backoff_slots` (8),
+  `retries` (3), `retry_base_ms` (0), `rate_limit_per_src` (20), `ack_default {text: true, reaction: false, geo: false}`.
+- `led.get`/`led.set`/`led.test`: `enabled`, `quiet`, `brightness` 0–255, `state_patterns` (`unprovisioned`, `locked`, `unlocked`),
+  `event_patterns` (`tx`, `rx`, `msg_received`, `delivered`, `failed`, `error`, `pairing`); Muster als Name (`off`, `on`, `flash`, `blink_slow`,
+  `blink_fast`, `double`, `heartbeat`, `pulse`) oder `{steps: [on_ms, off_ms, …], repeat}`.
+- `dbg.*` und `mock.*` des echten Geräts benutzt die App **nicht**.
+
+## 6. Ereignisse
+
+Ereignisse werden nie beantwortet. Die App wertet nur diese aus; `log`, `rf.tx`, `rf.rx`, `error` werden ignoriert.
+
+| Ereignis | `data` | Wann |
+|---|---|---|
+| `sys.boot` | `device_id`, `fw`, `proto`, `state`, `reset_reason` | nach jedem Start; einmal beim Verbinden |
+| `sec.state` | `state`, `reason` (`unlock`, `provision`, `lock`, `heartbeat_timeout`, `factory_reset`) | Zustand wechselt |
+| `msg.received` | `from`, `type`, `ctr`, `hops`, `retry`, `rssi`, `snr` + `text` \| `target`, `emoji` \| `lat`, `lon`, `alt_m`, `age_s` | eine Nachricht kam an und ist geprüft. Eine Wiederholung wird **nicht** noch einmal geliefert |
+| `msg.status` | `msg_ref`, `to`, `state`, `retry`, `reason?`, `hops?`, `rtt_ms?` | eine wartende Nachricht wechselt den Zustand |
+| `contact.state` | `contact_id`, `state` | ein Kontakt wurde `active` |
+
+`msg.status.state`: `queued` ⏳ · `sent` ✓ · `relayed` ✓ (Nachbar hat sie weitergegeben) · `retrying` ✓ (`retry` 1–3) ·
+`delivered` ✓✓ (Quittung geprüft) · `failed` ✗ (`reason`: `timeout`, `locked`, `contact_deleted`, `radio_error`) · `cancelled`.
+Abbildung auf `MessageStatus` der App: `queued` → Queued; `sent`, `relayed`, `retrying` → Sent; `delivered` → Delivered;
+`failed`, `cancelled` → Failed.
+
+## 7. Fehlercodes
+
+`E_PARSE`, `E_LINE_TOO_LONG`, `E_UNKNOWN_CMD`, `E_INVALID_ARG` (mit `field`), `E_PROTO_MISMATCH`, `E_LOCKED`, `E_NOT_PROVISIONED`,
+`E_ALREADY_PROVISIONED`, `E_ALREADY_UNLOCKED`, `E_NO_SESSION`, `E_UNLOCK_FAILED`, `E_RATE_LIMITED`, `E_CONFIRM_REQUIRED`, `E_NO_PAIRING`,
+`E_INVALID_QR`, `E_SELF_PAIR`, `E_CONTACT_EXISTS`, `E_NO_SUCH_CONTACT`, `E_STORAGE_FULL`, `E_TOO_LONG`, `E_QUEUE_FULL`, `E_BUSY`, `E_RADIO`,
+`E_INTERNAL`. Nur in der App entstehen `E_TIMEOUT`, `E_DISCONNECTED`, `E_INVALID_RESPONSE`. Typen in `core/models/device.ts`,
+Fehlerklasse `DeviceError` in `core/antenna/device-error.ts`. Die Oberfläche zeigt Fehlertexte aus dem Skill `offgrid-screens`, nie `error.message`.
+
+## 8. Limits und Konstanten
+
+| Konstante | Wert |
+|---|---|
+| Protokollversion | `1.0` (die App prüft nur die Hauptversion) |
+| Serial | 115200 Baud, 8N1, DTR/RTS **low** |
+| Zeilenlänge | 2048 Bytes inkl. LF |
+| Anfragen in Flight | 4 |
+| Zeitlimit | 2 s; 5 s für `sec.*`, `pair.complete`, `contact.delete` |
+| `sys.hello`-Wiederholung | alle 500 ms |
+| Heartbeat (`sys.ping`) | alle 5 s |
+| Auto-Lock | 15 s ohne gültige Zeile |
+| Kontakte | höchstens 32 |
+| Warteschlange | 8 (nur RAM) |
+| Text pro Nachricht | **83 Bytes** (`limits.max_text_bytes`; die App liest den Wert aus `sys.hello`) |
+| Name (eigener Name, Kontaktname) | 1–24 Bytes UTF-8 |
+| `contact.list` | höchstens 10 je Seite |
+| Pairing läuft ab | 300 s |
+| Entsperr-Token | 32 Bytes; `wrapped_token` 60 Bytes |
+| Entsperren: Fehlversuche | nach 3 in Folge 2 s Sperre, doppelt, höchstens 60 s |
+
+`maxContentBytes(max)` (`core/messaging/limits.ts`) gibt das gemeldete Limit **unverändert** zurück – kein Abzug, keine
+feste Obergrenze, keine JSON-Escapes. `contentBytes(text)` = UTF-8-Bytes des Textes. `isValidDisplayName(name)` = getrimmt
+1–24 UTF-8-Bytes. `splitText(text, maxBytes)` teilt in Stücke ≤ `maxBytes`, nie mitten in einem Zeichen (Emoji bleiben ganz).
+
+## 9. Empfangen und Senden (`MessagingService`)
+
+Empfang (`msg.received`):
+1. `from` ist der `contact_id`. Kennt die App ihn nicht, holt sie ihn mit `contact.get` (`HandshakeService.refreshContact`).
+2. `text` und `geo`: Es gibt schon eine eingehende Nachricht mit demselben `ctr`? Dann verwerfen (Schutz vor Doppelten).
+   Sonst speichern: `direction 'in'`, `status Delivered`, `ctr`, `rssi`, `sent_at` = jetzt (die App stempelt selbst),
+   Kontakt-Signal aktualisieren (`rssi`, `snr`). `geo` zusätzlich als Koordinate (`recorded_at` = jetzt − `age_s`).
+3. `reaction`: nicht speichern, als Ereignis weitergeben (`MessagingService.reactions`).
+
+Senden (`sendText(contactId, text)`):
+1. Trimmen; leer → nichts. In Stücke ≤ `limits.max_text_bytes` teilen (`splitText`); **jedes Stück ist eine eigene Nachricht**.
+2. Je Stück speichern (`status Queued`, `ctr`/`msg_ref` leer, `sent_at` = jetzt), dann `msg.send`. Antwort: `ctr` und `msg_ref` eintragen.
+3. Ist das Gerät nicht entsperrt oder die Warteschlange voll (`E_QUEUE_FULL`): Nachricht bleibt `Queued` ohne Handle und geht,
+   sobald das Gerät entsperrt ist bzw. ein Platz frei wird, der Reihe nach hinaus. Alle anderen Fehler → `Failed`.
+4. `msg.status` über `msg_ref` zuordnen (nur offene ausgehende Nachrichten). Ein Status geht nie zurück; einzige Ausnahme:
+   `retry` legt `Failed` wieder in die Warteschlange (ohne `ctr`/`msg_ref`).
+5. Bei `sys.boot` ist die Warteschlange des Geräts leer: alles mit Handle, das noch `Queued`/`Sent` war, wird `Failed`.
+
+Alle Änderungen laufen nacheinander (ein Status-Ereignis darf nie vor der Antwort auf `msg.send` verarbeitet werden).
+
+## 10. Signalstärke
+
+Pro Kontakt: `last_rssi` und `last_snr` aus dem letzten gültigen Paket dieses Kontakts (vom Gerät, `null` wenn noch nichts).
+Level für `og-signal-bars`: `rssi ≥ -80` → 4, `≥ -95` → 3, `≥ -105` → 2, `≥ -115` → 1, sonst 0; kein `rssi` → 0.
+Die Funktion `signalLevel(rssi, seenAt, now)` in `core/messaging/signal.ts` bleibt wie in T03 (sie nimmt noch einen Zeitpunkt
+`seenAt`; die App stempelt ihn beim Empfang selbst, weil das Gerät keine Uhr hat).
+
+## 11. Mock-Gerät (`MockDevice`, Browser)
+
+Das Mock-Gerät spricht **dieselbe Host-API** wie das echte (alle Befehle aus §5 ausser `sys.factory_reset`, `sys.set_log_level`,
+`sec.rotate_token`, `sec.get/set_policy`, `led.test`, `radio.stats`, `dbg.*`, `mock.*`) mit denselben Antworten, Fehlercodes und Ereignissen.
+Es prüft das Entsperr-Token wirklich (X25519, HKDF, AES-GCM wie auf dem Gerät) und sperrt sich nach 15 s ohne Zeile selbst.
+`MockSerialTransport` hängt es als `SerialTransport` an den Browser (Verzögerung beim Öffnen 50 ms).
+
+- Standard im Browser: ein **schon eingerichtetes, gesperrtes** Gerät mit den Demo-Kontakten (`DEMO_CONTACTS`), das das erste Token
+  annimmt und behält (`adoptFirstToken`). Mit `localStorage og.noseed = '1'`: ein **frisches** Gerät (`unprovisioned`).
+- `msg.send` → nach 300 ms `sent`, 700 ms `relayed`, 1500 ms `delivered` (nur mit `ack`; sonst nur `sent`); der Kontakt wird `active`.
+- `pair.begin`/`pair.complete` rechnen `node_id` (SHA-256 des Schlüssels, 2 Bytes) und `fingerprint` wie im Vertrag;
+  der Kontakt wird nach 3 s `active` (das Gegenüber „antwortet“).
+- Fehlerinjektion: `failNext('timeout' | 'radio_error')` – die nächste Nachricht scheitert.
+- Entwickler-Hooks auf `window.ogMock` (nur im Mock; Typen in `mock-serial-transport.ts` per `declare global`):
+  - `receive(kontakt, text)` – eingehende Nachricht (Kontakt als Platz oder Name).
+  - `react(kontakt, {author, ref}, emoji | null)` – eingehende Reaktion.
+  - `receiveLocation(kontakt, lat = 47.05812, lon = 8.31998)` – eingehender Standort.
+  - `failNext(reason?)` – nächste Nachricht scheitert.
+  - `lock()` – das Gerät sperrt sich (Auto-Lock); `reboot()` – Neustart; `drop()` – Kabel ziehen.
+- Auf Android mit `localStorage og.mock = '1'` läuft derselbe Mock mit Schlüssel im Arbeitsspeicher (Vorführen ohne Hardware).

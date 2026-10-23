@@ -1,37 +1,50 @@
 # Änderungen
 
+## T23 – Protokoll auf Offgrid Link v1 umgestellt
+*2026-10-24*
+
+- Die Antenne (Heltec V3) besitzt jetzt Identität, Kontaktschlüssel, Verschlüsselung, Zähler und Kontaktliste. Die App ist Oberfläche und Verlaufsspeicher und spricht
+  die Host-API „Offgrid Link v1“ (JSON Lines über USB-Serial). Verbindliche Quelle sind die Spezifikationen des Firmware-Teams; `docs/esp-schnittstelle.md` verweist darauf.
+- Neu: `SerialClient` (Zeilen, `id`s, höchstens 4 Anfragen in Flight, Zeitlimits 2 s und 5 s, `sys.hello` alle 500 ms, Heartbeat alle 5 s), `AntennaPort` mit den
+  Zuständen `disconnected`, `unprovisioned`, `locked` und `unlocked` sowie das Mock-Gerät `MockDevice`, das für den Browser dieselben Befehle, Antworten und Ereignisse liefert.
+- Neu: `KeystoreService` hält das Entsperr-Geheimnis (Android Keystore bzw. Arbeitsspeicher im Browser). Das Token wird mit X25519, HKDF und AES-256-GCM zu 60 Bytes verpackt und
+  stimmt mit dem Testvektor der Spezifikation überein. Das native Plugin folgt mit T06.
+- Nachrichten gehen als Klartext über `msg.send`; längere Texte als 83 Bytes teilt die App in mehrere Nachrichten. Der Status kommt aus `msg.status`, eingehende Nachrichten
+  aus `msg.received`. `maxContentBytes` gibt das gemeldete Limit unverändert zurück.
+- Das Pairing macht die Antenne: `pair.begin` liefert den QR-Text, `pair.complete` den Kontakt samt Fingerabdruck. Der Fingerabdruck ersetzt das frühere Vergleichsbild.
+- Die Datenbank hat kein Schlüssel-Feld mehr: `contacts` spiegelt die Kontakte der Antenne, `messages` hat `ctr` und `msg_ref` statt der Funk-Id, die Tabelle `handshakes` entfällt.
+  Migration 1 wurde dafür einmalig umgeschrieben (noch keine veröffentlichte App).
+- Entfernt: die App-seitige Verschlüsselung von Nachrichten und das Vergleichsbild aus Schlüsseln. Skills und Doku wurden auf den neuen Vertrag umgestellt.
+
 ## T04 – Datenbank, Repositories, Settings, App-Start
 *2026-10-24*
 
 - Auf Android speichert die App Kontakte, Nachrichten, Koordinaten, Handshakes und Einstellungen in der SQLite-Datenbank
-  `offgrid`. Migration 1 legt das Schema fest; `PRAGMA user_version` steuert spätere Migrationen.
+  `offgrid`. (Die Tabelle für Handshakes entfiel mit T23.) Migration 1 legt das Schema fest; `PRAGMA user_version` steuert spätere Migrationen.
 - Im Browser arbeiten dieselben Repositories auf Daten im Arbeitsspeicher. Die Plattform-Weiche in `app.config.ts`
   wählt SQLite oder Memory und stellt für jede Variante dieselbe Instanz bereit.
 - Kontakte, Nachrichten, Koordinaten, Handshakes und Einstellungen haben jeweils ein abstraktes Repository sowie eine
   SQLite- und eine Memory-Implementierung. Das Löschen eines Kontakts entfernt in beiden Varianten seine Nachrichten
   und Koordinaten.
-- Der Browser startet mit drei Demo-Kontakten, sechs Nachrichten und dem offenen Handshake „Jonas Keller“. Mit
+- Der Browser startet mit Demo-Kontakten und sechs Nachrichten (mit T23: vier Kontakte, „Jonas Keller“ ist ausstehend). Mit
   `localStorage og.noseed = '1'` startet er leer. `DataChangedService` meldet Datenänderungen über eine Version.
 - `SettingsService` stellt Anzeigename, Install-Id, Hintergrundempfang, Vibration und Onboarding-Status bereit. Die
   Install-Id wird beim ersten Start erzeugt und danach weiterverwendet.
 - Der App-Start öffnet die Datenbank, lädt die Einstellungen und bereitet auf Android Statusleiste und Splashscreen
-  vor. Der Antennenstart folgt mit T05.
+  vor. Der Antennenstart kam mit T23 dazu.
 
-## T03 – Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level
+## T03 – Zeitformate, Hex/Base64, Signal-Level
 *2026-10-23*
 
 - Alle Zeiten der App werden in der Zeitzone `Europe/Zurich` formatiert: Uhrzeit, „Gestern“, Wochentag, Datum für die
   Tagestrenner im Chat und „zuletzt …“ in der Kontaktliste.
 - Die Frequenz der Antenne erscheint als MHz-Text (z. B. „868 MHz“).
-- `CryptoService` erzeugt Schlüssel, berechnet Tags (SHA-256) und verschlüsselt mit AES-GCM 128 – nur WebCrypto, ohne
-  zusätzliche Pakete.
-- `KeyPatternService` erzeugt aus den Schlüsseln eines Kontakts ein spiegelsymmetrisches 5×5-Muster, damit zwei
-  Personen auf beiden Handys prüfen können, ob der Schlüsselaustausch geklappt hat.
+- Hex- und Base64-Hilfen für Bytes. (Die ursprünglich gebauten Dienste für Schlüssel und Vergleichsbild entfielen mit T23, weil die Antenne
+  Schlüssel und Verschlüsselung übernimmt.)
 - Die Signalstärke wird aus Feldstärke und letztem Kontakt zu fünf Leveln; ein Signal älter als 15 Minuten zählt als
   „Ausser Reichweite“.
 - Die Länge von Texten und Anzeigenamen wird in UTF-8-Bytes ohne JSON-Escapes gerechnet. Der Gerätevertrag
-  „OffGrid Link“ setzt maximal 83 Bytes für Textinhalte (§7.5) und 24 Bytes für Anzeigenamen (§7.2/§7.3); der
-  Frame-Overhead beträgt 33 Bytes.
+  „OffGrid Link“ setzt maximal 83 Bytes für Textinhalte (§7.5) und 24 Bytes für Anzeigenamen (§7.2/§7.3).
 
 ## T01 – UI-Basis 1: Grundkomponenten
 *2026-10-23*

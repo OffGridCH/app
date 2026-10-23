@@ -46,18 +46,22 @@ Der Befehl legt das virtuelle Python-Umfeld `.venv-docs/` an und installiert dar
 `npm start` startet den Dev-Server. Im Browser öffnen und in den DevTools das Gerätesymbol auf Handy-Grösse stellen.
 Nach T00 zeigen die Routen noch leere Seiten: `/kontakte` und `/verbinden` sind Stubs, ihr Inhalt kommt mit T09 und T10.
 
-Ab T04 gibt es Demo-Daten, ab T05 zusätzlich die **Mock-Antenne**. Die Entwickler-Konsole bietet dann:
+Der Browser hat Demo-Daten und ein **simuliertes Gerät** (`MockDevice`), das dieselbe Host-API spricht wie die echte Antenne. Es startet als
+schon eingerichtetes, gesperrtes Gerät mit den Demo-Kontakten und nimmt das erste Entsperr-Token an. Die Entwickler-Konsole bietet:
 
 | Befehl | Wirkung |
 |---|---|
-| `ogMock.receive('Anna Meier', 'Hallo')` | eingehende Nachricht simulieren |
-| `ogMock.receiveLocation('Anna Meier')` | eingehende Standort-Nachricht simulieren |
-| `ogMock.completeShowing()` | Handshake abschliessen |
-| `ogMock.drop()` | Antenne trennen |
-| `ogMock.restore()` | Antenne verbinden |
-| `ogMock.failNext()` | nächstes Senden scheitern lassen |
+| `ogMock.receive('Anna Meier', 'Hallo')` | eingehende Nachricht simulieren (Kontakt als Name oder Platz) |
+| `ogMock.react('Anna Meier', { author: 'me', ref: 1 }, '👍')` | eingehende Reaktion simulieren |
+| `ogMock.receiveLocation('Anna Meier')` | eingehenden Standort simulieren |
+| `ogMock.failNext('timeout')` | nächste gesendete Nachricht scheitern lassen (`timeout` oder `radio_error`) |
+| `ogMock.lock()` | das Gerät sperrt sich (Auto-Lock); die App entsperrt es wieder |
+| `ogMock.reboot()` | das Gerät startet neu (`sys.boot`) |
+| `ogMock.drop()` | Kabel ziehen (Verbindung geht verloren) |
 
-Onboarding und Leerzustand ohne Demo-Daten:
+Auf Android läuft derselbe Mock mit `localStorage.setItem('og.mock', '1')`, zum Vorführen ohne Hardware.
+
+Onboarding und Leerzustand ohne Demo-Daten (das simulierte Gerät ist dann ein frisches, noch nicht eingerichtetes Gerät):
 
 ```js
 localStorage.setItem('og.noseed', '1'); // neu laden

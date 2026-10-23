@@ -1,6 +1,6 @@
 ---
 name: offgrid-location
-description: Standort-Funktion von OffGrid – eigenen GPS-Standort bestimmen, als Funk-Nachricht senden und empfangen, Entfernung und Richtung berechnen, Karten-App öffnen, Koordinaten kopieren, optional Live-Standort. Laden bei allem in core/location, bei Standort-Frames und bei den Standort-Screens.
+description: Standort-Funktion von OffGrid – eigenen GPS-Standort bestimmen, als Funk-Nachricht senden und empfangen, Entfernung und Richtung berechnen, Karten-App öffnen, Koordinaten kopieren, optional Live-Standort. Laden bei allem in core/location, beim Senden und Empfangen von Standort-Nachrichten (msg.send type geo) und bei den Standort-Screens.
 ---
 
 # Standort
@@ -26,7 +26,7 @@ formatCoordinatePlain(lat, lon): string           // zum Kopieren: „47.05021, 
 formatAccuracy(m: number): string                 // „±8 m“ (gerundet, mind. 1)
 formatAgo(iso: string, now: Date): string         // < 1 min „gerade eben“, < 60 min „vor <n> Min.“,
                                                   // < 24 h „vor <n> Std.“, sonst formatListTime(iso, now)
-roundCoord(v: number): number                     // auf 6 Nachkommastellen (für den Funk-Frame)
+roundCoord(v: number): number                     // auf 6 Nachkommastellen (für `msg.send`; das Gerät kodiert selbst auf 24 Bit)
 ```
 
 ## 2. LocationService (`core/location/location.service.ts`)
@@ -51,15 +51,19 @@ roundCoord(v: number): number                     // auf 6 Nachkommastellen (fü
 
 ## 3. Senden und Empfangen (in `MessagingService`)
 
-`sendLocation(contactId, fix)`:
-1. Nachricht speichern: `kind 'location'`, `content ''`, `wireId` neu, Status `Queued`, `sent_at` = jetzt.
-2. Koordinate speichern: `contactId`, `messageId`, Werte aus `fix` (gerundet mit `roundCoord`), `context 'einmal'`,
-   `recordedAt = fix.at`.
-3. Senden/Warteschlange/`txdone`/`ack`/Retry **genau wie bei Text** (Skill `offgrid-antenna-protocol` §6).
-   Frame-Typ `loc` statt `msg`.
+Ein Standort ist eine Nachricht vom Typ `geo` der Host-API (Skill `offgrid-antenna-protocol` §5). Die App baut kein Funkpaket.
 
-Empfang `loc`: wie `msg` (Duplikat über `wireId`, `ack` senden, Signal aktualisieren), aber `kind 'location'`,
-`content ''` und eine Koordinate aus dem Frame (`recordedAt` aus `t`). Ohne `s` (shareId) → `context 'einmal'`.
+`sendLocation(contactId, fix)`:
+1. Nachricht speichern: `kind 'location'`, `content ''`, `ctr`/`msg_ref` leer, Status `Queued`, `sent_at` = jetzt.
+2. Koordinate speichern: `contactId`, `messageId`, Werte aus `fix`, `context 'einmal'`, `recordedAt = fix.at`.
+3. `msg.send` mit `{ to: contactId, type: "geo", lat, lon, age_s }`. `lat`/`lon` sind Dezimalgrad (`roundCoord`), `age_s` ist das Alter
+   des Fixes in Sekunden (`jetzt − fix.at`, 0–2550, das Gerät rundet auf 10 s). `alt_m` ist optional und wird noch nicht gesendet.
+   Warteschlange, Status (`msg.status`), Retry und Abbrechen **genau wie bei Text**. Quittungen (`ack`) sind für `geo` standardmässig
+   **aus** (`mesh.ack_default.geo = false`): die Nachricht endet dann bei „gesendet“.
+
+Empfang (`msg.received` mit `type: "geo"`): wie Text (Duplikate über `ctr`, Signal aktualisieren), aber `kind 'location'`,
+`content ''` und eine Koordinate aus `lat`/`lon` mit `recordedAt = jetzt − age_s` (die App stempelt selbst, das Gerät hat keine Uhr);
+`accuracy` ist `null` (das Gerät überträgt keine). `context 'einmal'`.
 
 Vorschautext in der Kontaktliste für `kind 'location'`: „Standort“ bzw. „Du: Standort“.
 
@@ -74,20 +78,13 @@ Vorschautext in der Kontaktliste für `kind 'location'`: „Standort“ bzw. „
 - Offline-Hinweis (nur Doku, nicht UI): Für Karten ohne Netz eine Offline-Karten-App mit heruntergeladenem Gebiet
   installieren (z. B. Organic Maps oder OsmAnd). Die App übergibt nur die Koordinaten.
 
-## 5. Live-Standort (nur T19, optional)
+## 5. Live-Standort (nur T19, optional) – **offene Frage**
 
-- Im Sende-Sheet zusätzlich `og-segmented` mit `einmal` „Einmal“, `15` „15 Min. live“, `60` „60 Min. live“.
-- Live: sofort senden, danach alle **2 Minuten** neuer Fix und neuer `loc`-Frame, bis `share_until` erreicht ist oder
-  „Beenden“ gedrückt wird. **Nur solange die App im Vordergrund ist** (Timer pausiert bei `App` `pause`, läuft bei `resume`
-  weiter, holt aber keine verpassten Sendungen nach).
-- Alle Live-Updates gehören zu **einer** Nachricht: Frame-Felder `s` (shareId, 8 Hex) und `e` (Ende, Unix-Sekunden).
-- Sender: Das **erste** Update ist eine normale Standort-Nachricht (Warteschlange, Status, Retry, `ack` wie Text).
-  **Folge-Updates** werden ohne Warteschlange und ohne Retry gesendet (nur wenn Antenne `ready`, sonst überspringen),
-  bekommen je eine neue zufällige `wireId` nur für den Frame und speichern lokal nur eine neue Koordinate an der ersten
-  Nachricht. Ihre `ack`s werden ignoriert.
-- Empfänger: `CoordinateRepository.messageIdForShare(contactId, shareId)` liefert eine Nachricht → nur neue Koordinate
-  anhängen (Duplikat, wenn gleiche `recorded_at` schon da ist), trotzdem `ack` senden. Sonst wie normales `loc`.
-- Funk-Last: 1 Frame / 2 min ist für das 1-%-Duty-Cycle-Limit unkritisch. Kürzere Intervalle sind nicht erlaubt.
+Das `geo`-Paket der Host-API (Offgrid Host Interface v1 §7.5) kennt **keine** Freigabe-Id und kein Ende (`s`, `e` der alten Fassung).
+Live-Updates zu **einer** Nachricht lassen sich damit nicht kennzeichnen. Bevor T19 gebaut wird, muss das Firmware-Team klären, ob
+das Gerät das anbietet. Solange gilt: Jedes Update wäre eine eigene Standort-Nachricht (`geo`, ohne Quittung), höchstens alle
+**2 Minuten** (1-%-Duty-Cycle), nur im Vordergrund. Im Sende-Sheet käme `og-segmented` mit „Einmal“, „15 Min. live“, „60 Min. live“
+dazu. Die Spalten `share_id`/`share_until` der Tabelle `coordinates` bleiben vorerst ungenutzt.
 
 ## 6. Grenzen (ehrlich)
 

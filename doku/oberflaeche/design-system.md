@@ -276,7 +276,7 @@ Ein Umschalter mit Segmenten als `role="tablist"` mit `aria-label`.
 !!! info "Geplant"
 
     Diese Komponenten folgen mit T02 und sind im aktuellen Branch noch nicht vorhanden:
-    `og-avatar` (Schlüssel-Muster als Profilbild), `og-signal-bars` (Signalstärke),
+    `og-avatar` (Raster-Profilbild; die Quelle der Zellwerte entscheidet T02), `og-signal-bars` (Signalstärke),
     `og-banner` (Fehlerhinweis), `og-step-list` (Schrittliste), `og-message-bubble` (Nachrichtenblase),
     `og-composer` (Eingabeleiste im Chat) und `og-qr` (QR-Code).
 

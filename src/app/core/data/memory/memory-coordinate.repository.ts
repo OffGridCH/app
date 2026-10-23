@@ -25,7 +25,7 @@ export class MemoryCoordinateRepository extends CoordinateRepository {
    *
    * Entspricht dem `ON DELETE CASCADE` auf `coordinates.contact_id` (nur in Memory vorhanden).
    */
-  deleteByContact(contactId: string): void {
+  deleteByContact(contactId: number): void {
     for (const [id, coordinate] of this.rows) {
       if (coordinate.contactId === contactId) {
         this.rows.delete(id);
@@ -72,7 +72,7 @@ export class MemoryCoordinateRepository extends CoordinateRepository {
     return latest;
   }
 
-  async messageIdForShare(contactId: string, shareId: string): Promise<string | null> {
+  async messageIdForShare(contactId: number, shareId: string): Promise<string | null> {
     const rows = [...this.rows.values()]
       .filter((coordinate) => coordinate.contactId === contactId && coordinate.shareId === shareId)
       .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));

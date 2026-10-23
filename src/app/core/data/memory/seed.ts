@@ -1,15 +1,69 @@
-import type { CryptoService } from '../../crypto/crypto.service';
 import type { Contact } from '../../models/contact';
-import type { Handshake } from '../../models/handshake';
 import { MessageStatus, type Message } from '../../models/message';
 
 /** Demo-Daten für den Browser (Demo-Verlauf laut `offgrid-screens` §6). */
 export interface DemoData {
   contacts: Contact[];
   messages: Message[];
-  handshakes: Handshake[];
   settings: Record<string, string>;
 }
+
+/**
+ * Die Demo-Kontakte, so wie das simulierte Gerät sie kennt (`MockDevice`).
+ *
+ * Die App und der Mock müssen dieselben Kontakte haben, sonst ersetzt die Synchronisation sie beim Verbinden.
+ * Schlüssel und Fingerabdrücke sind erfunden und nur für die Demo.
+ */
+export const DEMO_CONTACTS: readonly Contact[] = [
+  {
+    contactId: 1,
+    name: 'Anna Meier',
+    nodeId: 'ECE4',
+    publicKey: 'A5d2V7F/elA8qTcKyHqIP0WiIe7IjNTvZ30L+2bBRls=',
+    state: 'active',
+    fingerprint: '4821 0937 1156',
+    lastRssi: -92,
+    lastSnr: 7.5,
+    txCtr: 3,
+    rxHighestCtr: 2,
+  },
+  {
+    contactId: 2,
+    name: 'Luca Bernasconi',
+    nodeId: 'ADC2',
+    publicKey: 'BqrLZITC2oY61ClcpwPFdCqy4fG2okPDHpdGQrTK4qI=',
+    state: 'active',
+    fingerprint: '7304 6218 0095',
+    lastRssi: -100,
+    lastSnr: 4.0,
+    txCtr: 0,
+    rxHighestCtr: 1,
+  },
+  {
+    contactId: 3,
+    name: 'Mia Frei',
+    nodeId: '8E2D',
+    publicKey: 'DuQAXvPB/3K5X3OnKS0xWmT92GDGn7rAaK40rByhzV0=',
+    state: 'active',
+    fingerprint: '1659 8842 3370',
+    lastRssi: -110,
+    lastSnr: 1.5,
+    txCtr: 2,
+    rxHighestCtr: null,
+  },
+  {
+    contactId: 4,
+    name: 'Jonas Keller',
+    nodeId: '8DDB',
+    publicKey: 'g7QWg+3lRb2fJHHIWz2mlAyShdhQDQyb6uG8Aw//aeo=',
+    state: 'pending',
+    fingerprint: '9027 5513 6841',
+    lastRssi: null,
+    lastSnr: null,
+    txCtr: 0,
+    rxHighestCtr: null,
+  },
+];
 
 const ZONE = 'Europe/Zurich';
 
@@ -64,159 +118,54 @@ function yesterdayAt(hour: number, minute: number, now: Date): Date {
 }
 
 /**
- * Erzeugt die Demo-Daten: drei Kontakte mit Verlauf und ein offener Handshake.
- * Die Schlüssel der Demo-Kontakte werden neu erzeugt.
+ * Erzeugt die Demo-Daten: vier Kontakte (einer davon noch ausstehend) mit Verlauf.
+ * Das Gerät kennt dieselben Kontakte (`DEMO_CONTACTS`).
  */
-export function createDemoData(cryptoService: CryptoService, now: Date = new Date()): DemoData {
+export function createDemoData(now: Date = new Date()): DemoData {
   const minutesAgo = (minutes: number): string => new Date(now.getTime() - minutes * 60_000).toISOString();
-  const daysAgo = (days: number): string => new Date(now.getTime() - days * 86_400_000).toISOString();
 
-  const anna: Contact = {
-    id: crypto.randomUUID(),
-    sendingKey: cryptoService.newKey(),
-    receivingKey: cryptoService.newKey(),
-    displayName: 'Anna Meier',
-    firstName: 'Anna',
-    lastName: 'Meier',
-    handshakeAt: daysAgo(1),
-    lastRssi: -92,
-    lastSeenAt: minutesAgo(1),
-    createdAt: daysAgo(1),
-    updatedAt: null,
-  };
+  const contacts = DEMO_CONTACTS.map((contact) => ({ ...contact }));
+  const [anna, luca, mia] = contacts;
 
-  const luca: Contact = {
+  const message = (
+    contactId: number,
+    ctr: number,
+    direction: Message['direction'],
+    content: string,
+    sentAt: string,
+    status: MessageStatus,
+    readAt: string | null,
+    rssi: number | null,
+  ): Message => ({
     id: crypto.randomUUID(),
-    sendingKey: cryptoService.newKey(),
-    receivingKey: cryptoService.newKey(),
-    displayName: 'Luca Bernasconi',
-    firstName: 'Luca',
-    lastName: 'Bernasconi',
-    handshakeAt: daysAgo(2),
-    lastRssi: -100,
-    lastSeenAt: minutesAgo(5),
-    createdAt: daysAgo(2),
+    contactId,
+    ctr,
+    msgRef: null,
+    content,
+    direction,
+    kind: 'text',
+    sentAt,
+    status,
+    rssi,
+    readAt,
+    createdAt: sentAt,
     updatedAt: null,
-  };
-
-  const mia: Contact = {
-    id: crypto.randomUUID(),
-    sendingKey: cryptoService.newKey(),
-    receivingKey: cryptoService.newKey(),
-    displayName: 'Mia Frei',
-    firstName: 'Mia',
-    lastName: 'Frei',
-    handshakeAt: daysAgo(3),
-    lastRssi: -110,
-    lastSeenAt: yesterdayAt(19, 12, now).toISOString(),
-    createdAt: daysAgo(3),
-    updatedAt: null,
-  };
+  });
 
   const annaRead = minutesAgo(12);
+  const yesterdayEvening = yesterdayAt(19, 12, now).toISOString();
   const messages: Message[] = [
-    {
-      id: crypto.randomUUID(),
-      contactId: anna.id,
-      wireId: cryptoService.randomHex(4),
-      content: 'Bin oben beim Gipfelkreuz. Hier gibt es keinen Handyempfang.',
-      direction: 'in',
-      kind: 'text',
-      sentAt: annaRead,
-      status: MessageStatus.Delivered,
-      rssi: -92,
-      readAt: annaRead,
-      createdAt: annaRead,
-      updatedAt: null,
-    },
-    {
-      id: crypto.randomUUID(),
-      contactId: anna.id,
-      wireId: cryptoService.randomHex(4),
-      content: 'Wir sind bei der Hütte und kommen in etwa 20 Minuten.',
-      direction: 'out',
-      kind: 'text',
-      sentAt: minutesAgo(11),
-      status: MessageStatus.Delivered,
-      rssi: null,
-      readAt: null,
-      createdAt: minutesAgo(11),
-      updatedAt: null,
-    },
-    {
-      id: crypto.randomUUID(),
-      contactId: anna.id,
-      wireId: cryptoService.randomHex(4),
-      content: 'Wartest du dort auf uns?',
-      direction: 'out',
-      kind: 'text',
-      sentAt: minutesAgo(9),
-      status: MessageStatus.Sent,
-      rssi: null,
-      readAt: null,
-      createdAt: minutesAgo(9),
-      updatedAt: null,
-    },
-    {
-      id: crypto.randomUUID(),
-      contactId: anna.id,
-      wireId: cryptoService.randomHex(4),
-      content: 'Ja, ich warte hier. Es ist ziemlich windig.',
-      direction: 'in',
-      kind: 'text',
-      sentAt: minutesAgo(2),
-      status: MessageStatus.Delivered,
-      rssi: -92,
-      readAt: null,
-      createdAt: minutesAgo(2),
-      updatedAt: null,
-    },
-    {
-      id: crypto.randomUUID(),
-      contactId: luca.id,
-      wireId: cryptoService.randomHex(4),
-      content: 'Basislager erreicht.',
-      direction: 'in',
-      kind: 'text',
-      sentAt: minutesAgo(180),
-      status: MessageStatus.Delivered,
-      rssi: -100,
-      readAt: minutesAgo(180),
-      createdAt: minutesAgo(180),
-      updatedAt: null,
-    },
-    {
-      id: crypto.randomUUID(),
-      contactId: mia.id,
-      wireId: cryptoService.randomHex(4),
-      content: 'Wir starten morgen um 7 Uhr.',
-      direction: 'out',
-      kind: 'text',
-      sentAt: yesterdayAt(19, 12, now).toISOString(),
-      status: MessageStatus.Delivered,
-      rssi: null,
-      readAt: null,
-      createdAt: yesterdayAt(19, 12, now).toISOString(),
-      updatedAt: null,
-    },
+    message(anna.contactId, 1, 'in', 'Bin oben beim Gipfelkreuz. Hier gibt es keinen Handyempfang.', annaRead, MessageStatus.Delivered, annaRead, -92),
+    message(anna.contactId, 1, 'out', 'Wir sind bei der Hütte und kommen in etwa 20 Minuten.', minutesAgo(11), MessageStatus.Delivered, null, null),
+    message(anna.contactId, 2, 'out', 'Wartest du dort auf uns?', minutesAgo(9), MessageStatus.Sent, null, null),
+    message(anna.contactId, 2, 'in', 'Ja, ich warte hier. Es ist ziemlich windig.', minutesAgo(2), MessageStatus.Delivered, null, -92),
+    message(luca.contactId, 1, 'in', 'Basislager erreicht.', minutesAgo(180), MessageStatus.Delivered, minutesAgo(180), -100),
+    message(mia.contactId, 1, 'out', 'Wir starten morgen um 7 Uhr.', yesterdayEvening, MessageStatus.Delivered, null, null),
   ];
 
-  const handshake: Handshake = {
-    id: crypto.randomUUID(),
-    role: 'scanner',
-    localKey: cryptoService.newKey(),
-    remoteKey: cryptoService.newKey(),
-    peerName: 'Jonas Keller',
-    state: 'sent',
-    contactId: null,
-    createdAt: minutesAgo(10),
-    updatedAt: null,
-  };
-
   return {
-    contacts: [anna, luca, mia],
+    contacts,
     messages,
-    handshakes: [handshake],
     settings: {
       install_id: 'demo-install-id',
       display_name: 'HolyG',

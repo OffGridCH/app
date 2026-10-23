@@ -28,19 +28,18 @@ const MESSAGE_LAST_PER_CONTACT_UNQUALIFIED = `SELECT ${MESSAGE_COLUMNS} FROM mes
   ORDER BY messages.sent_at ASC`;
 
 /** Ein Kontakt für die Testdaten. */
-function contact(id: string): Contact {
+function contact(contactId: number): Contact {
   return {
-    id,
-    sendingKey: 'a'.repeat(32),
-    receivingKey: 'b'.repeat(32),
-    displayName: 'Anna',
-    firstName: null,
-    lastName: null,
-    handshakeAt: T0,
+    contactId,
+    name: 'Anna',
+    nodeId: 'ECE4',
+    publicKey: `${'A'.repeat(43)}=`,
+    state: 'active',
+    fingerprint: '4821 0937 1156',
     lastRssi: null,
-    lastSeenAt: null,
-    createdAt: T0,
-    updatedAt: null,
+    lastSnr: null,
+    txCtr: 0,
+    rxHighestCtr: null,
   };
 }
 
@@ -48,8 +47,9 @@ function contact(id: string): Contact {
 function message(id: string, sentAt: string): Message {
   return {
     id,
-    contactId: 'c1',
-    wireId: id.padEnd(8, '0'),
+    contactId: 1,
+    ctr: Number(id.slice(1)),
+    msgRef: null,
     content: 'Hallo',
     direction: 'in',
     kind: 'text',
@@ -89,7 +89,7 @@ describe('Gegenprobe: Produktivcode mit dem Statement vor der Korrekturrunde', (
   it('bricht lastPerContact() mit Daten mit „ambiguous column name“ ab', async () => {
     const contacts = TestBed.inject(SqliteContactRepository);
     const messages = TestBed.inject(SqliteMessageRepository);
-    await contacts.insert(contact('c1'));
+    await contacts.upsert(contact(1));
     await messages.insert(message('m1', T0));
     await messages.insert(message('m2', T1));
     adapter.replaceStatement = (statement) =>

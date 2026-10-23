@@ -53,7 +53,7 @@ nav:
       - Screens: oberflaeche/screens.md
   - Protokoll:
       - Serial (App ↔ Antenne): protokoll/serial.md
-      - Funk-Frames: protokoll/funk-frames.md
+      - Funk-Protokoll: protokoll/funk-protokoll.md
   - Qualität:
       - Tests: qualitaet/tests.md
       - CI: qualitaet/ci.md

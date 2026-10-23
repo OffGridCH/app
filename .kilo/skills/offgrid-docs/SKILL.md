@@ -31,15 +31,15 @@ doku/
   funktionen/
     antenne.md                  Verbinden, Zustände (stateDiagram), Heartbeat, Fehler
     nachrichten.md              Senden/Empfangen, Status-Ablauf (stateDiagram), Warteschlange, Signalstärke
-    kontakte-handshake.md       QR-Handshake (sequenceDiagram A ↔ B), Schlüssel-Muster
+    kontakte-handshake.md       QR-Handshake über die Host-API (sequenceDiagram), Fingerabdruck
     standort.md                 GPS, Entfernung/Richtung, Karten-App, (Live-Standort falls gebaut)
     backup.md                   Export/Import, Dateiformat
   oberflaeche/
     design-system.md            Farben (Tabelle mit Token + Hex), Schriften, Komponenten (Name, Inputs, Outputs)
     screens.md                  Pro Screen: Route, Zweck, Zustände, wichtigste Texte
   protokoll/
-    serial.md                   NDJSON-Befehle App ↔ Antenne
-    funk-frames.md              Frame-Aufbau (Byte-Tabelle), Frame-Typen, Grössen
+    serial.md                   Host-API v1 (JSON Lines) App ↔ Antenne: Rahmen, Befehle, Ereignisse, Fehlercodes
+    funk-protokoll.md           Funk-Protokoll des Geräts (die App baut es nicht): Überblick und Verweis
   qualitaet/
     tests.md                    Welche Testdateien was prüfen
     ci.md                       Lokale Checks und GitHub-Actions-Workflows
@@ -79,15 +79,16 @@ doku/
 |---|---|
 | T00, T21 | index, erste-schritte, architektur/ueberblick, qualitaet/ci |
 | T01, T02 | oberflaeche/design-system |
-| T03 | architektur/services, funktionen/kontakte-handshake (Schlüssel-Muster), funktionen/nachrichten (Signalstärke) |
+| T03 | architektur/services, funktionen/nachrichten (Signalstärke, Längen) |
 | T04 | architektur/datenmodell, architektur/services |
-| T05, T06 | funktionen/antenne, protokoll/serial, protokoll/funk-frames |
+| T05, T06 | funktionen/antenne, protokoll/serial |
+| T23 | funktionen/antenne, funktionen/nachrichten, funktionen/kontakte-handshake, protokoll/serial, protokoll/funk-protokoll, architektur/* (nav: „Funk-Protokoll“ statt „Funk-Frames“) |
 | T07 | funktionen/nachrichten, architektur/services |
 | T08, T11 | funktionen/kontakte-handshake |
 | T09, T10, T12, T13 | oberflaeche/screens |
 | T14 | funktionen/backup |
-| T17, T18, T19 | funktionen/standort, protokoll/funk-frames, oberflaeche/screens |
-| T20 | funktionen/gruppen (neu), protokoll/funk-frames, architektur/datenmodell |
+| T17, T18, T19 | funktionen/standort, oberflaeche/screens |
+| T20 | funktionen/gruppen (neu), architektur/datenmodell |
 | alle mit Tests | qualitaet/tests |
 
 ## 6. Screenshots (Playwright)

@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 
 /**
- * Meldet Änderungen an Kontakten, Handshakes und ganzen Datenbeständen.
+ * Meldet Änderungen an Kontakten und ganzen Datenbeständen.
  *
  * Dienste, die ihre Listen bei einer Änderung neu laden, reagieren auf `version`.
  */

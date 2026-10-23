@@ -3,16 +3,19 @@ import {
   CONTACT_COLUMNS,
   CONTACT_DELETE,
   CONTACT_INSERT,
-  CONTACT_UPDATE_NAMES,
-  CONTACT_UPDATE_SIGNAL,
+  CONTACT_UPDATE_LINK,
+  CONTACT_UPDATE_NAME,
+  CONTACT_UPDATE_STATE,
+  CONTACT_UPSERT,
   COORDINATE_COLUMNS,
   COORDINATE_INSERT,
-  HANDSHAKE_COLUMNS,
-  HANDSHAKE_INSERT,
-  HANDSHAKE_UPDATE,
+  MESSAGE_ASSIGN_REF,
   MESSAGE_COLUMNS,
+  MESSAGE_FAIL_PENDING,
   MESSAGE_INSERT,
+  MESSAGE_LAST_PER_CONTACT,
   MESSAGE_MARK_READ,
+  MESSAGE_REQUEUE,
   MESSAGE_UPDATE_STATUS,
   SETTING_UPSERT,
 } from './sqlite-mapping';
@@ -23,12 +26,8 @@ const ALLOWED_LITERALS = new Set([
   'out',
   'text',
   'location',
-  'shower',
-  'scanner',
-  'waiting',
-  'sent',
-  'done',
-  'cancelled',
+  'pending',
+  'active',
   'einmal',
   'live',
 ]);
@@ -116,27 +115,33 @@ describe('Migrationen', () => {
     }
   });
 
-  it('erstellt die Tabelle contacts mit den Spalten aus dem Daten-Skill', () => {
+  it('erstellt die Tabelle contacts ohne Schlüssel, nur mit den Spalten der Host-API', () => {
     expect(columnsOf('contacts')).toEqual([
-      'id',
-      'sending_key',
-      'receiving_key',
-      'display_name',
-      'first_name',
-      'last_name',
-      'handshake_at',
+      'contact_id',
+      'name',
+      'node_id',
+      'public_key',
+      'state',
+      'fingerprint',
       'last_rssi',
-      'last_seen_at',
-      'created_at',
-      'updated_at',
+      'last_snr',
+      'tx_ctr',
+      'rx_highest_ctr',
     ]);
   });
 
-  it('erstellt die Tabelle messages mit den Spalten aus dem Daten-Skill', () => {
+  it('speichert keine Schlüssel und keine Funk-Id', () => {
+    const ddl = migrationStatements().map(normalize).join(' ');
+
+    expect(ddl).not.toMatch(/sending_key|receiving_key|local_key|remote_key|wire_id/);
+  });
+
+  it('erstellt die Tabelle messages mit ctr und msg_ref statt wire_id', () => {
     expect(columnsOf('messages')).toEqual([
       'id',
       'contact_id',
-      'wire_id',
+      'ctr',
+      'msg_ref',
       'content',
       'direction',
       'kind',
@@ -166,18 +171,8 @@ describe('Migrationen', () => {
     ]);
   });
 
-  it('erstellt die Tabelle handshakes mit den Spalten aus dem Daten-Skill', () => {
-    expect(columnsOf('handshakes')).toEqual([
-      'id',
-      'role',
-      'local_key',
-      'remote_key',
-      'peer_name',
-      'state',
-      'contact_id',
-      'created_at',
-      'updated_at',
-    ]);
+  it('hat keine Tabelle handshakes mehr (das Gerät macht das Pairing)', () => {
+    expect(() => ddlOf('handshakes')).toThrow();
   });
 
   it('erstellt die Tabelle settings mit den Spalten aus dem Daten-Skill', () => {
@@ -187,21 +182,26 @@ describe('Migrationen', () => {
   it('legt die Indizes aus dem Daten-Skill an', () => {
     const statements = migrationStatements().map(normalize);
 
-    expect(statements).toContain(
-      'CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_receiving_key ON contacts(receiving_key);',
-    );
+    expect(statements).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_public_key ON contacts(public_key);');
     expect(statements).toContain(
       'CREATE INDEX IF NOT EXISTS idx_messages_contact_sent ON messages(contact_id, sent_at);',
     );
-    expect(statements).toContain('CREATE INDEX IF NOT EXISTS idx_messages_wire ON messages(contact_id, wire_id);');
+    expect(statements).toContain(
+      'CREATE INDEX IF NOT EXISTS idx_messages_ctr ON messages(contact_id, direction, ctr);',
+    );
+    expect(statements).toContain('CREATE INDEX IF NOT EXISTS idx_messages_msg_ref ON messages(msg_ref);');
     expect(statements).toContain(
       'CREATE INDEX IF NOT EXISTS idx_coordinates_message ON coordinates(message_id, recorded_at);',
     );
   });
 
   it('löscht Nachrichten und Koordinaten per ON DELETE CASCADE', () => {
-    expect(ddlOf('messages')).toContain('contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE');
-    expect(ddlOf('coordinates')).toContain('contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE');
+    expect(ddlOf('messages')).toContain(
+      'contact_id INTEGER NOT NULL REFERENCES contacts(contact_id) ON DELETE CASCADE',
+    );
+    expect(ddlOf('coordinates')).toContain(
+      'contact_id INTEGER NOT NULL REFERENCES contacts(contact_id) ON DELETE CASCADE',
+    );
     expect(ddlOf('coordinates')).toContain('message_id TEXT REFERENCES messages(id) ON DELETE CASCADE');
   });
 
@@ -209,28 +209,32 @@ describe('Migrationen', () => {
     expect(ddlOf('messages')).toContain("CHECK (direction IN ('in','out'))");
     expect(ddlOf('messages')).toContain("CHECK (kind IN ('text','location'))");
     expect(ddlOf('messages')).toContain('CHECK (status BETWEEN 0 AND 3)');
-    expect(ddlOf('handshakes')).toContain("CHECK (role IN ('shower','scanner'))");
-    expect(ddlOf('handshakes')).toContain("CHECK (state IN ('waiting','sent','done','cancelled'))");
     expect(ddlOf('coordinates')).toContain("CHECK (context IN ('einmal','live'))");
-    expect(ddlOf('contacts')).toContain('CHECK (length(sending_key) = 32)');
-    expect(ddlOf('contacts')).toContain('CHECK (length(receiving_key) = 32)');
-    expect(ddlOf('contacts')).toContain('CHECK (length(display_name) BETWEEN 1 AND 100)');
-    expect(ddlOf('messages')).toContain('CHECK (length(wire_id) = 8)');
+    expect(ddlOf('contacts')).toContain("CHECK (state IN ('pending','active'))");
+    expect(ddlOf('contacts')).toContain('CHECK (contact_id BETWEEN 1 AND 32)');
+    expect(ddlOf('contacts')).toContain('CHECK (length(name) BETWEEN 1 AND 24)');
+    expect(ddlOf('contacts')).toContain('CHECK (length(node_id) = 4)');
+    expect(ddlOf('contacts')).toContain('CHECK (length(public_key) = 44)');
+    expect(ddlOf('messages')).toContain('CHECK (ctr IS NULL OR ctr BETWEEN 0 AND 16777215)');
   });
 
   it('bindet alle Werte als Parameter und verkettet keine Werte in SQL', () => {
     const statements = [
       ...migrationStatements(),
       CONTACT_INSERT,
-      CONTACT_UPDATE_NAMES,
-      CONTACT_UPDATE_SIGNAL,
+      CONTACT_UPSERT,
+      CONTACT_UPDATE_NAME,
+      CONTACT_UPDATE_LINK,
+      CONTACT_UPDATE_STATE,
       CONTACT_DELETE,
       MESSAGE_INSERT,
       MESSAGE_UPDATE_STATUS,
+      MESSAGE_ASSIGN_REF,
+      MESSAGE_REQUEUE,
+      MESSAGE_FAIL_PENDING,
+      MESSAGE_LAST_PER_CONTACT,
       MESSAGE_MARK_READ,
       COORDINATE_INSERT,
-      HANDSHAKE_INSERT,
-      HANDSHAKE_UPDATE,
       SETTING_UPSERT,
     ];
 
@@ -241,10 +245,20 @@ describe('Migrationen', () => {
     }
   });
 
+  it('aktualisiert Kontakte per ON CONFLICT und nicht per REPLACE (REPLACE würde den Verlauf kaskadiert löschen)', () => {
+    expect(normalize(CONTACT_UPSERT)).toContain('ON CONFLICT(contact_id) DO UPDATE SET');
+    expect(CONTACT_UPSERT).not.toMatch(/REPLACE/i);
+  });
+
+  it('qualifiziert in der Abfrage der letzten Nachricht alle Spalten (kein „ambiguous column name“)', () => {
+    expect(MESSAGE_LAST_PER_CONTACT).toContain('messages.contact_id');
+    expect(MESSAGE_LAST_PER_CONTACT).not.toMatch(/SELECT id, contact_id/);
+  });
+
   it('bindet bei jedem INSERT so viele Werte wie die Tabelle Spalten hat', () => {
     expect(placeholdersOf(CONTACT_INSERT)).toBe(columnCount(CONTACT_COLUMNS));
     expect(placeholdersOf(MESSAGE_INSERT)).toBe(columnCount(MESSAGE_COLUMNS));
     expect(placeholdersOf(COORDINATE_INSERT)).toBe(columnCount(COORDINATE_COLUMNS));
-    expect(placeholdersOf(HANDSHAKE_INSERT)).toBe(columnCount(HANDSHAKE_COLUMNS));
+    expect(placeholdersOf(CONTACT_UPSERT)).toBe(columnCount(CONTACT_COLUMNS));
   });
 });
