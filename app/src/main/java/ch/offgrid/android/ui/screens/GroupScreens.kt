@@ -8,7 +8,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -16,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import ch.offgrid.android.data.GroupEntity
@@ -44,6 +44,13 @@ const val GROUP_NAME_ERROR = "Der Gruppenname muss 1 bis 24 Byte lang sein (Umla
 
 fun groupPattern(group: GroupEntity): BooleanArray = KeyPattern.fromSeed("group:${group.deviceId}:${group.deviceGroupId}")
 
+/** Ticks or unticks [id] in the member picker; a new member is only added while fewer than [max] are chosen. */
+fun toggleMember(selected: List<Long>, id: Long, max: Int): List<Long> = when {
+    id in selected -> selected - id
+    selected.size < max -> selected + id
+    else -> selected
+}
+
 /** Group screen "Neue Gruppe" (optional T20; on the link a proposed `group.create`, see README). */
 @Composable
 fun NewGroupScreen(nav: NavHostController) {
@@ -52,10 +59,13 @@ fun NewGroupScreen(nav: NavHostController) {
     val contacts by app.messaging.contacts.collectAsStateWithLifecycle(initialValue = emptyList())
     val active = contacts.filter { it.state == "active" }
     var name by rememberSaveable { mutableStateOf("") }
-    val selected = remember { mutableStateListOf<Long>() }
-    var error by remember { mutableStateOf<String?>(null) }
+    // A LongArray is bundle-safe, so the ticks survive rotation and process death.
+    var selectedIds by rememberSaveable { mutableStateOf(LongArray(0)) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
     var working by remember { mutableStateOf(false) }
     val nameValid = MessageLimits.isValidName(name)
+    // Only contacts that are still active count, in case one was deleted while the picker was open.
+    val selected = selectedIds.filter { id -> active.any { it.id == id } }
 
     Page {
         OgTopBar("Neue Gruppe", onBack = { nav.back() }, backLabel = "Zurück zu den Kontakten")
@@ -64,7 +74,7 @@ fun NewGroupScreen(nav: NavHostController) {
                 OgTextField("Gruppenname", name, { name = MessageLimits.clampToBytes(it, MessageLimits.MAX_NAME_BYTES) },
                     error = if (name.isNotEmpty() && !nameValid) GROUP_NAME_ERROR else null)
             }
-            SectionLabel("Mitglieder · ${selected.size} von ${MessageLimits.MAX_GROUP_MEMBERS}", list = false)
+            SectionLabel("Mitglieder · ${selected.size} von ${MessageLimits.MAX_GROUP_MEMBERS}", list = false, weight = 500)
             OgCard {
                 active.forEachIndexed { i, c ->
                     val checked = c.id in selected
@@ -74,22 +84,22 @@ fun NewGroupScreen(nav: NavHostController) {
                         checked = checked,
                         enabled = checked || selected.size < MessageLimits.MAX_GROUP_MEMBERS,
                         last = i == active.lastIndex,
-                    ) { if (checked) selected.remove(c.id) else selected.add(c.id) }
+                    ) { selectedIds = toggleMember(selected, c.id, MessageLimits.MAX_GROUP_MEMBERS).toLongArray() }
                 }
             }
             Text(
                 "Nur Kontakte mit abgeschlossenem Handshake. Jedes Mitglied bekommt den Gruppenschlüssel per Funk.",
-                style = OgType.help,
+                style = OgType.help.copy(lineHeight = 1.45.em),
                 modifier = Modifier.padding(start = 28.dp, top = 14.dp, end = 28.dp),
             )
             error?.let { OgNote(it) }
         }
-        Footer {
+        Footer(top = 0.dp) {
             OgButton("Gruppe erstellen", enabled = nameValid && selected.isNotEmpty() && !working, onClick = {
                 working = true
                 error = null
                 scope.launch {
-                    app.messaging.createGroup(name, selected.toList())
+                    app.messaging.createGroup(name, selected)
                         .onSuccess { id -> nav.navigate(Routes.group(id)) { popUpTo(Routes.CONTACTS) } }
                         .onFailure { e ->
                             error = when {
@@ -110,14 +120,19 @@ fun NewGroupScreen(nav: NavHostController) {
 @Composable
 fun GroupChatScreen(nav: NavHostController, groupId: Long) {
     val app = LocalApp.current
-    val group by app.messaging.group(groupId).collectAsStateWithLifecycle(initialValue = null)
+    val group by remember(groupId) { app.messaging.group(groupId).asLookup() }.collectAsStateWithLifecycle(Lookup.Loading)
     val messages by app.messaging.groupMessages(groupId).collectAsStateWithLifecycle(initialValue = emptyList())
     val members by app.messaging.members.collectAsStateWithLifecycle(initialValue = emptyList())
     val antenna by app.antenna.state.collectAsStateWithLifecycle()
     val now = rememberNow()
     var draft by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(messages.size) { app.messaging.markGroupRead(groupId) }
-    val g = group ?: return
+    // A deleted group, or a stale id after process death, leads back instead of an empty screen.
+    LeaveWhenGone(group == Lookup.Gone, nav)
+    val g = group.found ?: run {
+        Page {}
+        return
+    }
     val count = members.count { it.groupId == groupId } + 1
 
     Page {

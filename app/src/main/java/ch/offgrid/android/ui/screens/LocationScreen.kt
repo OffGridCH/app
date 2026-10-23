@@ -20,12 +20,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,14 +72,16 @@ fun LocationScreen(nav: NavHostController, contactId: Long, messageId: Long) {
     val app = LocalApp.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val contact by app.messaging.contact(contactId).collectAsStateWithLifecycle(initialValue = null)
-    val message by app.messaging.message(messageId).collectAsStateWithLifecycle(initialValue = null)
+    val contact by remember(contactId) { app.messaging.contact(contactId).asLookup() }.collectAsStateWithLifecycle(Lookup.Loading)
+    val message by remember(messageId) { app.messaging.message(messageId).asLookup() }.collectAsStateWithLifecycle(Lookup.Loading)
     val myFix by app.location.fix.collectAsStateWithLifecycle()
     val locating by app.location.locating.collectAsStateWithLifecycle()
     val locationError by app.location.error.collectAsStateWithLifecycle()
     val now = rememberNow()
     var copied by remember { mutableStateOf(false) }
-    var mapsError by remember { mutableStateOf(false) }
+    var mapsError by rememberSaveable { mutableStateOf(false) }
+    // Locate once per visit; a rotation must not ask for the permission again.
+    var autoLocated by rememberSaveable { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         scope.launch { app.location.locate() }
     }
@@ -88,17 +92,28 @@ fun LocationScreen(nav: NavHostController, contactId: Long, messageId: Long) {
             scope.launch { app.location.locate() }
         }
     }
-    LaunchedEffect(Unit) { locate() }
+    LaunchedEffect(Unit) {
+        if (!autoLocated) {
+            autoLocated = true
+            locate()
+        }
+    }
     LaunchedEffect(copied) {
         if (copied) {
             delay(2_000)
             copied = false
         }
     }
-    val m = message ?: return
-    val c = contact ?: return
-    val lat = m.lat ?: return
-    val lon = m.lon ?: return
+    // Spec §11: a missing message (deleted, or a stale id after process death) leads back to the chat.
+    val m = message.found
+    val c = contact.found
+    val lat = m?.lat
+    val lon = m?.lon
+    LeaveWhenGone(message == Lookup.Gone || contact == Lookup.Gone || (m != null && (lat == null || lon == null)), nav)
+    if (m == null || c == null || lat == null || lon == null) {
+        Page {}
+        return
+    }
     val out = m.direction == "out"
     val fix = myFix?.takeIf { app.location.isFresh(it, now) }
     val bearing = fix?.let { Geo.bearingDegrees(it.latitude, it.longitude, lat, lon) }
@@ -117,7 +132,10 @@ fun LocationScreen(nav: NavHostController, contactId: Long, messageId: Long) {
                     BearingDial(bearing, if (bearing != null) "Richtung ${Geo.compassName(bearing)}, $degrees Grad" else "Richtung unbekannt")
                     Text(
                         fix?.let { Geo.formatDistance(Geo.distanceMeters(it.latitude, it.longitude, lat, lon)) } ?: "–",
-                        style = TextStyle(fontFamily = Grotesk, fontSize = 40.sp, fontWeight = FontWeight(800), letterSpacing = (-0.03).em, color = Og.text),
+                        style = TextStyle(
+                            fontFamily = Grotesk, fontSize = 40.sp, lineHeight = 1.1.em, fontWeight = FontWeight(800),
+                            letterSpacing = (-0.03).em, color = Og.text,
+                        ),
                     )
                     Text(
                         if (bearing != null) "Richtung ${Geo.compassName(bearing)} · $degrees°" else "Eigener Standort fehlt",
@@ -132,18 +150,27 @@ fun LocationScreen(nav: NavHostController, contactId: Long, messageId: Long) {
             Spacer(Modifier.height(20.dp))
             OgCard {
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 8.dp),
+                    // End padding 6 plus the 48 dp touch slot keeps the 44 dp button where the design's 8 dp puts it.
+                    Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(Geo.formatCoordinate(lat, lon), style = TextStyle(fontFamily = Mono, fontSize = 13.sp, color = Og.text), modifier = Modifier.weight(1f))
                     if (copied) {
                         Text("Kopiert", style = TextStyle(fontFamily = Grotesk, fontSize = 13.sp, color = Og.ok),
                             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     }
-                    OgIconButton(if (copied) OgIcon.Check else OgIcon.Copy, "Koordinaten kopieren", {
-                        copyCoordinates(context, lat, lon)
-                        copied = true
-                    }, round = false)
+                    OgIconButton(
+                        if (copied) OgIcon.Check else OgIcon.Copy, "Koordinaten kopieren",
+                        {
+                            copyCoordinates(context, lat, lon)
+                            copied = true
+                        },
+                        round = false,
+                        modifier = Modifier.minimumInteractiveComponentSize(),
+                        tint = Og.text2,
+                        plainRadius = 12.dp,
+                    )
                 }
                 CardDivider()
                 InfoRow(
@@ -164,7 +191,7 @@ fun LocationScreen(nav: NavHostController, contactId: Long, messageId: Long) {
                 }
             }
             if (mapsError) OgNote(LocationError.NO_MAPS_APP.text())
-            else if (!out && locationError != null && fix == null) OgNote(locationError!!.text())
+            else if (!out && fix == null) locationError?.let { OgNote(it.text()) }
         }
         Footer(top = 0.dp) {
             OgButton("In Karten-App öffnen", icon = OgIcon.Map, onClick = {

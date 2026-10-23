@@ -1,10 +1,16 @@
 package ch.offgrid.android.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -25,12 +31,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import ch.offgrid.android.BuildConfig
@@ -67,15 +75,18 @@ import kotlinx.serialization.json.put
 @Composable
 fun SettingsScreen(nav: NavHostController) {
     val app = LocalApp.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Receiving stays on whatever the answer is; without the permission Android only hides the notification.
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val antenna by app.antenna.state.collectAsStateWithLifecycle()
     val settings by app.settings.values.collectAsStateWithLifecycle()
     val contacts by app.messaging.contacts.collectAsStateWithLifecycle(initialValue = emptyList())
     val messageCount by app.messaging.messageCount.collectAsStateWithLifecycle(initialValue = 0)
     val installId by produceState<String?>(null) { value = app.settings.installId() }
     var name by rememberSaveable { mutableStateOf<String?>(null) }
-    var nameError by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
+    var nameError by rememberSaveable { mutableStateOf(false) }
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(settings[Settings.DISPLAY_NAME]) { if (name == null) name = settings[Settings.DISPLAY_NAME] }
     val pattern = remember(settings[Settings.OWN_PUBLIC_KEY], installId) {
         KeyPattern.fromSeed(settings[Settings.OWN_PUBLIC_KEY] ?: installId ?: "")
@@ -95,14 +106,15 @@ fun SettingsScreen(nav: NavHostController) {
                 Text("DEIN MUSTER", style = OgType.meta.copy(letterSpacing = 0.08.em))
             }
 
-            SectionLabel("Profil")
-            OgCard(padded = true, gap = 8.dp) {
+            SectionLabel("Profil", top = 22.dp)
+            OgCard(padded = true, gap = 8.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
                 OgTextField(
                     "Anzeigename", name.orEmpty(), {
                         name = MessageLimits.clampToBytes(it, MessageLimits.MAX_NAME_BYTES)
                         nameError = false
                     },
                     hint = "Wird beim Hinzufügen an neue Kontakte übertragen.",
+                    gap = 8.dp,
                     error = if (nameError) NAME_ERROR else null,
                     onBlur = {
                         val value = name.orEmpty().trim()
@@ -136,9 +148,9 @@ fun SettingsScreen(nav: NavHostController) {
                 InfoRow("Firmware", antenna.fwVersion ?: "–")
                 Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OgButton("Neu verbinden", { nav.navigate(Routes.CONNECT) }, Modifier.weight(1f),
-                        variant = ButtonVariant.Secondary, containerColor = Og.line)
+                        variant = ButtonVariant.Secondary, containerColor = Og.line, height = 46.dp, radius = 14.dp, bordered = false)
                     OgButton("Trennen", { app.antenna.disconnect() }, Modifier.weight(1f),
-                        variant = ButtonVariant.Secondary, enabled = antenna.ready)
+                        variant = ButtonVariant.Secondary, enabled = antenna.ready, height = 46.dp, radius = 14.dp)
                 }
             }
 
@@ -148,7 +160,14 @@ fun SettingsScreen(nav: NavHostController) {
                     "Im Hintergrund empfangen",
                     "Nachrichten kommen an, auch wenn die App geschlossen ist.",
                     settings[Settings.BG_RECEIVE] != "false",
-                ) { on -> scope.launch { app.settings.put(Settings.BG_RECEIVE, on.toString()) } }
+                ) { on ->
+                    scope.launch { app.settings.put(Settings.BG_RECEIVE, on.toString()) }
+                    if (on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
                 CardDivider()
                 SwitchRow("Vibration bei Nachricht", null, settings[Settings.VIBRATE] == "true") { on ->
                     scope.launch { app.settings.put(Settings.VIBRATE, on.toString()) }
@@ -173,7 +192,7 @@ fun SettingsScreen(nav: NavHostController) {
             Text(
                 "OffGrid ${BuildConfig.VERSION_NAME}",
                 style = OgType.meta,
-                modifier = Modifier.fillMaxWidth().padding(top = 28.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 28.dp, top = 28.dp, end = 28.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
@@ -235,8 +254,8 @@ private fun LinkRow(icon: OgIcon, title: String, text: String, onClick: () -> Un
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         OgIconView(icon, Og.accent, size = 22.dp)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = OgType.bodyStrong.copy(fontSize = 16.sp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = OgType.bodyStrong.copy(fontSize = 16.sp, fontWeight = FontWeight(600)))
             Text(text, style = OgType.help.copy(fontSize = 13.sp))
         }
     }
