@@ -47,6 +47,7 @@ import androidx.navigation.NavHostController
 import ch.offgrid.android.data.ContactEntity
 import ch.offgrid.android.data.MessageEntity
 import ch.offgrid.android.data.MessageStatus
+import ch.offgrid.android.domain.AntennaState
 import ch.offgrid.android.domain.Conversation
 import ch.offgrid.android.domain.Formats
 import ch.offgrid.android.domain.Geo
@@ -133,8 +134,7 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
                 // Chat.png says "Nachricht an Anna", chat-standort.png "Nachricht an Anna Meier"; the
                 // screens skill settles it with display_name.
                 target = c.displayName,
-                ready = ready,
-                maxBytes = antenna.maxTextBytes,
+                antenna = antenna,
                 onSend = {
                     app.messaging.sendText(c.id, draft)
                     draft = ""
@@ -275,19 +275,20 @@ fun ChatComposer(
     draft: String,
     onDraft: (String) -> Unit,
     target: String,
-    ready: Boolean,
-    maxBytes: Int,
+    antenna: AntennaState,
     onSend: () -> Unit,
     onLocation: (() -> Unit)?,
 ) {
+    val ready = antenna.ready
     Composer(
         text = draft,
         onTextChange = onDraft,
         placeholder = if (ready) "Nachricht an $target" else "Wird später gesendet",
         label = "Nachricht an $target",
         sendLabel = if (ready) "Senden" else "In Warteschlange legen",
-        usedBytes = MessageLimits.utf8Bytes(draft),
-        maxBytes = maxBytes,
+        // On air, not typed: a lab image with the OGZ1 codec fits more text into the same bytes.
+        usedBytes = MessageLimits.onAirTextBytes(draft, antenna.textCodec, antenna.maxTextInputBytes),
+        maxBytes = antenna.maxTextBytes,
         onSend = onSend,
         onLocation = onLocation,
     )

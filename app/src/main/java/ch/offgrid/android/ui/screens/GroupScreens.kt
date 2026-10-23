@@ -162,8 +162,7 @@ fun GroupChatScreen(nav: NavHostController, groupId: Long) {
             draft = draft,
             onDraft = { draft = it },
             target = g.name,
-            ready = antenna.ready,
-            maxBytes = antenna.maxTextBytes,
+            antenna = antenna,
             onSend = {
                 app.messaging.sendGroupText(g.id, draft)
                 draft = ""
