@@ -3,7 +3,10 @@
 // The list of file replacements can be found in `angular.json`.
 
 export const environment = {
-  production: false
+  production: false,
+  // Entwicklung und Tests messen nie; der Schlüssel steht nur in environment.prod.ts.
+  posthogKey: '',
+  posthogHost: 'https://eu.i.posthog.com',
 };
 
 /*
