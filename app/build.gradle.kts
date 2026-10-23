@@ -29,6 +29,10 @@ android {
         // Optional serial-to-TCP bridge to a real antenna for debug builds (`OFFGRID_TCP_LINK=10.0.2.2:5555`).
         val tcpLink = local.getProperty("OFFGRID_TCP_LINK", "").trim().filter { it.isLetterOrDigit() || it in ".:-" }
         buildConfigField("String", "TCP_LINK", "\"$tcpLink\"")
+        // Optional TEXT codec the app selects on a lab radio image (`OFFGRID_TEXT_CODEC=ogz1` or `raw`). Empty
+        // leaves the antenna's setting alone; the team firmware has no codec and ignores it.
+        val textCodec = local.getProperty("OFFGRID_TEXT_CODEC", "").trim().filter { it.isLetterOrDigit() }
+        buildConfigField("String", "TEXT_CODEC", "\"$textCodec\"")
     }
 
     buildTypes {
