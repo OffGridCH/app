@@ -75,7 +75,9 @@ class LinkClient(
     private fun finish(cause: Throwable?) {
         if (closedSignal.isCompleted) return
         closedSignal.complete(cause)
-        eventChannel.close(cause?.let(::LinkClosedException))
+        // Close normally: consumers iterate `events` and must simply stop on unplug. The reason
+        // is reported through [closed]; closing with a cause would throw inside every consumer.
+        eventChannel.close()
         pending.values.forEach { it.completeExceptionally(LinkClosedException(cause)) }
     }
 

@@ -10,6 +10,7 @@ import ch.offgrid.android.link.obj
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.time.LocalTime
@@ -37,6 +38,11 @@ class DemoData(private val app: AppContainer) {
         // Wait until the virtual peers answered the pairing ping.
         withTimeoutOrNull(8_000) {
             while (listOf(anna, luca, mia).any { app.db.contacts().byId(it)?.state != "active" }) delay(200)
+        }
+        // Let the pings' "delivered" events land first; they stamp "last seen" with the current time.
+        withTimeoutOrNull(5_000) {
+            while ((app.antenna.call("msg.pending")["pending"] as? JsonArray)?.isNotEmpty() == true) delay(200)
+            delay(500)
         }
         app.db.contacts().byId(mia)?.let { sim.setPeerInRange(it.deviceContactId, false) }
 
