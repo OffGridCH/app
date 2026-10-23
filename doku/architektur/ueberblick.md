@@ -1,8 +1,9 @@
 # Überblick
 
-Stand: **nach T00** (Projektgerüst und Theme). Gebaut sind das App-Gerüst, die Kern-Grundlagen (`log.ts`,
-`platform.ts`, `models/`) und das Theme. Die Seiten unter `features/` sind leere Stubs; ihr Inhalt kommt mit dem
-jeweiligen Ticket. Alles, was noch fehlt, trägt im Diagramm und im Ordnerbaum den Vermerk „geplant: Txx".
+Stand: **nach T03** (Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level). Gebaut sind das App-Gerüst, die
+Kern-Grundlagen (`log.ts`, `platform.ts`, `models/`) und das Theme sowie die Krypto- und Format-Module unter `core/`.
+Die Seiten unter `features/` sind leere Stubs; ihr Inhalt kommt mit dem jeweiligen Ticket. Alles, was noch fehlt, trägt
+im Diagramm und im Ordnerbaum den Vermerk „geplant: Txx".
 
 ## Schichten
 
@@ -22,8 +23,9 @@ flowchart TD
         Start["app-start.service.ts<br>geplant: T04"]
         Data["data/<br>Datenbank und Repositories<br>geplant: T04"]
         Antenna["antenna/<br>Antennen-Port, Mock, Serial<br>geplant: T05, T06"]
-        Crypto["crypto/<br>geplant: T03"]
-        Messaging["messaging/<br>geplant: T03, T07"]
+        Crypto["crypto/<br>Schlüssel, AES-GCM<br/>(T03)"]
+        Format["format/<br>Zeit- und Funkformate<br/>(T03)"]
+        Messaging["messaging/<br>Limits, Signal-Level<br/>geplant: T07"]
         Handshake["handshake/<br>geplant: T08"]
         Backup["backup/<br>geplant: T14"]
         Location["location/<br>geplant: T17"]
@@ -38,6 +40,7 @@ flowchart TD
     Basis --> Data
     Basis --> Antenna
     Basis --> Crypto
+    Basis --> Format
     Basis --> Messaging
     Basis --> Handshake
     Basis --> Backup
@@ -63,13 +66,13 @@ src/
       app-start.service.ts    geplant: T04
       antenna/                geplant: T05, T06
       backup/                 geplant: T14
-      crypto/                 geplant: T03
+      crypto/                 Schlüssel, AES-GCM, Schlüssel-Muster (T03)
       data/                   geplant: T04
-      format/                 geplant: T03
+      format/                 Zeit- und Funkformate (T03)
       groups/                 geplant: T20
       handshake/              geplant: T08
       location/               geplant: T17
-      messaging/              geplant: T03, T07
+      messaging/              Limits, Signal-Level (T03), geplant: T07
       settings/               geplant: T04
     features/
       chat/                   geplant: T12
@@ -94,7 +97,7 @@ src/
 |---|---|---|---|
 | App | `src/app/app.*.ts` | Wurzel-Komponente, Provider, Routen | fertig (T00) |
 | Oberfläche | `src/app/features/`, `src/app/ui/` | Screens und wiederverwendbare `og-`-Komponenten | Stubs (T00), gefüllt ab T01, T02, T09 |
-| Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Krypto, Messaging | Grundgerüst (T00), gefüllt ab T03 |
+| Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Krypto, Messaging | Grundgerüst (T00), Krypto und Formate gebaut (T03) |
 | Typen | `src/app/core/models/` | Kontakt, Nachricht, Handshake, Antenne, Settings, Fehlercodes | fertig (T00) |
 | Theme | `src/theme/` | Design-Tokens, Schriften, globales Styling | fertig (T00) |
 
