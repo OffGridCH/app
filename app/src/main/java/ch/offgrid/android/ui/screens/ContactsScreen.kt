@@ -85,8 +85,14 @@ fun ContactsScreen(nav: NavHostController) {
                 Text(
                     "OffGrid",
                     style = OgType.appTitle,
-                    modifier = Modifier.semantics { heading() }
-                        .combinedClickable(onClick = {}, onLongClick = { if (BuildConfig.DEBUG) demoMenu = true }),
+                    // Debug builds open the test menu with a long press; release builds keep a plain heading.
+                    modifier = Modifier.semantics { heading() }.then(
+                        if (BuildConfig.DEBUG) {
+                            Modifier.combinedClickable(onClick = {}, onLongClick = { demoMenu = true }, onLongClickLabel = "Testmenü öffnen")
+                        } else {
+                            Modifier
+                        },
+                    ),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OgIconButton(OgIcon.Settings, "Einstellungen", { nav.navigate(Routes.SETTINGS) })
@@ -117,7 +123,7 @@ fun ContactsScreen(nav: NavHostController) {
                 OgButton(if (empty) "Ersten Kontakt hinzufügen" else "Kontakt hinzufügen", { nav.navigate(Routes.add()) }, icon = OgIcon.Qr)
             }
         }
-        if (demoMenu) DemoMenu(onClose = { demoMenu = false })
+        if (BuildConfig.DEBUG) DemoMenu(demoMenu, onClose = { demoMenu = false })
     }
 }
 
