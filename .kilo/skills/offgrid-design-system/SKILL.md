@@ -119,8 +119,11 @@ Inputs: `pattern: boolean[]` (25 Werte, Zeilen von oben, links nach rechts), `si
 - Zelle an: Grund `--og-text-2`; Zelle aus: transparent.
 - `pending`: kein Raster, Kreis-Rahmen 1.5px **gestrichelt** `--og-dashed`, kein Grund.
 - `aria-hidden="true"` (der Name steht immer daneben).
-- Das Raster wird **nicht** hier berechnet. Das Raster wird nicht mehr aus Schlüsseln abgeleitet; die Quelle der Zellwerte (z. B. aus `node_id` oder `fingerprint`)
-  ist **offen und wird in T02 entschieden**. Der vom Gerät gelieferte `fingerprint` ersetzt das frühere Vergleichsbild (Skill `offgrid-crypto-handshake` §4).
+- Das Raster wird **nicht** in der Komponente berechnet, sondern von `avatarPattern(seed)` in `ui/avatar/avatar-pattern.ts` geliefert (async, `crypto.subtle`):
+  SHA-256 über den UTF-8-Text des Seeds; für Zeile `y` 0–4 und Spalte `x` 0–2 ist die Zelle an, wenn `(bytes[y*3 + x] & 1) === 1`; Spalte 3 = Spalte 1,
+  Spalte 4 = Spalte 0 (spiegelsymmetrisch). Hat das Raster weniger als 5 Zellen an, werden zusätzlich die Zellen 11, 12 und 13 (Mitte von Zeile 2) gesetzt.
+  Seed bei Kontakten: `contact.publicKey` (Base64-Text); eigenes Bild: `install_id`; Gruppen (T20): `group_key`. Das Bild ist **nur Dekoration** und kein
+  Vergleichsbild: Zum Vergleichen dient der vom Gerät gelieferte `fingerprint` (Skill `offgrid-crypto-handshake` §4).
 
 ### og-signal-bars
 Inputs: `level: 0|1|2|3|4`, `size: 'md' | 'sm'`, `label` (Pflicht, → `role="img" aria-label`).
@@ -195,7 +198,7 @@ Inputs: `direction: 'in' | 'out'`, `status: 'queued' | 'sent' | 'delivered' | 'f
 ### og-composer
 Inputs: `placeholder`, `label` (verstecktes Label, Klasse `og-sr-only`), `sendLabel` (aria-label Senden-Button),
 `maxBytes` (number), `countBytes: (text: string) => number` (die Seite übergibt `contentBytes` aus `core/messaging/limits.ts`),
-`showLocation` (bool, Default false; ab T18 im Einzelchat true).
+`showLocation` (bool, Default false; ab T18 im Einzelchat true), `blockOverLimit` (bool, Default true; der Einzelchat setzt false, weil lange Texte geteilt werden).
 Outputs: `send(text)`, `location()` (Standort-Button gedrückt). Model `text`. Nach `send` wird `text` geleert.
 Leiste: Grund `--og-bar`, Rand oben 1px `--og-line`, padding `10px 14px 22px`, gap 10 (mit Standort-Button gap 8),
 Elemente unten ausgerichtet.
@@ -204,7 +207,7 @@ Icon `pin` 22 in `--og-text`, `aria-label` „Standort senden“, margin-bottom 
 Input (mit verstecktem Label `Nachricht an <Name>`): Höhe 48, Radius 16, Grund `--og-surface`, Rahmen 1px `--og-border`.
 Darunter Zähler im `meta`-Stil, padding-left 4: `<countBytes(text)> / <maxBytes> Zeichen pro Funkspruch`.
 Senden-Button 48×48 Radius 16 `--og-accent`, Icon `send` in `--og-on-accent`, `aria-label` aus Input `sendLabel`,
-margin-bottom 21px (bündig mit Input). Deaktiviert, wenn Text leer (nach trim) oder Bytes > maxBytes.
+margin-bottom 21px (bündig mit Input). Deaktiviert, wenn Text leer (nach trim) oder (nur bei `blockOverLimit`) Bytes > maxBytes.
 Bei Überschreitung: Zähler in `--og-danger`. Enter sendet.
 
 ### og-location-bubble (ab T18; Referenz `ChatStandort.dc.html`)

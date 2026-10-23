@@ -1,22 +1,16 @@
-# T05 – Antennen-Abstraktion, Frame-Codec, Mock-Antenne
+# T05 – Antennen-Abstraktion, Frame-Codec, Mock-Antenne (ersetzt durch T23)
 
-**Abhängig von:** T04
-**Skills:** `offgrid-antenna-protocol`, `offgrid-crypto-handshake` (§1), `offgrid-architecture`, `offgrid-testing`
-**Dateien:** `src/app/core/antenna/**` (ohne `serial-antenna.service.ts`, `usb-serial.plugin.ts`),
-`src/app/core/messaging/frame.ts`, `src/app/app.config.ts`, `src/app/core/app-start.service.ts`
+**Status: erledigt durch T23 (PR #12). Nicht starten.**
 
-## Umfang
-- `antenna.port.ts` (abstrakte Klasse laut Architektur §4; Typen liegen in `core/models/antenna.ts`), `ndjson.ts` (Zeilenpuffer, wird in T06 genutzt).
-- `frame.ts` laut Protokoll §5 (`encodeFrame`, `peekFrame`, `decodeFrame`).
-- `mock-antenna.service.ts` laut Protokoll §8 inkl. `window.ogMock`-Hooks.
-- Provider-Weiche `AntennaPort` in `app.config.ts`: vorerst **immer** `MockAntennaService` (T06 ergänzt Serial).
-- `AppStartService.init()` Schritt 3 (connect im Hintergrund).
+Dieses Ticket beschrieb eine Antenne als reines Funkmodem (NDJSON, Frame-Codec, `MockAntennaService`). Der Vertrag hat sich mit
+„Offgrid Host Interface v1“ geändert: Die Antenne macht Funk und Krypto selbst. Was dieses Ticket verlangte, steckt jetzt so in T23:
 
-## Akzeptanzkriterien
-- [ ] `peekFrame` verwirft zu kurze Frames, falsche Version und unbekannte Typen.
-- [ ] Mock durchläuft beim Start die Zustände in der Reihenfolge laut Skill und meldet `info`.
-- [ ] `window.ogMock` existiert nur mit Mock-Antenne.
-- [ ] Prüfbefehle grün.
+| Früher in T05 | Jetzt (T23) |
+|---|---|
+| `antenna.port.ts`, `ndjson.ts` | `core/antenna/antenna-port.ts`, `serial-client.ts` (JSON Lines) |
+| `frame.ts` (Frame-Codec) | entfällt: die App baut keine Funkpakete |
+| `mock-antenna.service.ts`, `window.ogMock` | `core/antenna/mock-device.ts`, `mock-serial-transport.ts`, `ogMock` |
+| Provider-Weiche `AntennaPort` | `app.config.ts`: `SerialTransport` und `KeystoreService` |
+| `AppStartService` Schritt 3 | `app-start.service.ts` verbindet die Antenne im Hintergrund |
 
-## Tests
-`ndjson.spec.ts`, `frame.spec.ts`.
+Skills: `offgrid-antenna-protocol`, `offgrid-crypto-handshake`.

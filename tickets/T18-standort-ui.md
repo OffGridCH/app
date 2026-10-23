@@ -17,7 +17,7 @@
 5. Kontakte: Vorschau „Standort“ / „Du: Standort“.
 
 ## Akzeptanzkriterien
-- [ ] Browser: Standort-Button → Sheet zeigt Demo-Fix → „An Anna Meier senden“ → Bubble „Mein Standort“ → nach ~1,8 s „zugestellt“.
+- [ ] Browser: Standort-Button → Sheet zeigt Demo-Fix → „An Anna Meier senden“ → Bubble „Mein Standort“ → nach ~0,3 s „gesendet“ (Standorte werden standardmässig nicht quittiert, es gibt kein „zugestellt“).
 - [ ] Browser: `ogMock.receiveLocation('Anna Meier')` → eingehende Bubble mit „1.2 km“ und „Richtung Nordosten“
       (nachdem der eigene Demo-Fix bestimmt wurde), „Anzeigen“ öffnet die Standort-Seite mit Pfeil auf 42°.
 - [ ] „Koordinaten kopieren“ zeigt 2 s lang den Haken; „In Karten-App öffnen“ öffnet im Browser OpenStreetMap.

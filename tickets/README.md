@@ -6,6 +6,7 @@
 - „Prüfbefehle grün“ heisst: `npm run lint`, `npm run test:ci`, `npm run build` ohne Fehler.
 - Neue Tickets schreibt nur der Mensch (oder der Planner auf ausdrücklichen Auftrag), im selben Aufbau.
 
-Kritischer Pfad: T00 → T21 (CI + Doku) → T03 → T04 → T05 → T07 → T08 → T11. Standort (wichtig): T07 → T17 → T18 (braucht T12).
+Kritischer Pfad: T00 → T21 (CI + Doku) → T03 → T04 → T23 (Host-API, Antenne, Nachrichten, Kontakte) → T09 → T10 → T11. Standort (wichtig): T23 → T17 → T18 (braucht T12).
+T23 hat T05, T07 und T08 ersetzt (die Dateien bleiben als Verweis liegen).
 Optional, nur auf Freigabe des Menschen, in dieser Reihenfolge: T19 Live-Standort → T16 Hintergrund → T20 Gruppenchat.
-Parallel möglich (wenn mehrere Sessions laufen): T01/T02 neben T03–T05; T06 neben T07.
+Parallel möglich (wenn mehrere Sessions laufen): T02 neben T06 und T09; T06 neben den Seiten-Tickets.

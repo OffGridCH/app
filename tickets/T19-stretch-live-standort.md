@@ -2,6 +2,8 @@
 
 **Abhängig von:** T18
 **Status-Hinweis:** Optional. Startet erst, wenn der Mensch es freigibt (in `STATUS.local.md` auf `offen` setzen).
+**Offene Frage vor dem Start:** Das `geo`-Paket der Host-API kennt keine Freigabe-Kennung und kein Ende. Das Firmware-Team muss klären, ob das Gerät
+Live-Updates zu **einer** Nachricht kennzeichnen kann (`docs/esp-schnittstelle.md` §8); sonst Ticket neu schreiben.
 **Skills:** `offgrid-location` (§5), `offgrid-screens` (§6 Punkt 5, §10, §11), `offgrid-design-system`, `offgrid-data`, `offgrid-testing`
 **Dateien:** `src/app/core/location/`, `src/app/core/messaging/`, `src/app/core/data/**` (nur `messageIdForShare`), `src/app/features/chat/`, `src/app/features/standort/`,
 `src/app/ui/location-bubble/`, `src/testing/**` (nur Tester)

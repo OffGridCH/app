@@ -137,7 +137,7 @@ Aufbau:
 4. Footer padding `12px 16px 26px`: `og-link-button primary` mit Icon `qr`: „Kontakt hinzufügen“ → `/kontakte/neu`.
 
 **Leerzustand** (keine Kontakte und keine ausstehenden): statt Liste zentrierter Block (flex 1, gap 22, padding `0 36px`):
-- Illustration `aria-hidden`: eigenes `og-avatar 56` (Quelle der Zellwerte offen, Skill `offgrid-design-system`) · drei Punkte 5×5 `--og-border-muted` gap 6 ·
+- Illustration `aria-hidden`: eigenes `og-avatar 56` (Zellwerte aus `avatarPattern`, Skill `offgrid-design-system`) · drei Punkte 5×5 `--og-border-muted` gap 6 ·
   `og-avatar pending 56`; Zeile gap 10.
 - `<h1>` `empty-title`: „Noch keine Kontakte“
 - `body-2` zentriert: „Triff dich mit jemandem, der OffGrid nutzt, und scannt gegenseitig eure Codes. Danach könnt ihr ohne Mobilnetz schreiben.“
@@ -173,7 +173,7 @@ Aufbau:
 ## 5. Kontakt benennen (`/kontakte/neu/fertig/:contactId`, Referenz `KontaktBenennen.dc.html`)
 
 1. Block padding `56px 24px 0`, zentriert, gap 16:
-   - `og-avatar 96` (Quelle der Zellwerte offen, Skill `offgrid-design-system`); unten rechts Erfolgs-Badge 32×32 Kreis `--og-ok`, Rand 3px `--og-bg`,
+   - `og-avatar 96` (Zellwerte aus `avatarPattern`, Skill `offgrid-design-system`); unten rechts Erfolgs-Badge 32×32 Kreis `--og-ok`, Rand 3px `--og-bg`,
      Icon `check` 14px `--og-on-accent` (aria-hidden).
    - `<h1>` `hero`: „Schlüssel ausgetauscht“
    - `body-2` max-width 300: „Vergleicht die Zahlen auf beiden Handys. Sind sie gleich, hat alles geklappt.“ ¹
@@ -212,7 +212,7 @@ Beim Öffnen und bei neuen Nachrichten: `markRead(contactId)`.
    `maxBytes` = `MessagingService.maxContentBytes()` (**83**, aus `sys.hello`), `countBytes` = `contentBytes`.
    **Lange Texte werden geteilt:** `MessagingService.sendText` zerlegt einen Text über `maxContentBytes()` Bytes in Stücke (nie mitten in einem
    Zeichen); jedes Stück ist eine eigene Nachricht im Verlauf. Der Composer darf das Senden deshalb **nicht** bei Überschreitung sperren.
-   Wie der Zähler bei Überschreitung aussieht, legt T02/T12 fest (offen; bisher: Zähler rot und Senden gesperrt).
+   Der Composer bekommt dafür `blockOverLimit = false`: Bei Überschreitung wird der Zähler rot (`--og-danger`, Hinweis „wird geteilt“), das Senden bleibt möglich.
    Ab T18: `showLocation` true → Output `location` öffnet das Standort-Sheet (§10).
 5. Ab T18 – Standort-Nachrichten (`kind 'location'`) werden mit `og-location-bubble` statt `og-message-bubble` gezeigt:
    - out: Titel „Mein Standort“; Meta wie Text-Nachrichten.
@@ -244,7 +244,7 @@ Beim Öffnen und bei neuen Nachrichten: `markRead(contactId)`.
 
 Seite scrollt (`ion-content`), padding-bottom 32.
 1. `og-topbar` „Einstellungen“, back `/kontakte`.
-2. Block zentriert padding `20px 16px 8px`, gap 12: `og-avatar 72` (Quelle der Zellwerte offen, Skill `offgrid-design-system`) + Meta-Label „DEINE ID“ ¹
+2. Block zentriert padding `20px 16px 8px`, gap 12: `og-avatar 72` (Zellwerte aus `avatarPattern`, Skill `offgrid-design-system`) + Meta-Label „DEINE ID“ ¹
    (letter-spacing 0.08em) und darunter `identity().nodeId` (Mono, z. B. „E3F0“). Das frühere Vergleichsbild entfällt (Skill `offgrid-crypto-handshake` §4).
 3. `og-section-label card` „PROFIL“ · `og-card padded` (gap 8): `og-text-field` „Anzeigename“ (**kein** `maxlength`) + Hint
    „Wird beim Hinzufügen an neue Kontakte übertragen.“ Bei `blurred`: wenn `isValidDisplayName` → speichern (`SettingsService.setDisplayName` **und** `id.set_name`

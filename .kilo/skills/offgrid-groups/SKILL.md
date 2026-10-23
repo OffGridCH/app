@@ -129,7 +129,7 @@ Darf `MessagingService` und `HandshakeService` **nicht** injizieren. Bekommt Fra
   `GroupErrorCode = 'group-name-invalid' | 'group-no-members' | 'group-too-many' | 'group-too-large' | 'group-duplicate-names'`.
 - `create` prüft: Name 1–40 Zeichen; 1–8 Kontakte; keine zwei gleichen `display_name` unter den Gewählten und keiner gleich
   meinem Namen (sonst `group-duplicate-names`).
-- Gruppen-Avatar: Raster aus SHA-256(`group_key`), Darstellung siehe §5 (Quelle der Zellwerte wie bei `og-avatar`, offen in T02).
+- Gruppen-Avatar: Raster aus SHA-256(`group_key`), Darstellung siehe §5 (Zellwerte wie bei `og-avatar`, Seed `group_key`).
 
 ## 5. Screens (Referenzen `docs/design/screens/GruppeErstellen.dc.html`, `GruppenChat.dc.html`)
 
