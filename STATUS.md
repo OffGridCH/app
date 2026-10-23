@@ -52,5 +52,5 @@ they are refreshed at the end.
    opt-out toggle in the designs.
 3. **Groups.** Built as a preview against proposed `group.*` firmware commands that the
    firmware does not have yet; keep as preview, hide, or drop.
-4. **Composer placeholder.** `Chat.png` shows "Nachricht an Anna" (first name), the screens
-   skill says `<display_name>`. The app follows the PNG.
+4. **Composer placeholder.** `Chat.png` shows "Nachricht an Anna", `chat-standort.png`
+   "Nachricht an Anna Meier". The app follows the screens skill (`<display_name>`).
