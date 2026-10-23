@@ -497,6 +497,9 @@ fun BearingDial(bearing: Double?, label: String) {
     }
 }
 
+/** `Handshake.dc.html`: 25 modules of 9 px. */
+private val QR_SIZE = 225.dp
+
 /**
  * QR code on a light card (padding 22, radius 28). Modules touch and have a 2 dp corner radius
  * like the design; the code fades in once it is ready.
@@ -515,11 +518,11 @@ fun QrCard(data: String?, modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         Crossfade(matrix, animationSpec = tween(250), label = "qr") { m ->
-            Box(Modifier.size(230.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(QR_SIZE), contentAlignment = Alignment.Center) {
                 if (m == null) {
                     Spinner(28.dp)
                 } else {
-                    Canvas(Modifier.size(230.dp)) {
+                    Canvas(Modifier.size(QR_SIZE)) {
                         val n = m.width
                         val cell = size.width / n
                         val r = minOf(2.dp.toPx(), cell / 2)
