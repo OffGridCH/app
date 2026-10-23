@@ -14,6 +14,21 @@ class LineFramerTest {
     }
 
     @Test
+    fun keepsACompleteFirstLineBecauseTheUartHasNothingInFlightOnOpen() {
+        val framer = LineFramer()
+        val out = framer.feed(bytes("{\"id\":1,\"ok\":true,\"result\":{\"uptime_ms\":42}}\n"))
+        assertEquals(listOf(FramedLine.Json("{\"id\":1,\"ok\":true,\"result\":{\"uptime_ms\":42}}")), out)
+    }
+
+    @Test
+    fun dropsAFirstLineThatIsTheBalancedLookingTailOfAnObject() {
+        val framer = LineFramer()
+        // Attached right before the nested object: the tail starts with "{" but closes the outer object.
+        val out = framer.feed(bytes("{\"uptime_ms\":42}}\n{\"id\":2,\"ok\":true}\n"))
+        assertEquals(listOf(FramedLine.Json("{\"id\":2,\"ok\":true}")), out)
+    }
+
+    @Test
     fun stripsCrAndSkipsEmptyLines() {
         val framer = LineFramer(dropFirstPartialLine = false)
         // The firmware sends one empty LF at boot before sys.boot.
