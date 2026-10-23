@@ -1,5 +1,21 @@
 # Änderungen
 
+## T03 – Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level
+*2026-10-23*
+
+- Alle Zeiten der App werden in der Zeitzone `Europe/Zurich` formatiert: Uhrzeit, „Gestern“, Wochentag, Datum für die
+  Tagestrenner im Chat und „zuletzt …“ in der Kontaktliste.
+- Die Frequenz der Antenne erscheint als MHz-Text (z. B. „868 MHz“).
+- `CryptoService` erzeugt Schlüssel, berechnet Tags (SHA-256) und verschlüsselt mit AES-GCM 128 – nur WebCrypto, ohne
+  zusätzliche Pakete.
+- `KeyPatternService` erzeugt aus den Schlüsseln eines Kontakts ein spiegelsymmetrisches 5×5-Muster, damit zwei
+  Personen auf beiden Handys prüfen können, ob der Schlüsselaustausch geklappt hat.
+- Die Signalstärke wird aus Feldstärke und letztem Kontakt zu fünf Leveln; ein Signal älter als 15 Minuten zählt als
+  „Ausser Reichweite“.
+- Die Länge von Texten und Anzeigenamen wird in UTF-8-Bytes ohne JSON-Escapes gerechnet. Der Gerätevertrag
+  „OffGrid Link“ setzt maximal 83 Bytes für Textinhalte (§7.5) und 24 Bytes für Anzeigenamen (§7.2/§7.3); der
+  Frame-Overhead beträgt 33 Bytes.
+
 ## T01 – UI-Basis 1: Grundkomponenten
 *2026-10-23*
 

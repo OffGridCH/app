@@ -36,7 +36,7 @@ Hinweis steht, ist im Code dieses Branches vorhanden.
 | CI-Checks (Lint, Tests, Build) und Doku-Website | fertig | T21 |
 | UI-Grundkomponenten (Icons, Buttons, Karten, Eingabefeld, Schalter) | fertig | T01 |
 | UI-Zustandskomponenten (Avatar, Signalbalken, Banner, Schrittliste, Blase, Composer, QR) | geplant | T02 |
-| Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level | geplant | T03 |
+| Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level | fertig | T03 |
 | Datenbank, Repositories, App-Start | geplant | T04 |
 | Antennen-Abstraktion, Frame-Codec, Mock-Antenne | geplant | T05 |
 | Natives USB-Serial-Plugin für Android | geplant | T06 |
