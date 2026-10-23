@@ -1,0 +1,60 @@
+site_name: OffGrid – Frontend-Dokumentation
+site_description: Offline-Chat über LoRa – Ionic/Angular/Capacitor-App
+docs_dir: doku
+site_dir: site
+theme:
+  name: material
+  language: de
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  palette:
+    scheme: slate
+    primary: custom
+    accent: custom
+  font: false
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+extra_css:
+  - stylesheets/extra.css
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+nav:
+  - Start: index.md
+  - Erste Schritte: erste-schritte.md
+  - Architektur:
+      - Überblick: architektur/ueberblick.md
+      - Datenmodell: architektur/datenmodell.md
+      - Services: architektur/services.md
+  - Funktionen:
+      - Antenne: funktionen/antenne.md
+      - Nachrichten: funktionen/nachrichten.md
+      - Kontakte & Handshake: funktionen/kontakte-handshake.md
+      - Standort: funktionen/standort.md
+      - Backup: funktionen/backup.md
+  - Oberfläche:
+      - Design-System: oberflaeche/design-system.md
+      - Screens: oberflaeche/screens.md
+  - Protokoll:
+      - Serial (App ↔ Antenne): protokoll/serial.md
+      - Funk-Frames: protokoll/funk-frames.md
+  - Qualität:
+      - Tests: qualitaet/tests.md
+      - CI: qualitaet/ci.md
+  - Änderungen: aenderungen.md
