@@ -78,7 +78,10 @@ data class MessageEntity(
     val senderContactId: Long? = null,
     val senderName: String? = null,
     val rssi: Int? = null,
-    /** Emoji the peer reacted with on this message, if any. */
+    /**
+     * Reaction shown under this message: on our own messages the peer's, on the peer's messages
+     * the one we sent. The column name predates the second case; renaming it would need a migration.
+     */
     val peerReaction: String? = null,
     val sentAt: Long,
     val readAt: Long? = null,
