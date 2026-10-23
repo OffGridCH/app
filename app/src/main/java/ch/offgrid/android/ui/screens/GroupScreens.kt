@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.em
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import ch.offgrid.android.data.GroupEntity
+import ch.offgrid.android.domain.Conversation
 import ch.offgrid.android.domain.KeyPattern
 import ch.offgrid.android.domain.MessageLimits
 import ch.offgrid.android.link.LinkClosedException
@@ -129,6 +130,7 @@ fun GroupChatScreen(nav: NavHostController, groupId: Long) {
     LaunchedEffect(messages.size) { app.messaging.markGroupRead(groupId) }
     // A deleted group, or a stale id after process death, leads back instead of an empty screen.
     LeaveWhenGone(group == Lookup.Gone, nav)
+    ConversationOnScreen(Conversation.Group(groupId))
     val g = group.found ?: run {
         Page {}
         return

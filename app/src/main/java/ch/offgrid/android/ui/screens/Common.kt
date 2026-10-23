@@ -10,14 +10,12 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ch.offgrid.android.domain.AntennaError
 import ch.offgrid.android.domain.Conversation
 import ch.offgrid.android.domain.KeyPattern
@@ -26,8 +24,6 @@ import ch.offgrid.android.domain.PairingError
 import ch.offgrid.android.ui.LocalApp
 import ch.offgrid.android.ui.theme.Og
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 
 /** Page frame: graphite background, safe-area padding, keyboard aware. */
 @Composable
@@ -92,15 +88,3 @@ fun ConversationOnScreen(conversation: Conversation) {
         onPauseOrDispose { if (notifier.visible == conversation) notifier.visible = null }
     }
 }
-
-/** A database row as a screen sees it: still loading, or loaded (null when the row is gone). */
-sealed interface Loaded<out T> {
-    data object Pending : Loaded<Nothing>
-
-    data class Done<T>(val value: T) : Loaded<T>
-}
-
-/** Collects a single-row flow so a screen can tell "not loaded yet" from "deleted". */
-@Composable
-fun <T> Flow<T>.collectLoaded(): State<Loaded<T>> =
-    remember(this) { map<T, Loaded<T>> { Loaded.Done(it) } }.collectAsStateWithLifecycle(Loaded.Pending)

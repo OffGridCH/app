@@ -81,7 +81,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ChatScreen(nav: NavHostController, contactId: Long) {
     val app = LocalApp.current
-    val contact by remember(contactId) { app.messaging.contact(contactId) }.collectLoaded()
+    val contact by remember(contactId) { app.messaging.contact(contactId).asLookup() }.collectAsStateWithLifecycle(Lookup.Loading)
     val messages by app.messaging.messages(contactId).collectAsStateWithLifecycle(initialValue = emptyList())
     val antenna by app.antenna.state.collectAsStateWithLifecycle()
     val myFix by app.location.fix.collectAsStateWithLifecycle()
@@ -92,8 +92,8 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
     LaunchedEffect(messages.size) { app.messaging.markRead(contactId) }
     ConversationOnScreen(Conversation.Direct(contactId))
     // Opened from a notification for a contact that was deleted since: nothing to show.
-    LaunchedEffect(contact) { if (contact == Loaded.Done(null)) nav.back() }
-    val c = (contact as? Loaded.Done)?.value ?: return
+    LeaveWhenGone(contact == Lookup.Gone, nav)
+    val c = contact.found ?: return
     val ready = antenna.ready
 
     Box(Modifier.fillMaxSize()) {
