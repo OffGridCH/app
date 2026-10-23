@@ -91,6 +91,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ch.offgrid.android.ui.theme.Grotesk
@@ -640,7 +641,7 @@ fun OgSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, label: Str
             .padding(3.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        Box(Modifier.offset(x = knobX).size(26.dp).clip(CircleShape).background(knob))
+        Box(Modifier.offset { IntOffset(knobX.roundToPx(), 0) }.size(26.dp).clip(CircleShape).background(knob))
     }
 }
 

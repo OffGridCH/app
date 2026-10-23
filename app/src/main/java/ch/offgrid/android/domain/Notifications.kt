@@ -80,9 +80,10 @@ class MessageNotifier(private val context: Context, private val db: OffGridDatab
         )
     }
 
-    fun canPost(): Boolean = manager.areNotificationsEnabled() &&
-        (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+    fun canPost(): Boolean = manager.areNotificationsEnabled() && hasPermission()
+
+    private fun hasPermission() = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     suspend fun onIncoming(m: MessageEntity) {
         val conversation = Conversation.of(m) ?: return
@@ -113,7 +114,13 @@ class MessageNotifier(private val context: Context, private val db: OffGridDatab
             .setAutoCancel(true)
             .setContentIntent(open)
             .build()
-        runCatching { manager.notify(conversation.notificationId, notification) }
+        // Checked again right here: the user can revoke the permission while the message is on its way.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        manager.notify(conversation.notificationId, notification)
     }
 
     fun cancel(conversation: Conversation) = manager.cancel(conversation.notificationId)
