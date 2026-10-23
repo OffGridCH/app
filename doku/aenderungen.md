@@ -1,5 +1,36 @@
 # Änderungen
 
+## T03 – Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level
+*2026-10-23*
+
+- Alle Zeiten der App werden in der Zeitzone `Europe/Zurich` formatiert: Uhrzeit, „Gestern“, Wochentag, Datum für die
+  Tagestrenner im Chat und „zuletzt …“ in der Kontaktliste.
+- Die Frequenz der Antenne erscheint als MHz-Text (z. B. „868 MHz“).
+- `CryptoService` erzeugt Schlüssel, berechnet Tags (SHA-256) und verschlüsselt mit AES-GCM 128 – nur WebCrypto, ohne
+  zusätzliche Pakete.
+- `KeyPatternService` erzeugt aus den Schlüsseln eines Kontakts ein spiegelsymmetrisches 5×5-Muster, damit zwei
+  Personen auf beiden Handys prüfen können, ob der Schlüsselaustausch geklappt hat.
+- Die Signalstärke wird aus Feldstärke und letztem Kontakt zu fünf Leveln; ein Signal älter als 15 Minuten zählt als
+  „Ausser Reichweite“.
+- Die Länge von Texten und Anzeigenamen wird in UTF-8-Bytes ohne JSON-Escapes gerechnet. Der Gerätevertrag
+  „OffGrid Link“ setzt maximal 83 Bytes für Textinhalte (§7.5) und 24 Bytes für Anzeigenamen (§7.2/§7.3); der
+  Frame-Overhead beträgt 33 Bytes.
+
+## T01 – UI-Basis 1: Grundkomponenten
+*2026-10-23*
+
+- 13 `og-`-Grundkomponenten liegen unter `src/app/ui/`: Icon, Button, Link-Button, Icon-Button, Topbar,
+  Abschnittstitel, Karte, Info-Zeile, Statuspunkt, Badge, Eingabefeld, Schalter und Segmentumschalter.
+- Alle Komponenten sind Standalone, nutzen OnPush und kommen ohne Services aus; `src/app/ui/index.ts` exportiert
+  sie alle.
+- Farben, Radien und Grössen kommen ausschliesslich aus den Design-Tokens, die Schriften aus den
+  Typografie-Mixins in `src/theme/typography.scss`.
+- `og-button` rendert ein `<button>`, `og-link-button` und `og-icon-button` mit Route ein `<a>`.
+- `og-switch` trägt die Rolle `switch`, `og-segmented` die Rolle `tablist` – beide mit den passenden
+  ARIA-Attributen.
+- Die Zustandskomponenten (Avatar, Signalbalken, Banner, Schrittliste, Nachrichtenblase, Composer, QR)
+  folgen mit T02.
+
 ## T21 – CI-Checks (lokal + GitHub Actions) und Doku-Grundgerüst (MkDocs → GitHub Pages)
 *2026-10-23*
 
