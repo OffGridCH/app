@@ -126,7 +126,8 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
             ChatComposer(
                 draft = draft,
                 onDraft = { draft = it },
-                target = c.displayName,
+                // Chat.png shows the first name ("Nachricht an Anna"); the screens skill says display_name.
+                target = c.firstName ?: c.displayName,
                 ready = ready,
                 maxBytes = antenna.maxTextBytes,
                 onSend = {
