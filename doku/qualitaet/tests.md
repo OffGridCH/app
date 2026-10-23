@@ -14,9 +14,8 @@ Jede Testdatei (`*.spec.ts`) liegt neben dem Code, den sie prüft.
 | `src/app/core/crypto/base64.spec.ts` | `toBase64` und `fromBase64`: Hin- und Rückweg ohne Verlust, leere Eingabe. |
 | `src/app/core/crypto/crypto.service.spec.ts` | `CryptoService`: Schlüssellänge und -format, `randomHex`, Verschlüsseln und Entschlüsseln, neuer IV je Verschlüsselung, Fehler bei falschem Schlüssel und bei falschem AAD, der Tag aus SHA-256 und sein Cache. |
 | `src/app/core/crypto/key-pattern.service.spec.ts` | `KeyPatternService`: 25 Zellen, Spiegelsymmetrie, gleiches Muster bei vertauschten Schlüsseln, anderes Muster bei anderen Schlüsseln, Auffüllen bei fast leerem Muster, gleiche `install_id` → gleiches Muster. |
-| `src/app/core/messaging/limits.spec.ts` | `contentBytes` (Umlaute und JSON-Escapes), `maxContentBytes` (222, 255 und kleinere Frames) und `isValidDisplayName` (Länge, Bytes, Trimmen). |
+| `src/app/core/messaging/limits.spec.ts` | `contentBytes` (UTF-8-Bytes, Umlaute, ohne JSON-Escapes), `maxContentBytes` (83-Byte-Gerätelimit und 33-Byte-Frame-Overhead) und `isValidDisplayName` (1–24 UTF-8-Bytes, Trimmen). |
 | `src/app/core/messaging/signal.spec.ts` | `signalLevel` (Schwellen, fehlende Kontaktdaten, 15-Minuten-Frist) und `signalLabel` (die fünf Texte). |
-| `src/testing/verify-t03.spec.ts` | Zusatzprüfungen quer über mehrere Module: Spiegelsymmetrie über 100 Eingaben, Rahmenbedingungen für die Frame-Länge, monoton steigender Signal-Level. |
 
 Die Spec-Dateien prüfen die reinen Funktionen und Services ohne Oberfläche. Tests für die Seiten kommen mit den
 Tickets, die die Screens bauen (T09 bis T13).

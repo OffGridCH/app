@@ -33,18 +33,21 @@ describe('KeyPatternService', () => {
     expect(pattern).toHaveLength(25);
   });
 
-  it('ist spiegelsymmetrisch: Spalte 0 = Spalte 4 und Spalte 1 = Spalte 3', async () => {
-    const pattern = await service.forInstall('test');
+  it('spiegelt jede Zeile für 100 verschiedene Eingaben', async () => {
+    for (let i = 0; i < 100; i++) {
+      const pattern = await service.forInstall(`install-${i}`);
 
-    for (let row = 0; row < 5; row++) {
-      expect(pattern[row * 5 + 0]).toBe(pattern[row * 5 + 4]);
-      expect(pattern[row * 5 + 1]).toBe(pattern[row * 5 + 3]);
+      expect(pattern).toHaveLength(25);
+      for (let row = 0; row < 5; row++) {
+        expect(pattern[row * 5 + 0]).toBe(pattern[row * 5 + 4]);
+        expect(pattern[row * 5 + 1]).toBe(pattern[row * 5 + 3]);
+      }
     }
   });
 
-  it('liefert für dieselben Schlüssel in anderer Reihenfolge dasselbe Muster', async () => {
-    const first = await service.forContact(contact('a'.repeat(32), 'b'.repeat(32)));
-    const second = await service.forContact(contact('b'.repeat(32), 'a'.repeat(32)));
+  it('liefert für dasselbe Schlüsselpaar unabhängig von der Reihenfolge dasselbe Muster', async () => {
+    const first = await service.forContact(contact('1'.repeat(32), '2'.repeat(32)));
+    const second = await service.forContact(contact('2'.repeat(32), '1'.repeat(32)));
 
     expect(first).toEqual(second);
   });

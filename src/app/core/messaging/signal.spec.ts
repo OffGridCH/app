@@ -49,6 +49,16 @@ describe('signalLevel', () => {
 
     expect(signalLevel(-60, stale, now)).toBe(0);
   });
+
+  it('steigt mit stärkerem Signal nie ab', () => {
+    let previous = signalLevel(-140, seenAt, now);
+
+    for (let rssi = -139; rssi <= -40; rssi++) {
+      const level = signalLevel(rssi, seenAt, now);
+      expect(level).toBeGreaterThanOrEqual(previous);
+      previous = level;
+    }
+  });
 });
 
 describe('signalLabel', () => {

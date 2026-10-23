@@ -46,13 +46,19 @@ Zuordnung des Tages deshalb nicht.
 
 ## Länge der Texte
 
-`src/app/core/messaging/limits.ts` rechnet die Länge in Bytes, weil eine Funk-Nachricht eine feste Grösse hat:
+`src/app/core/messaging/limits.ts` rechnet die Länge in UTF-8-Bytes, weil eine Funk-Nachricht eine feste Grösse hat:
 
 | Funktion | Bedeutung |
 |---|---|
-| `contentBytes(text)` | Bytes, die der Text im Klartext der Nachricht braucht: `TextEncoder` über `JSON.stringify(text)`, minus 2 für die Anführungszeichen. JSON-Escapes sind mitgezählt. |
-| `maxContentBytes(max)` | `Math.min(180, max - 69)`. Die 69 Bytes sind 33 Bytes Frame-Overhead plus 36 Bytes JSON-Hülle ohne Text. |
-| `isValidDisplayName(name)` | Anzeigename: getrimmt 1 bis 40 Zeichen und höchstens 60 Bytes. |
+| `contentBytes(text)` | UTF-8-Bytelänge des Textes: `new TextEncoder().encode(text).length`. JSON-Escapes werden nicht mitgezählt. |
+| `maxContentBytes(max)` | `Math.min(83, max - 33)`. Das Geräte-Textlimit beträgt 83 Bytes. Der Frame-Overhead von 33 Bytes besteht aus 1 Byte Version/Typ, 4 Byte Empfänger-Tag, 12 Byte IV und 16 Byte Auth-Tag. |
+| `isValidDisplayName(name)` | Anzeigename: getrimmt mindestens 1 und höchstens 24 UTF-8-Bytes. |
+
+!!! note
+
+    Die Grenzwerte stammen aus dem Gerätevertrag „OffGrid Link“ (§7.2/§7.3 für Anzeigenamen, §7.5 für
+    Textinhalte). Der lokale Skill `offgrid-antenna-protocol` §5 beschreibt noch die alte Fassung und wird
+    nachgezogen.
 
 !!! info "Geplant"
 

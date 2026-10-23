@@ -38,7 +38,7 @@ Die Ergebnisse werden pro Eingabe zwischengespeichert. Wie das Muster aussieht, 
 | `src/app/core/crypto/base64.ts` | `toBase64(bytes)`, `fromBase64(base64)` | Bytes als Base64-Text. `fromBase64` wirft bei ungültigem Base64. |
 | `src/app/core/format/time.ts` | `formatTime`, `formatListTime`, `formatLastSeen`, `formatDay` | Zeittexte in der Zeitzone `Europe/Zurich`. |
 | `src/app/core/format/radio.ts` | `formatMHz(freqHz)` | Frequenz in Hz als MHz-Text, z. B. `868100000` → „868“. |
-| `src/app/core/messaging/limits.ts` | `contentBytes`, `maxContentBytes`, `isValidDisplayName` | Länge von Texten und Anzeigenamen in Bytes. |
+| `src/app/core/messaging/limits.ts` | `contentBytes`, `maxContentBytes`, `isValidDisplayName` | UTF-8-Bytelänge von Texten und Anzeigenamen; Grenzwerte aus dem Gerätevertrag „OffGrid Link“. |
 | `src/app/core/messaging/signal.ts` | `signalLevel`, `signalLabel` | Signal-Level eines Kontakts und der Text dazu. |
 
 Die Formate und die Signalstärke sind in [Nachrichten](../funktionen/nachrichten.md) beschrieben.

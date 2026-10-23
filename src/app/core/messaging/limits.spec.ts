@@ -5,8 +5,8 @@ describe('contentBytes', () => {
     expect(contentBytes('ä')).toBe(2);
   });
 
-  it('zählt Anführungszeichen als 2 Bytes', () => {
-    expect(contentBytes('"')).toBe(2);
+  it('zählt Anführungszeichen als 1 Byte (keine JSON-Escapes)', () => {
+    expect(contentBytes('"')).toBe(1);
   });
 
   it('zählt leeren Text als 0 Bytes', () => {
@@ -17,24 +17,33 @@ describe('contentBytes', () => {
     expect(contentBytes('abc')).toBe(3);
   });
 
-  it('zählt JSON-Escapes mit (Zeilenumbruch und Anführungszeichen)', () => {
-    expect(contentBytes('a\nb')).toBe(4);
-    expect(contentBytes('a"b')).toBe(4);
+  it('zählt Zeilenumbruch als 1 Byte (ohne JSON-Escape)', () => {
+    expect(contentBytes('a\nb')).toBe(3);
+  });
+
+  it('zählt Anführungszeichen im Text ohne JSON-Escape als je 1 Byte', () => {
+    expect(contentBytes('a"b')).toBe(3);
   });
 });
 
 describe('maxContentBytes', () => {
-  it('rechnet bei 222 Frame-Bytes', () => {
-    expect(maxContentBytes(222)).toBe(153);
+  it('deckelt beim Geräte-Textlimit von 83 Bytes', () => {
+    expect(maxContentBytes(222)).toBe(83);
+    expect(maxContentBytes(255)).toBe(83);
+    expect(maxContentBytes(249)).toBe(83);
   });
 
-  it('deckelt bei 180 Bytes', () => {
-    expect(maxContentBytes(255)).toBe(180);
+  it('rechnet bei kleineren Frames mit 33 Bytes Frame-Overhead', () => {
+    expect(maxContentBytes(100)).toBe(67);
   });
 
-  it('rechnet bei kleineren Frames mit 69 Bytes Overhead', () => {
-    expect(maxContentBytes(100)).toBe(31);
-    expect(maxContentBytes(249)).toBe(180);
+  it('respektiert das Gerätelimit und den Frame-Overhead für jede Frame-Grösse', () => {
+    for (const max of [100, 150, 222, 249, 255]) {
+      const limit = maxContentBytes(max);
+
+      expect(limit).toBe(Math.min(83, max - 33));
+      expect(limit + 33).toBeLessThanOrEqual(max);
+    }
   });
 });
 
@@ -44,25 +53,22 @@ describe('isValidDisplayName', () => {
     expect(isValidDisplayName('   ')).toBe(false);
   });
 
-  it('lehnt mehr als 40 Zeichen ab', () => {
-    expect(isValidDisplayName('a'.repeat(41))).toBe(false);
+  it('lehnt Namen mit mehr als 24 Bytes ab', () => {
+    expect(isValidDisplayName('a'.repeat(25))).toBe(false);
   });
 
-  it('nimmt 40 Zeichen an', () => {
-    expect(isValidDisplayName('a'.repeat(40))).toBe(true);
+  it('nimmt Namen mit genau 24 Bytes an', () => {
+    expect(isValidDisplayName('a'.repeat(24))).toBe(true);
   });
 
-  it('lehnt Namen mit mehr als 60 Bytes ab', () => {
-    expect(isValidDisplayName('ä'.repeat(31))).toBe(false);
-  });
-
-  it('nimmt Namen mit genau 60 Bytes an', () => {
-    expect(isValidDisplayName('ä'.repeat(30))).toBe(true);
+  it('zählt Umlaute als 2 Bytes', () => {
+    expect(isValidDisplayName('ä'.repeat(12))).toBe(true);
+    expect(isValidDisplayName('ä'.repeat(13))).toBe(false);
   });
 
   it('zählt nach dem Trimmen', () => {
     expect(isValidDisplayName('  Anna  ')).toBe(true);
-    expect(isValidDisplayName(`  ${'a'.repeat(41)}  `)).toBe(false);
+    expect(isValidDisplayName(`  ${'a'.repeat(25)}  `)).toBe(false);
   });
 
   it('nimmt normale Namen an', () => {

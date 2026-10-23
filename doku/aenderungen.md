@@ -12,7 +12,9 @@
   Personen auf beiden Handys prüfen können, ob der Schlüsselaustausch geklappt hat.
 - Die Signalstärke wird aus Feldstärke und letztem Kontakt zu fünf Leveln; ein Signal älter als 15 Minuten zählt als
   „Ausser Reichweite“.
-- Die Länge von Texten und Anzeigenamen wird in Bytes gerechnet, damit eine Nachricht in einen Frame passt.
+- Die Länge von Texten und Anzeigenamen wird in UTF-8-Bytes ohne JSON-Escapes gerechnet. Der Gerätevertrag
+  „OffGrid Link“ setzt maximal 83 Bytes für Textinhalte (§7.5) und 24 Bytes für Anzeigenamen (§7.2/§7.3); der
+  Frame-Overhead beträgt 33 Bytes.
 
 ## T21 – CI-Checks (lokal + GitHub Actions) und Doku-Grundgerüst (MkDocs → GitHub Pages)
 *2026-10-23*
