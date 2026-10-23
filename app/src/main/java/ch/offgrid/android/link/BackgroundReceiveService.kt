@@ -23,9 +23,7 @@ class BackgroundReceiveService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val manager = getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.bg_channel_name), NotificationManager.IMPORTANCE_LOW))
-        }
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.bg_channel_name), NotificationManager.IMPORTANCE_LOW))
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(getString(R.string.app_name))

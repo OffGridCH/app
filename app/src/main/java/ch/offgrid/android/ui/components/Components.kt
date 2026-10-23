@@ -256,7 +256,7 @@ fun OgAvatar(pattern: BooleanArray?, size: Dp, variant: AvatarVariant = AvatarVa
 
 /** `og-signal-bars`: four bars, `level` of them in accent. md = 20x14, sm = 15x11. */
 @Composable
-fun SignalBars(level: Int, small: Boolean = false, label: String? = null, modifier: Modifier = Modifier) {
+fun SignalBars(level: Int, modifier: Modifier = Modifier, small: Boolean = false, label: String? = null) {
     val w = if (small) 15.dp else 20.dp
     val h = if (small) 11.dp else 14.dp
     Canvas(

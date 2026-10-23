@@ -3,5 +3,4 @@
     <string name="app_name">OffGrid</string>
     <string name="bg_channel_name">Empfang im Hintergrund</string>
     <string name="bg_notification_text">OffGrid empfängt Nachrichten über die Antenne.</string>
-    <string name="msg_channel_name">Nachrichten</string>
 </resources>
