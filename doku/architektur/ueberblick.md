@@ -1,9 +1,10 @@
 # Überblick
 
-Stand: **nach T03** (Zeitformate, Krypto-Basis, Schlüssel-Muster, Signal-Level). Gebaut sind das App-Gerüst, die
-Kern-Grundlagen (`log.ts`, `platform.ts`, `models/`) und das Theme sowie die Krypto- und Format-Module unter `core/`.
-Die Seiten unter `features/` sind leere Stubs; ihr Inhalt kommt mit dem jeweiligen Ticket. Alles, was noch fehlt, trägt
-im Diagramm und im Ordnerbaum den Vermerk „geplant: Txx".
+Stand: **nach T01, T03** (Projektgerüst, Theme, og-Grundkomponenten, Zeitformate, Krypto-Basis, Schlüssel-Muster und
+Signal-Level). Gebaut sind das App-Gerüst, die Kern-Grundlagen (`log.ts`, `platform.ts`, `models/`), das Theme, die
+13 Grundkomponenten in `src/app/ui/` sowie die Krypto- und Format-Module unter `core/`. Die Seiten unter `features/`
+sind leere Stubs; ihr Inhalt kommt mit dem jeweiligen Ticket. Alles, was noch fehlt, trägt im Diagramm und im
+Ordnerbaum den Vermerk „geplant: Txx".
 
 ## Schichten
 
@@ -16,7 +17,7 @@ flowchart TD
     end
     subgraph Ui["Oberfläche"]
         Pages["features/<br>eine Seite pro Ordner<br>Stubs (T00)"]
-        Components["ui/<br>og- Komponenten<br>geplant: T01, T02"]
+        Components["ui/<br>og- Komponenten<br>Grundkomponenten (T01)<br>geplant: T02"]
     end
     subgraph Core["Kern – src/app/core"]
         Basis["log.ts, platform.ts, models/"]
@@ -83,7 +84,7 @@ src/
       name/                   geplant: T09
       standort/               geplant: T18
       verbinden/              geplant: T09
-    ui/                       geplant: T01, T02
+    ui/                       og-Grundkomponenten (T01), geplant: T02
   environments/               environment.ts, environment.prod.ts
   theme/                      tokens.scss, typography.scss, global.scss
   test-setup.ts               WebCrypto für Vitest und jsdom
@@ -96,7 +97,7 @@ src/
 | Schicht | Ort | Aufgabe | Stand |
 |---|---|---|---|
 | App | `src/app/app.*.ts` | Wurzel-Komponente, Provider, Routen | fertig (T00) |
-| Oberfläche | `src/app/features/`, `src/app/ui/` | Screens und wiederverwendbare `og-`-Komponenten | Stubs (T00), gefüllt ab T01, T02, T09 |
+| Oberfläche | `src/app/features/`, `src/app/ui/` | Screens und wiederverwendbare `og-`-Komponenten | Grundkomponenten fertig (T01), Zustandskomponenten ab T02, Seiten ab T09 |
 | Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Krypto, Messaging | Grundgerüst (T00), Krypto und Formate gebaut (T03) |
 | Typen | `src/app/core/models/` | Kontakt, Nachricht, Handshake, Antenne, Settings, Fehlercodes | fertig (T00) |
 | Theme | `src/theme/` | Design-Tokens, Schriften, globales Styling | fertig (T00) |
