@@ -65,7 +65,7 @@ formatting and analytics.
 
 | Package | Content |
 |---|---|
-| `link` | `Link` interface, `LineFramer`, `LinkCodec`, `LinkClient` (ids, max 4 in flight, timeouts, events) |
+| `link` | `Link` interface, `LineFramer`, `LinkCodec`, `LinkClient` (ids, one request in flight, timeouts, events) |
 | `link/usb` | `UsbSerialLink` on usb-serial-for-android (CP210x, CH34x, ESP32-S3 CDC), permission request |
 | `link/sim` | `SimulatedHeltec`, an in-process antenna that speaks the same JSON Lines, with virtual peers |
 | `crypto` | X25519/HKDF/AES-GCM token wrap, fingerprint, Keystore-backed unlock token |
