@@ -135,7 +135,8 @@ fun AddContactScreen(nav: NavHostController, scanTab: Boolean) {
     Page {
         OgTopBar("Kontakt hinzufügen", onBack = requestClose, backLabel = "Kopplung abbrechen")
         WizardProgress(
-            ui.stepNumber, WIZARD_STEPS, title = stepTitle(step),
+            // Expired is not "finished": no bar is filled.
+            if (step == WizardStep.Expired) 0 else ui.stepNumber, WIZARD_STEPS, title = stepTitle(step),
             label = if (step == WizardStep.Expired) "Zeit abgelaufen" else null,
         )
         BoxWithConstraints(Modifier.weight(1f)) {

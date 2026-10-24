@@ -46,12 +46,12 @@ import ch.offgrid.android.ui.theme.OgType
 
 /**
  * Progress of a guided flow: [total] bars, "SCHRITT n VON m" and the step's [title] as a heading. [step] null marks
- * the flow as finished (all bars filled, "FERTIG"). The whole block is one live region, so TalkBack reads the new
- * step when it changes.
+ * the flow as finished (all bars filled, "FERTIG"); 0 fills none. [label] replaces the position text. The whole
+ * block is one live region, so TalkBack reads the new step when it changes.
  */
 @Composable
 fun WizardProgress(step: Int?, total: Int, title: String, modifier: Modifier = Modifier, label: String? = null) {
-    val position = if (step == null) "Fertig" else "Schritt $step von $total"
+    val position = label ?: if (step == null) "Fertig" else "Schritt $step von $total"
     Column(
         modifier.fillMaxWidth().padding(start = Og.gutterText, top = 4.dp, end = Og.gutterText)
             .clearAndSetSemantics {
@@ -68,7 +68,7 @@ fun WizardProgress(step: Int?, total: Int, title: String, modifier: Modifier = M
                 Box(Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(2.dp)).background(color))
             }
         }
-        Text((label ?: position).uppercase(), style = OgType.section.copy(color = Og.accent))
+        Text(position.uppercase(), style = OgType.section.copy(color = Og.accent))
         Text(title, style = OgType.hero.copy(lineHeight = 1.2.em))
     }
 }
