@@ -62,6 +62,7 @@ import ch.offgrid.android.ui.components.OgButton
 import ch.offgrid.android.ui.components.OgCard
 import ch.offgrid.android.ui.components.OgIcon
 import ch.offgrid.android.ui.components.OgIconView
+import ch.offgrid.android.ui.components.OgNote
 import ch.offgrid.android.ui.components.OgSwitch
 import ch.offgrid.android.ui.components.OgTextField
 import ch.offgrid.android.ui.components.OgTopBar
@@ -92,6 +93,8 @@ fun SettingsScreen(nav: NavHostController) {
     var name by rememberSaveable { mutableStateOf<String?>(null) }
     var nameError by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(settings[Settings.DISPLAY_NAME]) { if (name == null) name = settings[Settings.DISPLAY_NAME] }
     val pattern = remember(settings[Settings.OWN_PUBLIC_KEY], installId) {
         KeyPattern.fromSeed(settings[Settings.OWN_PUBLIC_KEY] ?: installId ?: "")
@@ -199,8 +202,10 @@ fun SettingsScreen(nav: NavHostController) {
             OgCard {
                 InfoRow("Kontakte", contacts.size.toString())
                 InfoRow("Nachrichten", messageCount.toString())
-                OgButton("Alle Daten löschen", { confirmDelete = true }, variant = ButtonVariant.DangerText)
+                OgButton(if (deleting) "Wird gelöscht …" else "Alle Daten löschen", { deleteError = null; confirmDelete = true },
+                    variant = ButtonVariant.DangerText, enabled = !deleting)
             }
+            deleteError?.let { OgNote(it) }
             Text(
                 "OffGrid ${BuildConfig.VERSION_NAME}",
                 style = OgType.meta,
@@ -217,17 +222,31 @@ fun SettingsScreen(nav: NavHostController) {
             shape = RoundedCornerShape(Og.rCard),
             text = {
                 Text(
-                    "Alle Kontakte und Nachrichten auf diesem Handy löschen? Das lässt sich nicht rückgängig machen.",
+                    if (antenna.ready) {
+                        "Alle Kontakte und Nachrichten löschen und die Antenne auf Werkseinstellungen zurücksetzen? " +
+                            "Danach müsst ihr euch neu koppeln. Das lässt sich nicht rückgängig machen."
+                    } else {
+                        "Alle Kontakte und Nachrichten auf diesem Handy löschen? Die Antenne ist nicht verbunden und " +
+                            "behält ihre Kontakte; verbinde sie zuerst, um sie mitzulöschen. Das lässt sich nicht rückgängig machen."
+                    },
                     style = OgType.body,
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
-                    scope.launch {
-                        app.messaging.deleteAll()
-                        app.resetAnalyticsId()
-                        nav.navigate(Routes.CONTACTS) { popUpTo(Routes.CONTACTS) { inclusive = true } }
+                    deleting = true
+                    // App scope: the reset must not be cut off when this screen goes away.
+                    app.scope.launch {
+                        val result = app.messaging.deleteAll()
+                        scope.launch {
+                            deleting = false
+                            deleteError = result.text()
+                            if (deleteError == null) {
+                                app.resetAnalyticsId()
+                                nav.navigate(Routes.CONTACTS) { popUpTo(Routes.CONTACTS) { inclusive = true } }
+                            }
+                        }
                     }
                 }) { Text("Löschen", style = TextStyle(fontFamily = Grotesk, fontWeight = FontWeight(700), color = Og.danger)) }
             },

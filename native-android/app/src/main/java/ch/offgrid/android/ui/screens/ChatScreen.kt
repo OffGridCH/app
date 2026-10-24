@@ -53,6 +53,7 @@ import ch.offgrid.android.domain.Formats
 import ch.offgrid.android.domain.Geo
 import ch.offgrid.android.domain.GeoFix
 import ch.offgrid.android.domain.MessageLimits
+import ch.offgrid.android.domain.Messaging
 import ch.offgrid.android.domain.REACTIONS
 import ch.offgrid.android.ui.LocalApp
 import ch.offgrid.android.ui.Routes
@@ -110,6 +111,13 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
                 },
             )
             if (!ready) DisconnectedBanner { nav.navigate(Routes.CONNECT) }
+            if (c.state == Messaging.UNPAIRED) {
+                OgBanner(
+                    "Neu koppeln",
+                    "Die Antenne kennt ${c.firstName ?: c.displayName} nicht mehr. Scannt eure Codes erneut, dann könnt ihr wieder schreiben.",
+                    "Koppeln",
+                ) { nav.navigate(Routes.add()) }
+            }
             MessageList(messages, now, Modifier.weight(1f), empty = "Noch keine Nachrichten. Schreib die erste.") { row ->
                 val m = row.message
                 if (m.kind == "geo") {

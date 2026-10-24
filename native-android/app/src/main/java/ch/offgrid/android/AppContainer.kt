@@ -69,7 +69,7 @@ class AppContainer(private val context: Context) {
             ?: UUID.randomUUID().toString().also { analyticsPrefs.edit().putString(ANALYTICS_ID, it).apply() }
     })
     val notifier = MessageNotifier(context, db)
-    val messaging = Messaging(db, antenna, scope, onIncoming = { message ->
+    val messaging = Messaging(db, antenna, scope, settings, onIncoming = { message ->
         vibrate()
         scope.launch { notifier.onIncoming(message) }
     }, track = analytics::track)

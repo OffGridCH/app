@@ -125,7 +125,8 @@ fun ConnectScreen(onNext: (onboardingDone: Boolean) -> Unit) {
                     ),
                 ),
             )
-            state.error?.let { OgNote(it.text()) }
+            state.lockReason?.takeIf { !state.ready }?.let { OgNote(lockReasonText(it)) }
+            state.error?.let { OgNote(it.text(state.errorCode)) }
             Spacer(Modifier.height(16.dp))
         }
         Footer(top = 0.dp) {

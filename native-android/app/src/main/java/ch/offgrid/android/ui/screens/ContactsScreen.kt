@@ -43,6 +43,7 @@ import ch.offgrid.android.data.MessageEntity
 import ch.offgrid.android.domain.ConversationItem
 import ch.offgrid.android.domain.Formats
 import ch.offgrid.android.domain.KeyPattern
+import ch.offgrid.android.domain.Messaging
 import ch.offgrid.android.domain.Settings
 import ch.offgrid.android.link.LinkKind
 import ch.offgrid.android.ui.LocalApp
@@ -51,6 +52,7 @@ import ch.offgrid.android.ui.components.AvatarVariant
 import ch.offgrid.android.ui.components.Footer
 import ch.offgrid.android.ui.components.OgAvatar
 import ch.offgrid.android.ui.components.OgBadge
+import ch.offgrid.android.ui.components.OgBanner
 import ch.offgrid.android.ui.components.OgButton
 import ch.offgrid.android.ui.components.OgIcon
 import ch.offgrid.android.ui.components.OgIconButton
@@ -58,6 +60,7 @@ import ch.offgrid.android.ui.components.SignalBars
 import ch.offgrid.android.ui.components.StatusDot
 import ch.offgrid.android.ui.theme.Og
 import ch.offgrid.android.ui.theme.OgType
+import kotlinx.coroutines.launch
 
 /** Screen 3 "Kontakte" with the empty state "Noch keine Kontakte". */
 @OptIn(ExperimentalFoundationApi::class)
@@ -106,6 +109,15 @@ fun ContactsScreen(nav: NavHostController) {
                 }
             }
             AntennaStatusLine(antenna.ready, antenna.kind, antenna.freqMhz) { nav.navigate(Routes.CONNECT) }
+            settings[Settings.REPAIR_NOTICE]?.toIntOrNull()?.takeIf { it > 0 }?.let { n ->
+                val who = if (n == 1) "einen Kontakt" else "$n Kontakte"
+                OgBanner(
+                    "Neu koppeln",
+                    "Die Antenne kennt $who nicht mehr, weil sie zurückgesetzt oder neu geflasht wurde. " +
+                        "Scannt eure Codes erneut, dann könnt ihr wieder schreiben.",
+                    "OK",
+                ) { app.scope.launch { app.settings.remove(Settings.REPAIR_NOTICE) } }
+            }
             HorizontalDivider(Modifier.padding(start = 20.dp, top = 6.dp, end = 20.dp, bottom = if (empty) 0.dp else 8.dp), thickness = 1.dp, color = Og.line)
 
             if (empty) {
@@ -164,6 +176,8 @@ fun AntennaStatusLine(ready: Boolean, kind: LinkKind, freqMhz: Double?, onClick:
 private fun ConversationRow(item: ConversationItem, now: Long, onOpen: () -> Unit) {
     val contact = item.contact
     val pending = contact?.state == "pending"
+    // The antenna lost this contact's keys; the row keeps the history but needs a new pairing.
+    val unpaired = contact?.state == Messaging.UNPAIRED
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(Og.rBtn))
             .clickable(role = Role.Button, onClick = onOpen)
@@ -173,7 +187,7 @@ private fun ConversationRow(item: ConversationItem, now: Long, onOpen: () -> Uni
     ) {
         when {
             item.group != null -> OgAvatar(groupPattern(item.group), 48.dp, AvatarVariant.Square)
-            pending -> OgAvatar(null, 48.dp, AvatarVariant.Pending)
+            pending || unpaired -> OgAvatar(null, 48.dp, AvatarVariant.Pending)
             else -> OgAvatar(patternFor(contact!!.fingerprint), 48.dp)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -181,13 +195,15 @@ private fun ConversationRow(item: ConversationItem, now: Long, onOpen: () -> Uni
                 Text(item.group?.name ?: contact!!.displayName, style = OgType.bodyStrong, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (contact != null) {
-                    val level = if (pending) 0 else Formats.signalLevel(contact.lastRssi, contact.lastSeenAt, now)
-                    SignalBars(level, label = if (pending) null else Formats.signalLabel(level))
+                    val level = if (pending || unpaired) 0 else Formats.signalLevel(contact.lastRssi, contact.lastSeenAt, now)
+                    SignalBars(level, label = if (pending || unpaired) null else Formats.signalLabel(level))
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (pending) {
                     Text("Schlüssel ausstehend", style = OgType.preview.copy(color = Og.accent), modifier = Modifier.weight(1f))
+                } else if (unpaired) {
+                    Text("Neu koppeln", style = OgType.preview.copy(color = Og.danger), modifier = Modifier.weight(1f))
                 } else {
                     Text(
                         preview(item),

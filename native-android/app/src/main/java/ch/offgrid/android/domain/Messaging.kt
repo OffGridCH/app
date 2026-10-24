@@ -53,6 +53,7 @@ class Messaging(
     private val db: OffGridDatabase,
     private val antenna: AntennaManager,
     private val scope: CoroutineScope,
+    private val settings: Settings,
     private val onIncoming: (MessageEntity) -> Unit = {},
     private val track: (AnalyticsEvent) -> Unit = {},
     private val now: () -> Long = System::currentTimeMillis,
@@ -89,9 +90,16 @@ class Messaging(
                 unread = unread.firstOrNull { it.groupId == g.id }?.n ?: 0,
             )
         }
-        // Active conversations by last activity, pending contacts ("Schlüssel ausstehend") at the end.
+        // Active conversations by last activity, then contacts to pair again ("Neu koppeln"), then pending
+        // contacts ("Schlüssel ausstehend").
         (contactItems + groupItems).sortedWith(
-            compareBy<ConversationItem> { it.contact?.state == "pending" }.thenByDescending { it.activity },
+            compareBy<ConversationItem> {
+                when (it.contact?.state) {
+                    UNPAIRED -> 1
+                    "pending" -> 2
+                    else -> 0
+                }
+            }.thenByDescending { it.activity },
         )
     }
 
@@ -188,7 +196,8 @@ class Messaging(
             val g = db.groups().all().firstOrNull { it.id == m.groupId } ?: return null
             return buildJsonObject { put("group_id", g.deviceGroupId); put("text", m.text) }
         }
-        val c = m.contactId?.let { db.contacts().byId(it) } ?: return null
+        // A contact the antenna no longer holds has no slot to send to until it is paired again.
+        val c = m.contactId?.let { db.contacts().byId(it) }?.takeIf { it.deviceContactId != NO_SLOT } ?: return null
         return when (m.kind) {
             "geo" -> buildJsonObject {
                 put("to", c.deviceContactId); put("type", "geo"); put("lat", m.lat); put("lon", m.lon)
@@ -240,16 +249,19 @@ class Messaging(
     }
 
     /**
-     * "Alle Daten löschen": removes the contacts from the device too, otherwise the next
-     * `contact.list` sync would bring them back. Settings and the device identity stay.
+     * "Alle Daten löschen". With the antenna connected it is erased too, with the authenticated factory
+     * reset (link spec 6.11): contacts, keys and identity on the antenna go, and the app sets it up again
+     * for this phone. The local data is only deleted when the antenna confirmed, so a refused reset does
+     * not leave contacts on the antenna that the app no longer shows. Without an antenna only this phone
+     * is cleared. Settings stay.
      */
-    suspend fun deleteAll() {
-        db.contacts().all().filter { it.deviceContactId != NO_SLOT }.forEach { c ->
-            runCatching {
-                antenna.call("contact.delete", buildJsonObject { put("contact_id", c.deviceContactId); put("confirm", true) })
-            }
+    suspend fun deleteAll(): ResetResult {
+        val result = if (antenna.state.value.ready) antenna.factoryReset() else ResetResult.NOT_CONNECTED
+        if (result == ResetResult.DONE || result == ResetResult.NOT_CONNECTED) {
+            db.maintenance().clearAll()
+            settings.remove(Settings.REPAIR_NOTICE)
         }
-        db.maintenance().clearAll()
+        return result
     }
 
     /** Proposed `group.create`; firmware without it answers `E_UNKNOWN_CMD`. */
@@ -310,9 +322,9 @@ class Messaging(
 
     /**
      * Mirrors the device's contact slots (state, RSSI) into the local table. Local contacts of this
-     * device that it no longer lists fall back to `pending`: the current firmware mock keeps contacts
-     * in RAM only, so after a reset they must be paired again (pairing the same key reuses the row
-     * and its history).
+     * device that it no longer lists become [UNPAIRED]: the antenna was reset or reflashed (new vault,
+     * new identity) or the contact was deleted there. They keep their history and must be paired again;
+     * pairing the same key reuses the row. The count goes to [Settings.REPAIR_NOTICE] for the contact list.
      */
     private suspend fun syncContacts(deviceId: String) {
         var offset = 0
@@ -329,9 +341,12 @@ class Messaging(
             offset += list.size
             if (list.isEmpty() || offset >= (page.int("total") ?: 0)) break
         }
-        db.contacts().all()
-            .filter { it.deviceId == deviceId && it.publicKey !in seen && it.deviceContactId != NO_SLOT }
-            .forEach { db.contacts().update(it.copy(state = "pending", deviceContactId = NO_SLOT)) }
+        val gone = db.contacts().all().filter { it.deviceId == deviceId && it.publicKey !in seen && it.deviceContactId != NO_SLOT }
+        gone.forEach { db.contacts().update(it.copy(state = UNPAIRED, deviceContactId = NO_SLOT)) }
+        if (gone.isNotEmpty()) {
+            val before = settings.get(Settings.REPAIR_NOTICE)?.toIntOrNull() ?: 0
+            settings.put(Settings.REPAIR_NOTICE, (before + gone.size).toString())
+        }
     }
 
     /** Stores a device contact object (link spec 7.4). Returns the local contact id. */
@@ -425,6 +440,9 @@ class Messaging(
     companion object {
         /** Slot of a contact the device no longer holds (device slots are 1 to 32). */
         const val NO_SLOT = 0
+
+        /** Local contact state: the antenna lost this contact's keys (reset, reflash); pair again. */
+        const val UNPAIRED = "unpaired"
 
         /** Empty "remove my reaction" packet after pairing; the peer's first valid packet activates the contact. */
         fun pingArgs(slot: Int) = buildJsonObject {

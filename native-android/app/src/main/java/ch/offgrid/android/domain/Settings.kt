@@ -33,6 +33,9 @@ class Settings(private val dao: SettingDao, scope: CoroutineScope) {
         const val LINK_KIND = "link_kind"
         const val OWN_PUBLIC_KEY = "own_public_key"
 
+        /** Number of contacts the antenna lost (reset or reflash) that the contact list still has to point out. */
+        const val REPAIR_NOTICE = "repair_notice"
+
         /** Unlock token restored from a backup, used once to take over the antenna, then rotated. */
         const val TRANSFER_TOKEN = "transfer_token"
         const val TRANSFER_DEVICE = "transfer_device"
