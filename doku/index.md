@@ -47,7 +47,8 @@ Hinweis steht, ist im Code dieses Branches vorhanden.
 | Natives USB-Serial-Plugin und natives Keystore-Plugin für Android | fertig | T06 |
 | Seiten Kontakt hinzufügen und Kontakt benennen | geplant | T11 |
 | Screens „Verbinden“ und „Name“ mit Onboarding-Guard | fertig | T09 |
-| Weitere Screens (Kontakte, Chat, Einstellungen) | geplant | T10, T12, T13 |
+| Screen „Kontakte“ mit Kontaktliste, Antennen-Statuszeile und Leerzustand | fertig | T10 |
+| Weitere Screens (Chat, Einstellungen) | geplant | T12, T13 |
 | Backup (Export und Import) | geplant | T14 |
 | Standort-Kern (GPS, Entfernung, Richtung) | fertig | T17 |
 | Standort-Oberfläche (Senden und Anzeigen) | geplant | T18 |

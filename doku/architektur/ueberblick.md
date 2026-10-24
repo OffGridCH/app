@@ -1,12 +1,14 @@
 # Überblick
 
-Stand: **nach T01, T03, T04, T06, T17, T23** (Projektgerüst, Theme, og-Grundkomponenten, Zeitformate, Datenbank, native Anbindung an die Antenne,
-Standort-Kern, Host-API zur Antenne). Gebaut sind
-das App-Gerüst, die Kern-Grundlagen (`log.ts`, `platform.ts`, `models/`), das Theme, die 13 Grundkomponenten in `src/app/ui/`, die
+Stand: **nach T01, T02, T03, T04, T06, T09, T10, T17, T23** (Projektgerüst, Theme, og-Komponenten, Zeitformate, Datenbank, native Anbindung an die Antenne,
+Standort-Kern, Host-API zur Antenne, Onboarding-Screens und Screen Kontakte). Gebaut sind
+das App-Gerüst, die Kern-Grundlagen (`log.ts`, `platform.ts`, `models/`), das Theme, die 22 Komponenten in `src/app/ui/`
+(13 Grundkomponenten aus T01, 9 Zustandskomponenten aus T02), die
 Daten-Schicht, der Serial-Client mit Antennen-Port und Mock-Gerät, der Entsperr-Schlüssel, die native USB-Serial-Anbindung für Android sowie
 die Nachrichten- und Kontaktdienste.
 Der Standort-Kern (`src/app/core/location/`) bestimmt den eigenen Standort und rechnet Entfernung und Richtung.
-Die Seiten unter `features/` sind leere Stubs; ihr Inhalt kommt mit dem jeweiligen Ticket. Alles, was noch fehlt, trägt im Diagramm und im
+Die Seiten „Verbinden“ und „Name“ (T09) und der Screen „Kontakte“ (T10) sind gebaut; die übrigen Seiten unter `features/` sind
+noch leere Stubs. Alles, was noch fehlt, trägt im Diagramm und im
 Ordnerbaum den Vermerk „geplant: Txx".
 
 **Aufgabenteilung:** Die Antenne (Heltec V3) besitzt Identität, Kontaktschlüssel, Verschlüsselung, Zähler und Kontaktliste. Die App ist
@@ -22,8 +24,8 @@ flowchart TD
         Routes["app.routes.ts<br>13 Routen, lazy geladen"]
     end
     subgraph Ui["Oberfläche"]
-        Pages["features/<br>eine Seite pro Ordner<br>Stubs (T00)"]
-        Components["ui/<br>og- Komponenten<br>Grundkomponenten (T01)<br>geplant: T02"]
+        Pages["features/<br>eine Seite pro Ordner<br>Verbinden und Name (T09)<br>Kontakte (T10)"]
+        Components["ui/<br>og- Komponenten<br>Grundkomponenten (T01)<br>Zustandskomponenten (T02)"]
     end
     subgraph Core["Kern – src/app/core"]
         Basis["log.ts, platform.ts, models/"]
@@ -89,11 +91,11 @@ src/
       einstellungen/          geplant: T13, T14
       gruppe/                 geplant: T20
       handshake/              geplant: T11
-      kontakte/               geplant: T10
-      name/                   geplant: T09
+      kontakte/               Screen Kontakte (T10)
+      name/                   Screen Name (T09)
       standort/               geplant: T18
-      verbinden/              geplant: T09
-    ui/                       og-Grundkomponenten (T01), geplant: T02
+      verbinden/              Screen Verbinden (T09)
+    ui/                       og-Grundkomponenten (T01), Zustandskomponenten (T02)
   environments/               environment.ts, environment.prod.ts
   theme/                      tokens.scss, typography.scss, global.scss
   test-setup.ts               WebCrypto für Vitest und jsdom
@@ -106,7 +108,7 @@ src/
 | Schicht | Ort | Aufgabe | Stand |
 |---|---|---|---|
 | App | `src/app/app.*.ts` | Wurzel-Komponente, Provider, Routen | fertig (T00) |
-| Oberfläche | `src/app/features/`, `src/app/ui/` | Screens und wiederverwendbare `og-`-Komponenten | Grundkomponenten fertig (T01), Zustandskomponenten ab T02, Seiten ab T09 |
+| Oberfläche | `src/app/features/`, `src/app/ui/` | Screens und wiederverwendbare `og-`-Komponenten | Grundkomponenten (T01), Zustandskomponenten (T02), Seiten „Verbinden“ und „Name“ (T09), Screen „Kontakte“ (T10) |
 | Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Entsperr-Schlüssel, Messaging, Standort | Grundgerüst (T00), Formate (T03), Daten (T04), Antenne und Nachrichten (T23), native Plugins (T06), Standort-Kern (T17) |
 | Typen | `src/app/core/models/` | Kontakt, Nachricht, Antenne, Gerät (Host-API), Handshake-Fehler, Settings, Fehlercodes | fertig (T00, T23) |
 | Theme | `src/theme/` | Design-Tokens, Schriften, globales Styling | fertig (T00) |

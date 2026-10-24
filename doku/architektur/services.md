@@ -65,6 +65,8 @@ verschlüsselt nichts. Details in [Nachrichten](../funktionen/nachrichten.md).
 | Name | Typ | Beschreibung |
 |---|---|---|
 | `maxContentBytes` | `Signal<number>` | Textlimit des Geräts (`limits.maxTextBytes`), unverändert; 83. |
+| `contacts` | `Signal<ContactListItem[]>` | Die Kontakte mit letzter Nachricht, Anzahl der ungelesenen Nachrichten und Signal-Level; sortiert nach der letzten Nachricht (neueste zuerst), Kontakte ohne Nachricht stehen nach ihrer Platznummer. Die Liste lädt bei jeder Datenänderung neu (`DataChangedService.version`). |
+| `unreadCount(contactId)` | `Signal<number>` | Anzahl der ungelesenen Nachrichten eines Kontakts; das Signal bleibt bestehen und liefert den neuen Wert. |
 | `reactions` | `Observable<ReactionEvent>` | Eingehende Reaktionen (werden nicht gespeichert). |
 | `sendText(contactId, text)` | `Promise<void>` | Teilt den Text an `maxContentBytes()` Bytes; jedes Stück ist eine eigene Nachricht. |
 | `sendLocation(contactId, fix)` | `Promise<void>` | Standort als Nachricht (`type: "geo"`). |
@@ -293,6 +295,7 @@ Die Formate und die Signalstärke sind in [Nachrichten](../funktionen/nachrichte
 | `AntennaPort` | `SerialTransport`, `KeystoreService`, `SerialClient` |
 | `UsbSerialTransport` | `UsbSerial` (natives Plugin) über das DI-Token `USB_SERIAL_PLUGIN` |
 | `MessagingService` | `AntennaPort`, `ContactRepository`, `MessageRepository`, `CoordinateRepository`, `HandshakeService`, `DataChangedService` |
+| `KontaktePage` | `MessagingService`, `AntennaPort`, `SettingsService` |
 | `HandshakeService` | `AntennaPort`, `ContactRepository`, `DataChangedService` |
 | `SettingsService` | `SettingsRepository` |
 | `LocationService` | `@capacitor/geolocation` (nur nativ) |

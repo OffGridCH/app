@@ -515,4 +515,179 @@ describe('MessagingService', () => {
       await waitForStatus(message.id, MessageStatus.Sent);
     });
   });
+
+  describe('Kontaktliste', () => {
+    /** Eine Nachricht mit einem festen Abstand zu jetzt (in Minuten). */
+    function messageOf(
+      contactId: number,
+      direction: Message['direction'],
+      content: string,
+      minutesAgo: number,
+    ): Message {
+      const sentAt = new Date(Date.now() - minutesAgo * 60_000).toISOString();
+      return {
+        id: crypto.randomUUID(),
+        contactId,
+        ctr: 1,
+        msgRef: null,
+        content,
+        direction,
+        kind: 'text',
+        sentAt,
+        status: MessageStatus.Delivered,
+        rssi: direction === 'in' ? -92 : null,
+        readAt: null,
+        createdAt: sentAt,
+        updatedAt: null,
+      };
+    }
+
+    /** Wartet, bis die Kontaktliste die erwartete Zahl von Kontakten zeigt. */
+    async function waitForContacts(count: number): Promise<void> {
+      await vi.waitFor(
+        () => {
+          TestBed.tick();
+          expect(messaging.contacts()).toHaveLength(count);
+        },
+        { timeout: 2000 },
+      );
+    }
+
+    /** Wartet, bis die Liste die erwartete Zahl ungelesener Nachrichten zeigt. */
+    async function waitForUnread(contactId: number, count: number): Promise<void> {
+      await vi.waitFor(
+        () => {
+          TestBed.tick();
+          expect(messaging.unreadCount(contactId)()).toBe(count);
+        },
+        { timeout: 2000 },
+      );
+    }
+
+    it('liefert die Kontakte mit letzter Nachricht, Ungelesenen und Signal-Level', async () => {
+      await connected();
+
+      harness.device.injectText(1, 'Hallo!');
+      await vi.waitFor(async () => expect(await messagesOf(1)).toHaveLength(1));
+      await waitForContacts(2);
+
+      const anna = messaging.contacts().find((item) => item.contact.contactId === 1);
+      expect(anna?.contact.name).toBe('Anna');
+      expect(anna?.lastMessage?.content).toBe('Hallo!');
+      expect(anna?.unread).toBe(1);
+      expect(anna?.signalLevel).toBe(3);
+      expect(messaging.unreadCount(1)()).toBe(1);
+    });
+
+    it('sortiert nach der letzten Nachricht; Kontakte ohne Nachricht stehen nach ihrer Platznummer', async () => {
+      // Ohne Antenne bleibt die Kontaktliste unter der Kontrolle des Tests.
+      harness = setupAntennaHarness();
+      messaging = TestBed.inject(MessagingService);
+      messages = TestBed.inject(MessageRepository);
+      contacts = TestBed.inject(ContactRepository);
+      dataChanged = TestBed.inject(DataChangedService);
+      await contacts.upsert({
+        contactId: 1,
+        name: 'Anna',
+        nodeId: 'ECE4',
+        publicKey: 'A5d2V7F/elA8qTcKyHqIP0WiIe7IjNTvZ30L+2bBRls=',
+        state: 'active',
+        fingerprint: '4821 0937 1156',
+        lastRssi: null,
+        lastSnr: null,
+        txCtr: 0,
+        rxHighestCtr: null,
+      });
+      await contacts.upsert({
+        contactId: 3,
+        name: 'Mia',
+        nodeId: '8E2D',
+        publicKey: 'DuQAXvPB/3K5X3OnKS0xWmT92GDGn7rAaK40rByhzV0=',
+        state: 'active',
+        fingerprint: '1659 8842 3370',
+        lastRssi: null,
+        lastSnr: null,
+        txCtr: 0,
+        rxHighestCtr: null,
+      });
+      await contacts.upsert({
+        contactId: 4,
+        name: 'Nina',
+        nodeId: '8DDB',
+        publicKey: 'g7QWg+3lRb2fJHHIWz2mlAyShdhQDQyb6uG8Aw//aeo=',
+        state: 'active',
+        fingerprint: '9027 5513 6841',
+        lastRssi: null,
+        lastSnr: null,
+        txCtr: 0,
+        rxHighestCtr: null,
+      });
+      await messages.insert(messageOf(1, 'in', 'Hallo!', 10));
+      await messages.insert(messageOf(3, 'out', 'Wir starten morgen.', 60));
+      dataChanged.notify();
+
+      await waitForContacts(3);
+
+      expect(messaging.contacts().map((item) => item.contact.contactId)).toEqual([1, 3, 4]);
+      expect(messaging.contacts()[2]?.lastMessage).toBeNull();
+    });
+
+    it('setzt das Signal-Level auf 0, wenn die letzte eingehende Nachricht älter als 15 Minuten ist', async () => {
+      await connected();
+      await contacts.updateLink(1, -92, 7.5);
+      await messages.insert(messageOf(1, 'in', 'Hallo!', 20));
+      dataChanged.notify();
+
+      await waitForContacts(2);
+
+      const anna = messaging.contacts().find((item) => item.contact.contactId === 1);
+      expect(anna?.signalLevel).toBe(0);
+    });
+
+    it('setzt das Signal-Level auf 0, wenn der Kontakt noch aussteht', async () => {
+      await connected();
+      await contacts.updateLink(2, -92, 7.5);
+      await messages.insert(messageOf(2, 'in', 'Hallo!', 2));
+      dataChanged.notify();
+
+      await waitForContacts(2);
+
+      const luca = messaging.contacts().find((item) => item.contact.contactId === 2);
+      expect(luca?.contact.state).toBe('pending');
+      expect(luca?.signalLevel).toBe(0);
+    });
+
+    it('zählt die ungelesenen Nachrichten je Kontakt', async () => {
+      await connected();
+      await messages.insert(messageOf(1, 'in', 'Hallo!', 2));
+      dataChanged.notify();
+
+      await waitForUnread(1, 1);
+
+      await messaging.markRead(1);
+      await waitForUnread(1, 0);
+    });
+
+    it('lädt die Liste neu, wenn sich die Daten ändern', async () => {
+      await connected();
+      await waitForContacts(2);
+
+      await contacts.upsert({
+        contactId: 5,
+        name: 'Nina',
+        nodeId: '8DDB',
+        publicKey: 'g7QWg+3lRb2fJHHIWz2mlAyShdhQDQyb6uG8Aw//aeo=',
+        state: 'active',
+        fingerprint: '9027 5513 6841',
+        lastRssi: null,
+        lastSnr: null,
+        txCtr: 0,
+        rxHighestCtr: null,
+      });
+      dataChanged.notify();
+
+      await waitForContacts(3);
+      expect(messaging.contacts().map((item) => item.contact.name)).toContain('Nina');
+    });
+  });
 });
