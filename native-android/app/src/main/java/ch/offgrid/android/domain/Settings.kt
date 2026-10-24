@@ -30,6 +30,9 @@ class Settings(private val dao: SettingDao, scope: CoroutineScope) {
         const val INSTALL_ID = "install_id"
         const val BG_RECEIVE = "bg_receive"
         const val VIBRATE = "vibrate"
+
+        /** Shows "Erweitert" for boards on the team firmware too; lab boards always show it. */
+        const val SHOW_ADVANCED = "show_advanced"
         const val LINK_KIND = "link_kind"
         const val OWN_PUBLIC_KEY = "own_public_key"
 

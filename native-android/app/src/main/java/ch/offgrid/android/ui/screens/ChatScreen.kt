@@ -5,7 +5,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -33,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -55,7 +53,6 @@ import ch.offgrid.android.domain.GeoFix
 import ch.offgrid.android.domain.MessageDetails
 import ch.offgrid.android.domain.MessageLimits
 import ch.offgrid.android.domain.Messaging
-import ch.offgrid.android.domain.REACTIONS
 import ch.offgrid.android.ui.LocalApp
 import ch.offgrid.android.ui.Routes
 import ch.offgrid.android.ui.back

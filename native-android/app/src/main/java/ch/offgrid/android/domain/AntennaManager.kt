@@ -123,6 +123,8 @@ data class AntennaState(
     val radioError: Int? = null,
     /** `sys.status.storage.vault_status`: `ready`, `missing`, `corrupt`, … */
     val vaultStatus: String? = null,
+    /** `sys.status.queue.dropped_events`: events the antenna could not hand to the phone since it booted. */
+    val droppedEvents: Int? = null,
     val secureBoot: Boolean? = null,
     val flashEncryption: Boolean? = null,
     /** `sec.get_policy.lock_timeout_s`: the antenna locks after this long without a command (0 = never). */
@@ -335,6 +337,7 @@ class AntennaManager(
                 radioRunning = status?.obj("radio")?.bool("running"),
                 radioError = status?.obj("radio")?.int("last_error")?.takeIf { e -> e != 0 },
                 vaultStatus = status?.obj("storage")?.str("vault_status"),
+                droppedEvents = status?.obj("queue")?.int("dropped_events"),
                 secureBoot = status?.obj("security")?.bool("secure_boot"),
                 flashEncryption = status?.obj("security")?.bool("flash_encryption"),
                 lockTimeoutS = policy?.int("lock_timeout_s"),
@@ -565,7 +568,8 @@ class AntennaManager(
                 lab = lab ?: it.lab,
                 radioRunning = status?.obj("radio")?.bool("running") ?: it.radioRunning,
                 radioError = if (status != null) status.obj("radio")?.int("last_error")?.takeIf { e -> e != 0 } else it.radioError,
-                vaultStatus = status?.obj("storage")?.str("vault_status") ?: it.vaultStatus)
+                vaultStatus = status?.obj("storage")?.str("vault_status") ?: it.vaultStatus,
+                droppedEvents = status?.obj("queue")?.int("dropped_events") ?: it.droppedEvents)
         }
     }
 

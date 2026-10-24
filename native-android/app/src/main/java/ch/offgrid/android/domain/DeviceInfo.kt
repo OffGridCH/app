@@ -73,8 +73,28 @@ data class LabConfig(
         )
 
         /** Normalises user input to the four upper-case hex digits of a NodeID, or null when it is not one. */
-        fun normalizeNodeId(input: String): String? = input.trim().removePrefix("0x").uppercase().takeIf { NODE_ID.matches(it) }
+        fun normalizeNodeId(input: String): String? =
+            input.trim().removePrefix("0x").removePrefix("0X").uppercase().takeIf { NODE_ID.matches(it) }
+
+        /** The ignore list with [input] added, or why it cannot be added. */
+        fun withIgnored(current: List<String>, input: String, ownNodeId: String?): IgnoreEdit {
+            val id = normalizeNodeId(input) ?: return IgnoreEdit.Refused(IgnoreEdit.Reason.INVALID)
+            return when {
+                ownNodeId != null && id.equals(ownNodeId, ignoreCase = true) -> IgnoreEdit.Refused(IgnoreEdit.Reason.OWN)
+                id in current -> IgnoreEdit.Refused(IgnoreEdit.Reason.DUPLICATE)
+                current.size >= MAX_IGNORE_NODES -> IgnoreEdit.Refused(IgnoreEdit.Reason.FULL)
+                else -> IgnoreEdit.Changed(current + id)
+            }
+        }
     }
+}
+
+/** Result of [LabConfig.withIgnored]. */
+sealed interface IgnoreEdit {
+    data class Changed(val nodes: List<String>) : IgnoreEdit
+    data class Refused(val reason: Reason) : IgnoreEdit
+
+    enum class Reason { INVALID, OWN, DUPLICATE, FULL }
 }
 
 /** Counters of `radio.stats` in the order the advanced screen lists them, with German labels. */
