@@ -2,7 +2,7 @@
 
 **Abhängig von:** T01
 **Skills:** `offgrid-design-system`, `offgrid-testing`
-**Dateien:** `src/app/ui/**`, `package.json` (nur `qrcode`, `@types/qrcode`)
+**Dateien:** `src/app/ui/**`, `src/theme/typography.scss` (nur die Mixins `og-type-action` und `og-type-note`), `package.json` (nur `qrcode`, `@types/qrcode`)
 **Referenz:** `docs/design/screens/Kontakte.dc.html`, `Main.dc.html`, `ChatGetrennt.dc.html`, `Handshake.dc.html`, `Antenne.dc.html`
 
 ## Umfang
