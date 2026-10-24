@@ -102,6 +102,8 @@ class AppContainer(private val context: Context) {
     }
 
     private fun defaultLinkKind(): LinkKind {
+        // A debug build with OFFGRID_TCP_LINK has a real antenna behind a bridge, also on the emulator.
+        if (BuildConfig.DEBUG && BuildConfig.TCP_LINK.isNotBlank()) return LinkKind.USB
         val emulator = Build.FINGERPRINT.contains("generic") || Build.HARDWARE.contains("ranchu") ||
             Build.HARDWARE.contains("goldfish") || Build.PRODUCT.contains("sdk")
         return if (emulator) LinkKind.SIMULATED else LinkKind.USB
