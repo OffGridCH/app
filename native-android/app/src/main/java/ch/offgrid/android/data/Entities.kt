@@ -1,5 +1,6 @@
 package ch.offgrid.android.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -45,8 +46,17 @@ object MessageStatus {
     /** End-to-end ACK verified ("zugestellt"). */
     const val DELIVERED = 3
 
-    /** Gave up ("Nicht gesendet"). */
+    /**
+     * Gave up: "Nicht zugestellt" when the antenna had the message (reason from `msg.status`, or `lost`
+     * when it vanished from the antenna's queue), "Nicht gesendet" when the antenna refused it (error code).
+     */
     const val FAILED = 4
+
+    /**
+     * Lab image: no ACK after all retries, the antenna keeps it and sends it again when the contact is
+     * heard, for up to 30 minutes ("Wartet auf …", `msg.status` state `waiting`).
+     */
+    const val WAITING = 5
 }
 
 @Serializable
@@ -70,14 +80,42 @@ data class MessageEntity(
     val ageS: Int? = null,
     val status: Int,
     val failReason: String? = null,
-    /** Device handle from `msg.send`, unique since the device booted. Cleared on `sys.boot`. */
+    /**
+     * Device handle from `msg.send`, unique only within one boot of the antenna. Set while the antenna
+     * has the message and cleared when it reached a final state.
+     */
     val msgRef: Int? = null,
+    /**
+     * `<device_id>/<random>` of the app's link session in which [msgRef] was last confirmed. `msg.status`
+     * events only match messages of the current session; a reconnect re-confirms refs with `msg.pending`.
+     */
+    val refSession: String? = null,
     /** Counter of the message within the conversation direction, used to match reactions. */
     val ctr: Int? = null,
     /** Group messages: who wrote it. */
     val senderContactId: Long? = null,
     val senderName: String? = null,
     val rssi: Int? = null,
+    /** SNR in dB of a received message (`msg.received.snr`). */
+    val snr: Double? = null,
+    /** Hops the ACK of a delivery reported, or the hops a received message took (0 = direct). */
+    val hops: Int? = null,
+    /** RETRY of the received copy, or the retries the antenna needed for an outgoing message. */
+    val retry: Int? = null,
+    /** Time from handing over to the authenticated ACK (`msg.status.rtt_ms`), waits and retries included. */
+    val rttMs: Int? = null,
+    /** Lab image: the TEXT body went on air OGZ1-compressed. Null when the firmware does not say. */
+    val compressed: Boolean? = null,
+    val bytesOnAir: Int? = null,
+    val airtimeMs: Int? = null,
+    /** Last state the antenna reported (`queued`, `sent`, `relayed`, `retrying`, `waiting`, …). */
+    val deviceState: String? = null,
+    /**
+     * The delivery was not reported while the phone was connected; the reconciliation found it in
+     * `msg.pending.recent` afterwards ("zugestellt, während offline").
+     */
+    @ColumnInfo(defaultValue = "0")
+    val deliveredOffline: Boolean = false,
     /**
      * Reaction shown under this message: on our own messages the peer's, on the peer's messages
      * the one we sent. The column name predates the second case; renaming it would need a migration.

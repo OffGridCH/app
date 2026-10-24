@@ -28,6 +28,7 @@ import ch.offgrid.android.analytics.Screen
 import ch.offgrid.android.domain.Conversation
 import ch.offgrid.android.domain.Settings
 import ch.offgrid.android.ui.screens.AddContactScreen
+import ch.offgrid.android.ui.screens.AdvancedScreen
 import ch.offgrid.android.ui.screens.ChatScreen
 import ch.offgrid.android.ui.screens.ConnectScreen
 import ch.offgrid.android.ui.screens.ContactAddedScreen
@@ -56,6 +57,7 @@ object Routes {
     const val SETTINGS = "einstellungen"
     const val EXPORT = "einstellungen/export"
     const val IMPORT = "einstellungen/import"
+    const val ADVANCED = "einstellungen/erweitert"
     const val NEW_GROUP = "gruppe/neu"
     const val GROUP = "gruppe/{groupId}"
 
@@ -136,6 +138,7 @@ fun AppNavHost(openRequest: MutableStateFlow<Conversation?>) {
         composable(Routes.SETTINGS) { SettingsScreen(nav) }
         composable(Routes.EXPORT) { ExportScreen(nav) }
         composable(Routes.IMPORT) { ImportScreen(nav) }
+        composable(Routes.ADVANCED) { AdvancedScreen(nav) }
         composable(Routes.NEW_GROUP) { NewGroupScreen(nav) }
         composable(Routes.GROUP, arguments = listOf(navArgument("groupId") { type = NavType.LongType })) {
             GroupChatScreen(nav, it.arguments!!.getLong("groupId"))

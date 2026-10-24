@@ -23,8 +23,8 @@ class LinkClosedException(cause: Throwable? = null) : Exception("link closed", c
  * Request/response client for the JSON Lines link protocol on top of an open [LinkSession].
  *
  * - Request ids are chosen here and matched against responses (spec 4.1/4.2).
- * - At most 4 requests are in flight (spec 4.4).
- * - Timeouts: 2 s for normal commands, 5 s for vault commands (spec 4.4).
+ * - One request is in flight at a time (link spec 1); the timeout starts when it is written.
+ * - Timeouts: 2 s for normal commands, 5 s for commands that write the vault or settings.
  * - Events are delivered through [events] in arrival order. The consumer must not call [call] from
  *   inside the reader, which is why events go through a channel instead of a callback.
  */
@@ -104,8 +104,13 @@ class LinkClient(
     }
 
     companion object {
-        const val MAX_IN_FLIGHT = 4
-        private val VAULT_COMMANDS = setOf("pair.complete", "contact.delete")
+        /** Link spec 1: one request in flight at a time is recommended; others wait for the line, not for a timeout. */
+        const val MAX_IN_FLIGHT = 1
+        /** Commands that write the vault or NVS on the antenna and can take longer than a plain read. */
+        private val VAULT_COMMANDS = setOf(
+            "pair.complete", "contact.delete", "contact.rename", "id.set_name", "mesh.set", "radio.set", "lab.set",
+            "led.set", "sys.factory_reset",
+        )
 
         fun timeoutFor(cmd: String): Long =
             if (cmd.startsWith("sec.") || cmd in VAULT_COMMANDS) 5_000 else 2_000
