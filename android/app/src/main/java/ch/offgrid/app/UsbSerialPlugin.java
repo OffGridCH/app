@@ -49,6 +49,7 @@ public class UsbSerialPlugin extends Plugin {
     private UsbSerialPort serialPort;
     private UsbDeviceConnection connection;
     private SerialInputOutputManager serialManager;
+    private int connectionGeneration;
 
     @Override
     public void load() {
@@ -253,6 +254,11 @@ public class UsbSerialPlugin extends Plugin {
     }
 
     private void openSerial(PluginCall call, UsbDevice device) {
+        if (usbManager == null) {
+            call.reject("USB-Serial konnte nicht geöffnet werden", "OPEN_FAILED");
+            return;
+        }
+
         UsbSerialDriver driver = driverFor(device);
         if (driver == null) {
             call.reject("Kein passender USB-Serial-Treiber", "NO_DRIVER");
@@ -266,7 +272,8 @@ public class UsbSerialPlugin extends Plugin {
         }
 
         UsbSerialPort port = ports.get(0);
-        UsbDeviceConnection openedConnection = device.openConnection();
+        // Das Android-Framework oeffnet die Verbindung; UsbDevice kennt keine openConnection-Methode.
+        UsbDeviceConnection openedConnection = usbManager.openDevice(device);
         if (openedConnection == null) {
             call.reject("USB-Serial konnte nicht geöffnet werden", "OPEN_FAILED");
             return;
@@ -290,11 +297,21 @@ public class UsbSerialPlugin extends Plugin {
             return;
         }
 
+        // Jede Verbindung bekommt eine eigene Generation. Ein verspaeteter Callback eines alten Managers
+        // darf die neuere Verbindung weder schliessen noch Daten liefern.
+        final int generation;
+        synchronized (this) {
+            generation = ++connectionGeneration;
+        }
+
         SerialInputOutputManager manager = new SerialInputOutputManager(
             port,
             new SerialInputOutputManager.Listener() {
                 @Override
                 public void onNewData(byte[] data) {
+                    if (!isCurrentGeneration(generation)) {
+                        return;
+                    }
                     JSObject payload = new JSObject();
                     payload.put("data", Base64.encodeToString(data, Base64.NO_WRAP));
                     notifyListeners(EVENT_DATA, payload);
@@ -302,10 +319,13 @@ public class UsbSerialPlugin extends Plugin {
 
                 @Override
                 public void onRunError(Exception error) {
+                    if (!isCurrentGeneration(generation)) {
+                        return;
+                    }
                     JSObject payload = new JSObject();
                     payload.put("message", error.getMessage() == null ? "USB-Serial-Fehler" : error.getMessage());
                     notifyListeners(EVENT_ERROR, payload);
-                    closeConnection();
+                    closeConnection(generation);
                 }
             }
         );
@@ -321,7 +341,7 @@ public class UsbSerialPlugin extends Plugin {
             manager.start();
             call.resolve();
         } catch (RuntimeException error) {
-            closeConnection();
+            closeConnection(generation);
             call.reject("USB-Serial konnte nicht gestartet werden", "OPEN_FAILED");
         }
     }
@@ -346,11 +366,20 @@ public class UsbSerialPlugin extends Plugin {
         return driver;
     }
 
-    private void closeConnection() {
+    /**
+     * Beendet die aktive Verbindung. Mit expectedGeneration >= 0 wird nur geschlossen, wenn die
+     * Verbindung noch die aktuelle ist - ein verspaeteter Callback einer alten Verbindung bleibt
+     * damit wirkungslos.
+     */
+    private void closeConnection(int expectedGeneration) {
         SerialInputOutputManager manager;
         UsbSerialPort port;
         UsbDeviceConnection openedConnection;
         synchronized (this) {
+            if (expectedGeneration >= 0 && expectedGeneration != connectionGeneration) {
+                return;
+            }
+            connectionGeneration++;
             manager = serialManager;
             port = serialPort;
             openedConnection = connection;
@@ -364,6 +393,16 @@ public class UsbSerialPlugin extends Plugin {
             manager.stop();
         }
         closePort(port, openedConnection);
+    }
+
+    private void closeConnection() {
+        closeConnection(-1);
+    }
+
+    private boolean isCurrentGeneration(int generation) {
+        synchronized (this) {
+            return generation == connectionGeneration;
+        }
     }
 
     private void closePort(UsbSerialPort port, UsbDeviceConnection openedConnection) {
