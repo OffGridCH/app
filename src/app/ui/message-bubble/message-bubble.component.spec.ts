@@ -116,6 +116,92 @@ describe('og-message-bubble', () => {
     expect(wrapper.classList.contains('og-message-bubble--out')).toBe(true);
   });
 
+  it('verankert eingehende Nachrichten am linken Rand', () => {
+    const fixture = TestBed.createComponent(OgMessageBubbleComponent);
+    fixture.componentRef.setInput('direction', 'in');
+    fixture.componentRef.setInput('text', 'Ja, ich warte hier.');
+    fixture.detectChanges();
+
+    const wrapper = fixture.nativeElement.querySelector('.og-message-bubble') as HTMLElement;
+    const style = getComputedStyle(wrapper);
+
+    expect(style.alignSelf).toBe('flex-start');
+    expect(style.alignItems).toBe('flex-start');
+  });
+
+  it('verankert ausgehende Nachrichten am rechten Rand', () => {
+    const fixture = TestBed.createComponent(OgMessageBubbleComponent);
+    fixture.componentRef.setInput('direction', 'out');
+    fixture.componentRef.setInput('status', 'sent');
+    fixture.componentRef.setInput('text', 'Super, bis gleich!');
+    fixture.detectChanges();
+
+    const wrapper = fixture.nativeElement.querySelector('.og-message-bubble') as HTMLElement;
+    const style = getComputedStyle(wrapper);
+
+    expect(style.alignSelf).toBe('flex-end');
+    expect(style.alignItems).toBe('flex-end');
+  });
+
+  it('begrenzt die Breite der Blase und bricht lange Wörter um', () => {
+    const fixture = TestBed.createComponent(OgMessageBubbleComponent);
+    fixture.componentRef.setInput('direction', 'in');
+    fixture.componentRef.setInput('text', 'Ja, ich warte hier.');
+    fixture.detectChanges();
+
+    const wrapper = fixture.nativeElement.querySelector('.og-message-bubble') as HTMLElement;
+    const bubble = fixture.nativeElement.querySelector('.og-message-bubble__bubble') as HTMLElement;
+    const wrapperStyle = getComputedStyle(wrapper);
+    const bubbleStyle = getComputedStyle(bubble);
+
+    expect(wrapperStyle.maxWidth).toBe('78%');
+    expect(['0', '0px']).toContain(wrapperStyle.minWidth);
+    expect(bubbleStyle.maxWidth).toBe('100%');
+    expect(['0', '0px']).toContain(bubbleStyle.minWidth);
+    expect(bubbleStyle.overflowWrap).toBe('anywhere');
+  });
+
+  it('nutzt die Radien aus den Tokens', () => {
+    const fixture = TestBed.createComponent(OgMessageBubbleComponent);
+    fixture.componentRef.setInput('direction', 'in');
+    fixture.componentRef.setInput('text', 'Ja, ich warte hier.');
+    fixture.detectChanges();
+
+    const bubble = fixture.nativeElement.querySelector('.og-message-bubble__bubble') as HTMLElement;
+    expect(getComputedStyle(bubble).borderRadius).toBe(
+      'var(--og-r-bubble) var(--og-r-bubble) var(--og-r-bubble) var(--og-r-bubble-tail)',
+    );
+
+    fixture.componentRef.setInput('direction', 'out');
+    fixture.componentRef.setInput('status', 'sent');
+    fixture.detectChanges();
+    expect(getComputedStyle(bubble).borderRadius).toBe(
+      'var(--og-r-bubble) var(--og-r-bubble) var(--og-r-bubble-tail) var(--og-r-bubble)',
+    );
+  });
+
+  it('sprengt die Blase nicht bei einem Text ohne Leerzeichen', () => {
+    const text = 'a'.repeat(83);
+    const fixture = TestBed.createComponent(OgMessageBubbleComponent);
+    fixture.componentRef.setInput('direction', 'out');
+    fixture.componentRef.setInput('status', 'sent');
+    fixture.componentRef.setInput('text', text);
+    fixture.detectChanges();
+
+    const bubble = fixture.nativeElement.querySelector('.og-message-bubble__bubble') as HTMLElement;
+
+    // Der Text steht vollständig in der Blase und wird nicht abgeschnitten.
+    expect(bubble.textContent).toBe(text);
+    expect(text).toHaveLength(83);
+
+    // Die Blase bleibt innerhalb der Zeile: sie ist auf die Zeilenbreite begrenzt,
+    // schrumpft auf 0 und bricht das Wort um, statt es überstehen zu lassen.
+    const bubbleStyle = getComputedStyle(bubble);
+    expect(bubbleStyle.maxWidth).toBe('100%');
+    expect(['0', '0px']).toContain(bubbleStyle.minWidth);
+    expect(bubbleStyle.overflowWrap).toBe('anywhere');
+  });
+
   it('setzt den Abstand beim Richtungswechsel', () => {
     const fixture = TestBed.createComponent(OgMessageBubbleComponent);
     fixture.componentRef.setInput('direction', 'out');

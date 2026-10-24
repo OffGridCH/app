@@ -12,6 +12,8 @@ import { OgIconComponent } from '../icon/icon.component';
     </div>
   `,
   styles: `
+    @use '../../../theme/typography.scss' as *;
+
     :host {
       display: block;
     }
@@ -33,10 +35,7 @@ import { OgIconComponent } from '../icon/icon.component';
     }
 
     .og-note__text {
-      font-family: var(--og-font);
-      font-size: 14px;
-      line-height: 1.45;
-      font-weight: 400;
+      @include og-type-note;
       color: var(--og-danger-text);
     }
   `,

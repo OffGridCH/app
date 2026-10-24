@@ -40,19 +40,23 @@ export type OgMessageStatus = 'queued' | 'sent' | 'delivered' | 'failed';
     @use '../../../theme/typography.scss' as *;
 
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
     }
 
     .og-message-bubble {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
+      align-self: flex-start;
       gap: 4px;
       max-width: 78%;
+      min-width: 0;
     }
 
     .og-message-bubble--out {
       align-items: flex-end;
+      align-self: flex-end;
     }
 
     .og-message-bubble--group-start {
@@ -65,16 +69,19 @@ export type OgMessageStatus = 'queued' | 'sent' | 'delivered' | 'failed';
 
     .og-message-bubble__bubble {
       box-sizing: border-box;
+      max-width: 100%;
+      min-width: 0;
       padding: 10px 14px;
-      border-radius: 20px 20px 20px 6px;
+      border-radius: var(--og-r-bubble) var(--og-r-bubble) var(--og-r-bubble) var(--og-r-bubble-tail);
       background: var(--og-surface);
       border: 1px solid var(--og-border);
       @include og-type-body;
+      overflow-wrap: anywhere;
       color: var(--og-text);
     }
 
     .og-message-bubble__bubble--out {
-      border-radius: 20px 20px 6px 20px;
+      border-radius: var(--og-r-bubble) var(--og-r-bubble) var(--og-r-bubble-tail) var(--og-r-bubble);
       font-weight: 500;
     }
 
@@ -100,6 +107,8 @@ export type OgMessageStatus = 'queued' | 'sent' | 'delivered' | 'failed';
       display: flex;
       align-items: center;
       gap: 6px;
+      max-width: 100%;
+      min-width: 0;
       padding-right: 6px;
     }
 

@@ -240,8 +240,8 @@ describe('UI-Basis (src/app/ui)', () => {
     }
   });
 
-  it('exportiert das Avatar-Muster mit 25 Werten', () => {
+  it('exportiert das Avatar-Muster mit 25 Werten', async () => {
     expect(AVATAR_PATTERN_SIZE).toBe(25);
-    expect(avatarPattern(11)).toHaveLength(AVATAR_PATTERN_SIZE);
+    expect(await avatarPattern('install_id')).toHaveLength(AVATAR_PATTERN_SIZE);
   });
 });

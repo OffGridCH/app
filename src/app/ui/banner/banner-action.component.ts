@@ -10,6 +10,8 @@ import { RouterLink } from '@angular/router';
     </a>
   `,
   styles: `
+    @use '../../../theme/typography.scss' as *;
+
     :host {
       display: inline-flex;
       flex-shrink: 0;
@@ -23,9 +25,7 @@ import { RouterLink } from '@angular/router';
       padding: 0 14px;
       border-radius: var(--og-r-md);
       background: var(--og-text);
-      font-family: var(--og-font);
-      font-size: 14px;
-      font-weight: 700;
+      @include og-type-action;
       color: var(--og-bg);
       text-decoration: none;
     }
