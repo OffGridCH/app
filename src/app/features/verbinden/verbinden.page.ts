@@ -212,8 +212,14 @@ export class VerbindenPage implements OnInit {
     void this.router.navigateByUrl(this.onboardingDone() ? '/einstellungen' : '/name');
   }
 
-  /** „Erneut suchen“: die Antenne noch einmal verbinden. */
+  /** „Erneut suchen“: die Antenne noch einmal verbinden oder ein gesperrtes Gerät wieder entsperren. */
   protected onSearchAgain(): void {
+    // Ein gesperrtes Gerät ist noch verbunden: `connect()` kehrt sofort zurück und es passiert nichts.
+    // Deshalb im Zustand `locked` gezielt erneut entsperren.
+    if (this.antenna.state() === 'locked') {
+      void this.antenna.unlock();
+      return;
+    }
     void this.antenna.connect();
   }
 }

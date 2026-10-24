@@ -44,7 +44,10 @@ hat der Zustand „erledigt“ Vorrang vor „aktiv“.
 - Die Antenne ist frisch (`unprovisioned`) und das Onboarding ist noch nicht abgeschlossen. Der Button führt zu
   `/name`; dort wird das Gerät eingerichtet.
 
-„Erneut suchen“ startet `AntennaPort.connect()` erneut. Während `connecting` ist der Button deaktiviert.
+„Erneut suchen“ wiederholt die Suche nach der Antenne. Im Zustand `locked` – also nach einem fehlgeschlagenen
+Entsperren – löst die Schaltfläche `AntennaPort.unlock()` aus: Das Gerät ist noch verbunden, ein erneutes
+`AntennaPort.connect()` kehrt deshalb sofort zurück und würde nichts bewirken. In allen anderen Zuständen startet die
+Schaltfläche `AntennaPort.connect()`. Während `connecting` ist der Button deaktiviert.
 
 ### Antennenzustände und Fehler
 

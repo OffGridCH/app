@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
 import { AntennaPort } from '../../core/antenna/antenna-port';
+import { KeystoreService } from '../../core/keystore/keystore.service';
 import { SettingsService } from '../../core/settings/settings.service';
 import {
   buttonByLabel,
@@ -104,6 +105,88 @@ describe('VerbindenPage', () => {
     fixture.detectChanges();
 
     expect(buttonByLabel(fixture, 'Erneut suchen').disabled).toBe(true);
+  });
+
+  it('entsperrt nach einem Schlüsselspeicher-Fehler mit „Erneut suchen“', async () => {
+    const harness = setupOnboardingTest();
+    // Der erste Entsperrversuch scheitert am Schlüsselspeicher, der zweite gelingt.
+    const keystore = TestBed.inject(KeystoreService);
+    vi.spyOn(keystore, 'createUnlockEnvelope').mockRejectedValueOnce(new Error('Schlüsselspeicher gesperrt'));
+    const fixture = createPage(VerbindenPage);
+
+    await vi.waitFor(() => expect(harness.antenna.error()).toBe('keystore-failed'));
+    fixture.detectChanges();
+
+    expect(harness.antenna.state()).toBe('locked');
+    expect(buttonByLabel(fixture, 'Weiter').disabled).toBe(true);
+    expect(textOf(fixture)).toContain('Der Schlüsselspeicher des Handys ist nicht verfügbar.');
+
+    buttonByLabel(fixture, 'Erneut suchen').click();
+
+    await waitForAntennaState(harness.antenna, 'unlocked');
+    fixture.detectChanges();
+
+    expect(harness.antenna.error()).toBeNull();
+    expect(buttonByLabel(fixture, 'Weiter').disabled).toBe(false);
+    expect(textOf(fixture)).not.toContain('Der Schlüsselspeicher des Handys ist nicht verfügbar.');
+  });
+
+  it('entsperrt ein gesperrtes Gerät mit „Erneut suchen“ statt neu zu verbinden', async () => {
+    const harness = setupOnboardingTest();
+    // Der erste Entsperrversuch scheitert am Schlüsselspeicher: das Gerät bleibt gesperrt.
+    const keystore = TestBed.inject(KeystoreService);
+    vi.spyOn(keystore, 'createUnlockEnvelope').mockRejectedValueOnce(new Error('Schlüsselspeicher gesperrt'));
+    const fixture = createPage(VerbindenPage);
+    await vi.waitFor(() => expect(harness.antenna.error()).toBe('keystore-failed'));
+    fixture.detectChanges();
+
+    expect(harness.antenna.state()).toBe('locked');
+
+    const unlock = vi.spyOn(harness.antenna, 'unlock');
+    const connect = vi.spyOn(harness.antenna, 'connect');
+
+    buttonByLabel(fixture, 'Erneut suchen').click();
+
+    // Ein gesperrtes Gerät ist noch verbunden: `connect()` kehrt sofort zurück, es muss entsperrt werden.
+    expect(unlock).toHaveBeenCalledTimes(1);
+    expect(connect).not.toHaveBeenCalled();
+
+    // Der Zustand wechselt wirklich von `locked` auf `unlocked`.
+    await waitForAntennaState(harness.antenna, 'unlocked');
+    fixture.detectChanges();
+
+    expect(harness.antenna.error()).toBeNull();
+    expect(buttonByLabel(fixture, 'Weiter').disabled).toBe(false);
+  });
+
+  it('entsperrt ein gesperrtes Gerät nicht durch blosses Verbinden', async () => {
+    const harness = setupOnboardingTest();
+    const keystore = TestBed.inject(KeystoreService);
+    vi.spyOn(keystore, 'createUnlockEnvelope').mockRejectedValueOnce(new Error('Schlüsselspeicher gesperrt'));
+    createPage(VerbindenPage);
+    await vi.waitFor(() => expect(harness.antenna.error()).toBe('keystore-failed'));
+
+    expect(harness.antenna.state()).toBe('locked');
+
+    // Der Weg über `connect()` allein: bei einem gesperrten, aber verbundenen Gerät passiert nichts.
+    await harness.antenna.connect();
+
+    expect(harness.antenna.state()).toBe('locked');
+  });
+
+  it('sucht nach dem Trennen mit „Erneut suchen“ wieder nach der Antenne', async () => {
+    const harness = setupOnboardingTest();
+    const fixture = createPage(VerbindenPage);
+    await waitForAntennaState(harness.antenna, 'unlocked');
+    window.ogMock?.drop();
+    await vi.waitFor(() => expect(harness.antenna.state()).toBe('disconnected'));
+    fixture.detectChanges();
+    const connect = vi.spyOn(harness.antenna, 'connect');
+
+    buttonByLabel(fixture, 'Erneut suchen').click();
+
+    expect(connect).toHaveBeenCalledTimes(1);
+    await waitForAntennaState(harness.antenna, 'unlocked');
   });
 
   it('führt im Onboarding mit „Weiter“ zur Namensseite', async () => {
