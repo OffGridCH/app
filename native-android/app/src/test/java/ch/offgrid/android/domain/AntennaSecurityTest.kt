@@ -18,14 +18,19 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
@@ -86,7 +91,45 @@ class AntennaSecurityTest {
     }
 
     @Test
-    fun autoLockIsReopenedAndTheReasonCleared() = runBlocking {
+    fun rateLimitCarriesTheEstimatedEndAndRetriesOnItsOwn() = runBlocking {
+        val owner = manager("phone-a")
+        owner.connect()
+        owner.settle()
+        owner.disconnect()
+        device.powerCycle()
+
+        val other = manager("phone-b")
+        other.connect()
+        other.settle()
+        other.reconnect()
+        other.reconnect()
+        val limited = other.reconnect()
+        assertEquals(AntennaError.RATE_LIMITED, limited.error)
+        // Third failure: 2 s backoff, counted from that failure.
+        val retryAt = limited.retryAt!!
+        assertTrue(retryAt - System.currentTimeMillis() in 1..2_000)
+        // When it ends the session tries again by itself and meets the wrong token, not the rate limit.
+        val again = withTimeout(6_000) { other.state.first { it.phase == AntennaPhase.ERROR && it.error != AntennaError.RATE_LIMITED } }
+        assertEquals(AntennaError.UNLOCK_FAILED, again.error)
+        assertNull(again.retryAt)
+    }
+
+    @Test
+    fun backoffEstimateFollowsSecurityFailure() {
+        assertEquals(0, AuthBackoff.delayAfter(2))
+        assertEquals(2_000, AuthBackoff.delayAfter(3))
+        assertEquals(16_000, AuthBackoff.delayAfter(6))
+        assertEquals(60_000, AuthBackoff.delayAfter(8))
+        assertEquals(60_000, AuthBackoff.delayAfter(30))
+        // Own failures known: from the last failure. Unknown (another phone failed): 2 s, then doubling.
+        assertEquals(1_500L + 4_000, AuthBackoff.retryAt(now = 2_000, failures = 4, lastFailureAt = 1_500, rateLimited = 1))
+        assertEquals(10_000L + 2_000, AuthBackoff.retryAt(now = 10_000, failures = 0, lastFailureAt = 0, rateLimited = 1))
+        assertEquals(10_000L + 8_000, AuthBackoff.retryAt(now = 10_000, failures = 0, lastFailureAt = 0, rateLimited = 3))
+        assertEquals(10_000L + 60_000, AuthBackoff.retryAt(now = 10_000, failures = 0, lastFailureAt = 0, rateLimited = 9))
+    }
+
+    @Test
+    fun autoLockIsReopenedAndTheReasonKeptAsLastLock() = runBlocking {
         val m = manager("phone-a")
         m.connect()
         m.settle()
@@ -96,6 +139,88 @@ class AntennaSecurityTest {
         val state = m.state.value
         assertEquals(AntennaPhase.READY, state.phase)
         assertNull(state.lockReason)
+        assertEquals("lock", state.lastLock?.reason)
+        assertEquals(2, state.unlockCount)
+    }
+
+    @Test
+    fun aRestartIsNoticedAndTheVaultOpenedAgain() = runBlocking {
+        val m = manager("phone-a")
+        m.connect()
+        m.settle()
+        readyCount.receive()
+        device.powerCycle()
+        withTimeout(5_000) { readyCount.receive() }
+        assertEquals(AntennaPhase.READY, m.state.value.phase)
+        assertEquals(AntennaManager.REASON_RESTART, m.state.value.lastLock?.reason)
+    }
+
+    @Test
+    fun provisioningReportsDeviceStateRadioMeshAndLab() = runBlocking {
+        val m = manager("phone-a")
+        val seen = mutableListOf<AntennaActivity>()
+        val watcher = scope.launch { m.state.collect { s -> s.activity?.let { if (seen.lastOrNull() != it) seen += it } } }
+        m.connect()
+        val s = m.settle()
+        watcher.cancel()
+        assertEquals(AntennaPhase.READY, s.phase)
+        assertTrue(AntennaActivity.PROVISIONING in seen)
+        assertEquals("unlocked", s.deviceState)
+        assertEquals(true, s.radioRunning)
+        assertEquals("ready", s.vaultStatus)
+        assertEquals(15, s.lockTimeoutS)
+        assertEquals(3, s.mesh?.hopDefault)
+        assertTrue(s.labRadio)
+        assertEquals(s.nodeId, s.lab?.nodeId)
+        assertEquals(emptyList<String>(), s.lab?.ignoreNodes)
+        assertEquals(869.525, s.freqMhz!!, 0.0001)
+    }
+
+    @Test
+    fun teamFirmwareHasNoLabSettings() = runBlocking {
+        val team = SimulatedHeltec(SimFlashStore(null), scope, labRadio = false)
+        val m = AntennaManager(scope, { SimulatedLink(team) }, FixedKeyUnlockTokenSource(OgCrypto.sha256("p".toByteArray())),
+            Settings(MemorySettingDao(), scope)).apply { listener = NoopListener }
+        m.connect()
+        val s = m.settle()
+        assertEquals(AntennaPhase.READY, s.phase)
+        assertFalse(s.labRadio)
+        assertNull(s.lab)
+        assertEquals(SimulatedHeltec.TEAM_FW_VERSION, s.fwVersion)
+        assertEquals(MessageLimits.CODEC_RAW, s.textCodec)
+    }
+
+    @Test
+    fun aMockImageIsRefused() = runBlocking {
+        device.mockImage = true
+        val m = manager("phone-a")
+        m.connect()
+        assertEquals(AntennaError.MOCK_FIRMWARE, m.settle().error)
+    }
+
+    @Test
+    fun aHungAntennaEndsTheSessionAsUnresponsive() = runBlocking {
+        val m = manager("phone-a")
+        m.connect()
+        m.settle()
+        device.hung = true
+        val s = withTimeout(15_000) { m.state.first { it.phase == AntennaPhase.ERROR } }
+        assertEquals(AntennaError.UNRESPONSIVE, s.error)
+    }
+
+    @Test
+    fun meshAndLabSettingsAreWrittenAndKept() = runBlocking {
+        val m = manager("phone-a")
+        m.connect()
+        m.settle()
+        val mesh = m.setMesh(buildJsonObject { put("hop_default", 1); put("relay_enabled", false) })
+        assertEquals(1, mesh.hopDefault)
+        assertEquals(false, m.state.value.mesh?.relayEnabled)
+        val lab = m.setLab(buildJsonObject { putJsonArray("ignore_nodes") { add(JsonPrimitive("033B")) } })
+        assertEquals(listOf("033B"), lab.ignoreNodes)
+        assertEquals(listOf("033B"), m.state.value.lab?.ignoreNodes)
+        val stats = m.radioStats()
+        assertTrue(RadioStats.rows(stats).any { it.first == "Gesendete Pakete" })
     }
 
     @Test
@@ -154,6 +279,12 @@ class AntennaSecurityTest {
         assertEquals(AntennaPhase.READY, heir.settle().phase)
         assertEquals(ResetResult.DONE, heir.factoryReset())
         assertNull(settings.get(Settings.TRANSFER_TOKEN))
+    }
+
+    private object NoopListener : AntennaListener {
+        override suspend fun onReady(antenna: AntennaManager, deviceId: String) {}
+        override suspend fun onEvent(event: Incoming.Event) {}
+        override suspend fun onDeviceRebooted() {}
     }
 
     private class MemorySettingDao : SettingDao {

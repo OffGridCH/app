@@ -40,6 +40,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import ch.offgrid.android.BuildConfig
 import ch.offgrid.android.data.MessageEntity
+import ch.offgrid.android.domain.AntennaActivity
+import ch.offgrid.android.domain.AntennaPhase
+import ch.offgrid.android.domain.AntennaState
 import ch.offgrid.android.domain.ConversationItem
 import ch.offgrid.android.domain.Formats
 import ch.offgrid.android.domain.KeyPattern
@@ -108,7 +111,7 @@ fun ContactsScreen(nav: NavHostController) {
                     }
                 }
             }
-            AntennaStatusLine(antenna.ready, antenna.kind, antenna.freqMhz) { nav.navigate(Routes.CONNECT) }
+            AntennaStatusLine(antenna) { nav.navigate(Routes.CONNECT) }
             settings[Settings.REPAIR_NOTICE]?.toIntOrNull()?.takeIf { it > 0 }?.let { n ->
                 val who = if (n == 1) "einen Kontakt" else "$n Kontakte"
                 OgBanner(
@@ -151,7 +154,8 @@ fun ContactsScreen(nav: NavHostController) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AntennaStatusLine(ready: Boolean, kind: LinkKind, freqMhz: Double?, onClick: () -> Unit) {
+fun AntennaStatusLine(antenna: AntennaState, onClick: () -> Unit) {
+    val ready = antenna.ready
     Row(
         Modifier.padding(horizontal = 12.dp).fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
             .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp),
@@ -160,16 +164,32 @@ fun AntennaStatusLine(ready: Boolean, kind: LinkKind, freqMhz: Double?, onClick:
     ) {
         StatusDot(ready)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.Center) {
-            Text(if (ready) "Antenne verbunden" else "Antenne getrennt", style = OgType.preview.copy(color = Og.text2),
+            Text(antennaStatusTitle(antenna), style = OgType.preview.copy(color = Og.text2),
                 modifier = Modifier.align(Alignment.CenterVertically))
-            val transport = if (kind == LinkKind.SIMULATED) "Simuliert" else "USB-C"
+            val transport = if (antenna.kind == LinkKind.SIMULATED) "Simuliert" else "USB-C"
             Text(
-                if (ready) "· $transport · ${freqMhz?.let(Formats::band) ?: "868"} MHz" else "· Tippen zum Verbinden",
+                when {
+                    ready && antenna.radioRunning == false -> "· Funkmodul nicht bereit"
+                    ready -> "· $transport · ${antenna.freqMhz?.let(Formats::band) ?: "868"} MHz"
+                    antenna.phase == AntennaPhase.CONNECTING -> "· ${antenna.activity?.text() ?: "verbindet …"}"
+                    antenna.busy -> "· sucht …"
+                    else -> "· Tippen zum Verbinden"
+                },
                 style = OgType.meta,
                 modifier = Modifier.align(Alignment.CenterVertically),
             )
         }
     }
+}
+
+/** First half of the status line: connected, being opened, locked with an error, or away. */
+fun antennaStatusTitle(antenna: AntennaState): String = when {
+    antenna.ready -> "Antenne verbunden"
+    antenna.phase == AntennaPhase.CONNECTING && antenna.activity == AntennaActivity.RELOCKING -> "Antenne gesperrt"
+    antenna.busy -> "Antenne wird verbunden"
+    antenna.phase == AntennaPhase.ERROR && antenna.deviceState == "locked" -> "Antenne gesperrt"
+    antenna.phase == AntennaPhase.ERROR -> "Antenne: Fehler"
+    else -> "Antenne getrennt"
 }
 
 @Composable
