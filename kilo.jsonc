@@ -13,5 +13,6 @@
   // Die globale ~/.config/kilo/kilo.json bleibt unverändert.
   "permission": {
     "bash": "ask"
-  }
+  },
+  "snapshot": false
 }
