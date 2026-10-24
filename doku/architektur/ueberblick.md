@@ -1,8 +1,10 @@
 # Überblick
 
-Stand: **nach T01, T03, T04, T23** (Projektgerüst, Theme, og-Grundkomponenten, Zeitformate, Datenbank, Host-API zur Antenne). Gebaut sind
+Stand: **nach T01, T03, T04, T06, T23** (Projektgerüst, Theme, og-Grundkomponenten, Zeitformate, Datenbank, native Anbindung an die Antenne,
+Host-API zur Antenne). Gebaut sind
 das App-Gerüst, die Kern-Grundlagen (`log.ts`, `platform.ts`, `models/`), das Theme, die 13 Grundkomponenten in `src/app/ui/`, die
-Daten-Schicht, der Serial-Client mit Antennen-Port und Mock-Gerät, der Entsperr-Schlüssel sowie die Nachrichten- und Kontaktdienste.
+Daten-Schicht, der Serial-Client mit Antennen-Port und Mock-Gerät, der Entsperr-Schlüssel, die native USB-Serial-Anbindung für Android sowie
+die Nachrichten- und Kontaktdienste.
 Die Seiten unter `features/` sind leere Stubs; ihr Inhalt kommt mit dem jeweiligen Ticket. Alles, was noch fehlt, trägt im Diagramm und im
 Ordnerbaum den Vermerk „geplant: Txx".
 
@@ -26,8 +28,8 @@ flowchart TD
         Basis["log.ts, platform.ts, models/"]
         Start["app-start.service.ts<br>(T04)"]
         Data["data/<br>Datenbank und Repositories<br>(T04)"]
-        Antenna["antenna/<br>Serial-Client, Antennen-Port, Mock-Gerät<br>(T23), geplant: T06"]
-        Keystore["keystore/<br>Entsperr-Token, X25519<br>(T23), geplant: T06"]
+        Antenna["antenna/<br>Serial-Client, Antennen-Port, Mock-Gerät<br>(T23), USB-Transport (T06)"]
+        Keystore["keystore/<br>Entsperr-Token, X25519<br>(T23), natives Plugin (T06)"]
         Crypto["crypto/<br>Hex und Base64<br/>(T03)"]
         Format["format/<br>Zeit- und Funkformate<br/>(T03)"]
         Messaging["messaging/<br>Nachrichten, Limits, Signal-Level<br/>(T03, T23)"]
@@ -70,14 +72,14 @@ src/
       platform.ts             isNative(), STATUS_BAR_COLOR
       models/                 antenna, contact, device, errors, handshake, message, settings
       app-start.service.ts    Datenbank, Einstellungen, Antenne starten (T04, T23)
-      antenna/                Serial-Client, Antennen-Port, Mock-Gerät (T23), USB-Plugin geplant: T06
+      antenna/                Serial-Client, Antennen-Port, Mock-Gerät (T23), USB-Transport (T06)
       backup/                 geplant: T14
       crypto/                 Hex, Base64 (T03)
       data/                   Datenbank und Repositories (T04, T23)
       format/                 Zeit- und Funkformate (T03)
       groups/                 geplant: T20
       handshake/              Kontakte spiegeln, Pairing (T23), Scanner geplant: T11
-      keystore/               Entsperr-Token, X25519, Wrap (T23), natives Plugin geplant: T06
+      keystore/               Entsperr-Token, X25519, Wrap (T23), natives Plugin (T06)
       location/               geplant: T17
       messaging/              Limits, Signal-Level (T03), Nachrichten, Reaktionen (T23)
       settings/               Einstellungen (T04)
@@ -104,7 +106,7 @@ src/
 |---|---|---|---|
 | App | `src/app/app.*.ts` | Wurzel-Komponente, Provider, Routen | fertig (T00) |
 | Oberfläche | `src/app/features/`, `src/app/ui/` | Screens und wiederverwendbare `og-`-Komponenten | Grundkomponenten fertig (T01), Zustandskomponenten ab T02, Seiten ab T09 |
-| Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Entsperr-Schlüssel, Messaging | Grundgerüst (T00), Formate (T03), Daten (T04), Antenne und Nachrichten (T23) |
+| Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Entsperr-Schlüssel, Messaging | Grundgerüst (T00), Formate (T03), Daten (T04), Antenne und Nachrichten (T23), native Plugins (T06) |
 | Typen | `src/app/core/models/` | Kontakt, Nachricht, Antenne, Gerät (Host-API), Handshake-Fehler, Settings, Fehlercodes | fertig (T00, T23) |
 | Theme | `src/theme/` | Design-Tokens, Schriften, globales Styling | fertig (T00) |
 
@@ -119,11 +121,12 @@ Die Weiche liegt in `app.config.ts` auf Provider-Ebene und betrifft nur die Leit
 
 | Token | Browser | Android |
 |---|---|---|
-| `SerialTransport` | `MockSerialTransport` (simuliertes Gerät) | `UsbSerialTransport` (T06); bis dahin `UnavailableSerialTransport` |
-| `KeystoreService` | `BrowserKeystoreService` (Schlüssel im Arbeitsspeicher) | `AndroidKeystoreService` (T06 liefert das native Plugin) |
+| `SerialTransport` | `MockSerialTransport` (simuliertes Gerät) | `UsbSerialTransport` (T06, natives USB-Plugin) |
+| `KeystoreService` | `BrowserKeystoreService` (Schlüssel im Arbeitsspeicher) | `AndroidKeystoreService` (T06, natives Keystore-Plugin) |
 | `DatabaseService` und Repositories | Memory-Implementierungen | SQLite-Implementierungen |
 
-`AntennaPort`, `SerialClient`, `MessagingService` und `HandshakeService` sind für beide Plattformen dieselben Klassen. Zusätzlich gilt: Ist
+`AntennaPort`, `SerialClient`, `MessagingService` und `HandshakeService` sind für beide Plattformen dieselben Klassen. Auf Android verbindet sich die
+App nach einem `resume` erneut, wenn die Antenne `disconnected` ist (`src/app/app.config.ts`). Zusätzlich gilt: Ist
 `localStorage.getItem('og.mock') === '1'`, laufen auch auf Android das simulierte Gerät und der Arbeitsspeicher-Schlüssel (Vorführen ohne
 Hardware). Das Einstellen und Zurücksetzen passiert nur über die Entwickler-Konsole, es gibt dafür keine Oberfläche.
 

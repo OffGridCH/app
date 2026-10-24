@@ -1,6 +1,6 @@
 # Tests
 
-Stand: **nach T01, T02, T03, T04, T09, T23**. Der Test-Runner ist Vitest mit jsdom über den Angular-Builder. Einmal, headless:
+Stand: **nach T01, T02, T03, T04, T06, T09, T23**. Der Test-Runner ist Vitest mit jsdom über den Angular-Builder. Einmal, headless:
 `npm run test:ci`. WebCrypto kommt aus dem Node-Modul `node:crypto` und wird in `src/test-setup.ts` bereitgestellt.
 
 Jede Testdatei (`*.spec.ts`) liegt neben dem Code, den sie prüft.
@@ -33,6 +33,7 @@ Jede Testdatei (`*.spec.ts`) liegt neben dem Code, den sie prüft.
 | `src/app/core/antenna/serial-client.spec.ts` | `SerialClient` (JSON Lines): Anfrage mit `id`, `cmd`, `args` und LF; `id`s eindeutig und steigend; genau eine Antwort je `id`, Ereignisse werden nie beantwortet; höchstens 4 Anfragen in Flight; Zeilen über 2048 Bytes (inklusive LF) verworfen, 2048 angenommen; CR toleriert; Zeilen ohne `{` und das Stück bis zum ersten LF nach dem Öffnen verworfen; Zeitlimit 2 s und 5 s für `sec.*`, `pair.complete`, `contact.delete`; `sys.hello` alle 500 ms bis zur ersten Antwort; `sys.ping` alle 5 s; `close` weist offene Anfragen ab. |
 | `src/app/core/antenna/mock-device.spec.ts` | `MockDevice` spricht die Host-API wie der Vertrag: `sys.hello` mit den Limits 2048 / 32 / 83 / 8, alle `sys.*`, `sec.*`, `id.*`, `pair.*`, `contact.*`, `msg.*`, `radio.*`, `mesh.*`, `led.*` mit den Fehlercodes des Vertrags; Ereignisse `sys.boot`, `sec.state`, `msg.status`, `msg.received`, `contact.state`; Entsperren mit dem echten Wrap, einmalige Sitzung, Ratenbegrenzung, Auto-Lock; Beispiele des Vertrags (23 Byte → 206 ms, `node_id` und Fingerabdruck „0501 3010 7790“, QR von Bob). |
 | `src/app/core/antenna/antenna-port.spec.ts` | `AntennaPort`: Zustände `disconnected`, `unprovisioned`, `locked`, `unlocked`; Entsperren von selbst, `provision`, `lock`; Fehler `no-device`, `permission-denied`, `open-failed`, `no-hello`, `proto-mismatch`, `lost`, `unlock-failed`, `rate-limited`, `keystore-failed`; Neustart und Auto-Lock entsperren wieder; zwei verpasste Heartbeats → `lost`; Ereignisse sind typisiert, unbekannte und kaputte werden ignoriert. |
+| `src/app/core/antenna/usb-serial.transport.spec.ts` | `UsbSerialTransport` gegen ein gemocktes Plugin (T06): kein Gerät ergibt `no-device`; die Reject-Codes `PERMISSION_DENIED`, `OPEN_FAILED` und `NO_DRIVER` werden zu `permission-denied`, `open-failed` und `no-device`, ein unbekannter Fehler zu `open-failed`; UTF-8 wird über Chunk-Grenzen hinweg ganz dekodiert; `detached` und der Fehler `error` melden die Verbindung als geschlossen; der Text geht unverändert zum Plugin; `close()` trennt die Verbindung und entfernt die Listener. |
 | `src/app/core/keystore/x25519.spec.ts` | X25519 gegen die Testvektoren von RFC 7748 (§5.2 und §6.1); falsche Länge und Punkte kleiner Ordnung werden abgewiesen. |
 | `src/app/core/keystore/unlock-wrap.spec.ts` | Das Entsperr-Token (`HMAC-SHA256(K_phone, "og-unlock-v1" ‖ device_id_bytes)`) und der Wrap gegen den Testvektor der Spezifikation: 60 Bytes, `wrapped_token` stimmt Byte für Byte, die Antenne packt es wieder aus, falsche Antenne, Nonce oder verfälschte Bytes werden abgelehnt. |
 | `src/app/core/keystore/keystore.service.spec.ts` | `KeystoreService` (Browser): Token pro Antenne, gleicher Schlüssel → gleiches Token, Testvektor-Wrap, bei jedem Versuch neue Einmal-Schlüssel und neuer IV. |
@@ -45,6 +46,8 @@ aus T09 kommen gezielte Tests der sichtbaren Zustände und Interaktionen dazu. D
 Parameter und zusätzlich gegen eine echte SQLite-Datenbank geprüft; das Verhalten der Repositories wird über die
 Memory-Implementierungen getestet. Die Dienste für Antenne, Nachrichten und Kontakte laufen gegen das **simulierte Gerät** (`MockDevice`), das dieselbe
 Host-API spricht wie die echte Antenne; der Test-Helfer `src/app/core/antenna/antenna-harness.testing.ts` richtet es ein.
+Der native USB-Transport lässt sich nicht ohne Hardware prüfen: Seine Spec aus T06 ersetzt deshalb das Plugin durch einen Mock und prüft die
+Fehlercodes, das Dekodieren und das Abziehen des Geräts.
 Für die Onboarding-Screens aus T09 richtet `src/testing/onboarding-harness.ts` die Memory-Datenbank, die simulierte
 Antenne, den Browser-Schlüsselspeicher und eine gemockte Navigation ein. Weitere Screen-Tests kommen mit T10 bis T13.
 
