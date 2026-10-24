@@ -11,6 +11,8 @@ import ch.offgrid.android.link.Incoming
 import ch.offgrid.android.link.LinkClosedException
 import ch.offgrid.android.link.LinkCommandException
 import ch.offgrid.android.link.LinkTimeoutException
+import ch.offgrid.android.link.bool
+import ch.offgrid.android.link.dbm
 import ch.offgrid.android.link.double
 import ch.offgrid.android.link.int
 import ch.offgrid.android.link.isNull
@@ -53,12 +55,20 @@ class Messaging(
     private val db: OffGridDatabase,
     private val antenna: AntennaManager,
     private val scope: CoroutineScope,
+    private val settings: Settings,
     private val onIncoming: (MessageEntity) -> Unit = {},
     private val track: (AnalyticsEvent) -> Unit = {},
     private val now: () -> Long = System::currentTimeMillis,
 ) : AntennaListener {
     private val sendMutex = Mutex()
+
+    /** Held while refs are handed out, matched or reconciled, so an event never sees half an update. */
+    private val refMutex = Mutex()
     private var currentDevice: String? = null
+
+    /** Link session whose refs `msg.status` events may update; null until the outbox was reconciled. */
+    @Volatile
+    private var currentSession: String? = null
 
     val conversations: Flow<List<ConversationItem>> = combine(
         db.contacts().observeAll(),
@@ -82,9 +92,16 @@ class Messaging(
                 unread = unread.firstOrNull { it.groupId == g.id }?.n ?: 0,
             )
         }
-        // Active conversations by last activity, pending contacts ("Schlüssel ausstehend") at the end.
+        // Active conversations by last activity, then contacts to pair again ("Neu koppeln"), then pending
+        // contacts ("Schlüssel ausstehend").
         (contactItems + groupItems).sortedWith(
-            compareBy<ConversationItem> { it.contact?.state == "pending" }.thenByDescending { it.activity },
+            compareBy<ConversationItem> {
+                when (it.contact?.state) {
+                    UNPAIRED -> 1
+                    "pending" -> 2
+                    else -> 0
+                }
+            }.thenByDescending { it.activity },
         )
     }
 
@@ -99,26 +116,33 @@ class Messaging(
 
     // ------------------------------------------------------------------ sending
 
+    /** A text longer than one packet goes out as several messages, see [MessageLimits.split]. */
     fun sendText(contactId: Long, text: String) = enqueue(
-        MessageEntity(contactId = contactId, direction = "out", kind = "text", text = text.trim(),
-            status = MessageStatus.LOCAL_QUEUED, sentAt = now()),
+        MessageLimits.split(text, antenna.state.value).map {
+            MessageEntity(contactId = contactId, direction = "out", kind = "text", text = it, status = MessageStatus.LOCAL_QUEUED, sentAt = now())
+        },
     )
 
     fun sendGroupText(groupId: Long, text: String) = enqueue(
-        MessageEntity(groupId = groupId, direction = "out", kind = "text", text = text.trim(),
-            status = MessageStatus.LOCAL_QUEUED, sentAt = now()),
+        MessageLimits.split(text, antenna.state.value).map {
+            MessageEntity(groupId = groupId, direction = "out", kind = "text", text = it, status = MessageStatus.LOCAL_QUEUED, sentAt = now())
+        },
     )
 
     fun sendLocation(contactId: Long, fix: GeoFix) = enqueue(
-        MessageEntity(contactId = contactId, direction = "out", kind = "geo", lat = fix.latitude, lon = fix.longitude,
+        listOf(MessageEntity(contactId = contactId, direction = "out", kind = "geo", lat = fix.latitude, lon = fix.longitude,
             accuracyM = fix.accuracyM, ageS = ((now() - fix.at) / 1000).toInt().coerceIn(0, 2550),
-            status = MessageStatus.LOCAL_QUEUED, sentAt = now()),
+            status = MessageStatus.LOCAL_QUEUED, sentAt = now())),
     )
 
     fun retry(messageId: Long) {
         scope.launch {
             val m = db.messages().byId(messageId) ?: return@launch
-            db.messages().update(m.copy(status = MessageStatus.LOCAL_QUEUED, failReason = null, msgRef = null))
+            // A new attempt: the antenna gives it a new ref and counter, the old outcome is forgotten.
+            db.messages().update(
+                m.copy(status = MessageStatus.LOCAL_QUEUED, failReason = null, msgRef = null, refSession = null, deviceState = null,
+                    retry = null, hops = null, rttMs = null, compressed = null, bytesOnAir = null, airtimeMs = null),
+            )
             flushQueue()
         }
     }
@@ -126,38 +150,50 @@ class Messaging(
     fun markRead(contactId: Long) = scope.launch { db.messages().markContactRead(contactId, now()) }
     fun markGroupRead(groupId: Long) = scope.launch { db.messages().markGroupRead(groupId, now()) }
 
-    private fun enqueue(message: MessageEntity) {
+    /** Inserts in order (the queue sends by `sentAt`, then id), then hands them to the antenna. */
+    private fun enqueue(messages: List<MessageEntity>) {
+        if (messages.isEmpty()) return
         track(AnalyticsEvent.MessageSent)
         scope.launch {
-            db.messages().insert(message)
+            messages.forEach { db.messages().insert(it) }
             flushQueue()
         }
     }
 
-    /** Hands every locally queued message to the device, oldest first. */
+    /** Hands every locally queued message to the device, oldest first, once the outbox was reconciled. */
     suspend fun flushQueue() = sendMutex.withLock {
         if (!antenna.state.value.ready) return@withLock
+        val session = currentSession ?: return@withLock
         for (m in db.messages().localQueue()) {
-            if (!handOver(m)) break
+            if (!handOver(m, session)) break
         }
     }
 
     /** Returns false when the link went away; the message then stays queued locally. */
-    private suspend fun handOver(m: MessageEntity): Boolean {
+    private suspend fun handOver(m: MessageEntity, session: String): Boolean {
         val args = argsFor(m) ?: run {
             db.messages().update(m.copy(status = MessageStatus.FAILED, failReason = "no_contact"))
             return true
         }
         return try {
             val cmd = if (m.groupId != null) "group.send" else "msg.send"
-            val result = antenna.call(cmd, args)
-            db.messages().update(
-                m.copy(status = MessageStatus.DEVICE_QUEUED, msgRef = result.int("msg_ref"), ctr = result.int("ctr") ?: m.ctr),
-            )
+            // Under refMutex: a msg.status event for the new ref waits until the ref is stored.
+            refMutex.withLock {
+                val result = antenna.call(cmd, args)
+                db.messages().update(
+                    m.copy(status = MessageStatus.DEVICE_QUEUED, msgRef = result.int("msg_ref"), refSession = session,
+                        ctr = result.int("ctr") ?: m.ctr, deviceState = result.str("state") ?: "queued",
+                        compressed = result.bool("compressed"), bytesOnAir = result.int("bytes_on_air"),
+                        airtimeMs = result.int("est_airtime_ms")),
+                )
+            }
             true
         } catch (e: LinkCommandException) {
             when (e.error.code) {
-                "E_LOCKED", "E_QUEUE_FULL", "E_BUSY" -> false
+                // Passing states: the antenna locked, or its 8 slots are taken (waiting messages hold theirs
+                // up to 30 minutes). The message stays queued; a final msg.status or the next connect flushes again.
+                // E_BUSY means the counter is exhausted (Commands.cpp: "re-pair"), so it fails like other refusals.
+                "E_LOCKED", "E_QUEUE_FULL" -> false
                 else -> {
                     db.messages().update(m.copy(status = MessageStatus.FAILED, failReason = e.error.code))
                     true
@@ -175,7 +211,8 @@ class Messaging(
             val g = db.groups().all().firstOrNull { it.id == m.groupId } ?: return null
             return buildJsonObject { put("group_id", g.deviceGroupId); put("text", m.text) }
         }
-        val c = m.contactId?.let { db.contacts().byId(it) } ?: return null
+        // A contact the antenna no longer holds has no slot to send to until it is paired again.
+        val c = m.contactId?.let { db.contacts().byId(it) }?.takeIf { it.deviceContactId != NO_SLOT } ?: return null
         return when (m.kind) {
             "geo" -> buildJsonObject {
                 put("to", c.deviceContactId); put("type", "geo"); put("lat", m.lat); put("lon", m.lon)
@@ -212,31 +249,38 @@ class Messaging(
         val name = displayName.trim()
         db.contacts().update(c.copy(displayName = name, firstName = firstName?.trim()?.ifEmpty { null },
             lastName = lastName?.trim()?.ifEmpty { null }))
-        runCatching {
-            antenna.call("contact.rename", buildJsonObject { put("contact_id", c.deviceContactId); put("name", name) })
+        if (c.deviceContactId != NO_SLOT) {
+            runCatching {
+                antenna.call("contact.rename", buildJsonObject { put("contact_id", c.deviceContactId); put("name", name) })
+            }
         }
     }
 
     suspend fun deleteContact(id: Long) {
         val c = db.contacts().byId(id) ?: return
-        runCatching {
-            antenna.call("contact.delete", buildJsonObject { put("contact_id", c.deviceContactId); put("confirm", true) })
+        if (c.deviceContactId != NO_SLOT) {
+            runCatching {
+                antenna.call("contact.delete", buildJsonObject { put("contact_id", c.deviceContactId); put("confirm", true) })
+            }
         }
         db.messages().deleteForContact(id)
         db.contacts().delete(id)
     }
 
     /**
-     * "Alle Daten löschen": removes the contacts from the device too, otherwise the next
-     * `contact.list` sync would bring them back. Settings and the device identity stay.
+     * "Alle Daten löschen". With the antenna connected it is erased too, with the authenticated factory
+     * reset (link spec 6.11): contacts, keys and identity on the antenna go, and the app sets it up again
+     * for this phone. The local data is only deleted when the antenna confirmed, so a refused reset does
+     * not leave contacts on the antenna that the app no longer shows. Without an antenna only this phone
+     * is cleared. Settings stay.
      */
-    suspend fun deleteAll() {
-        db.contacts().all().filter { it.deviceContactId != NO_SLOT }.forEach { c ->
-            runCatching {
-                antenna.call("contact.delete", buildJsonObject { put("contact_id", c.deviceContactId); put("confirm", true) })
-            }
+    suspend fun deleteAll(): ResetResult {
+        val result = if (antenna.state.value.ready) antenna.factoryReset() else ResetResult.NOT_CONNECTED
+        if (result == ResetResult.DONE || result == ResetResult.NOT_CONNECTED) {
+            db.maintenance().clearAll()
+            settings.remove(Settings.REPAIR_NOTICE)
         }
-        db.maintenance().clearAll()
+        return result
     }
 
     /** Proposed `group.create`; firmware without it answers `E_UNKNOWN_CMD`. */
@@ -259,19 +303,47 @@ class Messaging(
     override suspend fun onReady(antenna: AntennaManager, deviceId: String) {
         currentDevice = deviceId
         syncContacts(deviceId)
+        reconcileOutbox(deviceId)
         flushQueue()
     }
 
+    /**
+     * The antenna restarted while connected: its queue is gone (link spec 7.5), so every message it had
+     * is lost, and until the next [onReady] no ref is valid.
+     */
     override suspend fun onDeviceRebooted() {
-        db.messages().failDeviceQueued()
-        db.messages().clearRefs()
+        val device = currentDevice ?: return
+        refMutex.withLock {
+            currentSession = null
+            OutboxReconciler.reconcile(db.messages().openOutgoing(), device, PendingSnapshot.EMPTY, session = "")
+                .forEach { db.messages().update(it) }
+        }
+    }
+
+    /** Settles messages of earlier link sessions with `msg.pending` and starts a new session (see [OutboxReconciler]). */
+    private suspend fun reconcileOutbox(deviceId: String) = refMutex.withLock {
+        currentSession = null
+        val session = OutboxReconciler.newSession(deviceId)
+        val snapshot = try {
+            PendingSnapshot.parse(antenna.call("msg.pending"))
+        } catch (_: LinkCommandException) {
+            // Without the queue nothing can be settled; the messages keep their state until the next connect.
+            currentSession = session
+            return@withLock
+        } catch (_: LinkClosedException) {
+            return@withLock
+        } catch (_: LinkTimeoutException) {
+            return@withLock
+        }
+        OutboxReconciler.reconcile(db.messages().openOutgoing(), deviceId, snapshot, session).forEach { db.messages().update(it) }
+        currentSession = session
     }
 
     /**
      * Mirrors the device's contact slots (state, RSSI) into the local table. Local contacts of this
-     * device that it no longer lists fall back to `pending`: the current firmware mock keeps contacts
-     * in RAM only, so after a reset they must be paired again (pairing the same key reuses the row
-     * and its history).
+     * device that it no longer lists become [UNPAIRED]: the antenna was reset or reflashed (new vault,
+     * new identity) or the contact was deleted there. They keep their history and must be paired again;
+     * pairing the same key reuses the row. The count goes to [Settings.REPAIR_NOTICE] for the contact list.
      */
     private suspend fun syncContacts(deviceId: String) {
         var offset = 0
@@ -288,9 +360,12 @@ class Messaging(
             offset += list.size
             if (list.isEmpty() || offset >= (page.int("total") ?: 0)) break
         }
-        db.contacts().all()
-            .filter { it.deviceId == deviceId && it.publicKey !in seen && it.deviceContactId != NO_SLOT }
-            .forEach { db.contacts().update(it.copy(state = "pending", deviceContactId = NO_SLOT)) }
+        val gone = db.contacts().all().filter { it.deviceId == deviceId && it.publicKey !in seen && it.deviceContactId != NO_SLOT }
+        gone.forEach { db.contacts().update(it.copy(state = UNPAIRED, deviceContactId = NO_SLOT)) }
+        if (gone.isNotEmpty()) {
+            val before = settings.get(Settings.REPAIR_NOTICE)?.toIntOrNull() ?: 0
+            settings.put(Settings.REPAIR_NOTICE, (before + gone.size).toString())
+        }
     }
 
     /** Stores a device contact object (link spec 7.4). Returns the local contact id. */
@@ -309,7 +384,7 @@ class Messaging(
             displayName = if (keepName && existing != null) existing.displayName else json.str("name") ?: base.displayName,
             fingerprint = json.str("fingerprint") ?: base.fingerprint,
             state = json.str("state") ?: base.state,
-            lastRssi = json.int("last_rssi") ?: base.lastRssi,
+            lastRssi = json.dbm("last_rssi") ?: base.lastRssi,
             lastSnr = json.double("last_snr") ?: base.lastSnr,
         )
         return if (existing == null) db.contacts().insert(updated) else updated.id.also { db.contacts().update(updated) }
@@ -333,25 +408,24 @@ class Messaging(
     }
 
     private suspend fun onStatus(d: JsonObject) {
-        val m = d.int("msg_ref")?.let { db.messages().byMsgRef(it) } ?: return
-        val status = when (d.str("state")) {
-            "queued" -> MessageStatus.DEVICE_QUEUED
-            "sent", "relayed", "retrying" -> MessageStatus.SENT
-            "delivered" -> MessageStatus.DELIVERED
-            "failed", "cancelled" -> MessageStatus.FAILED
-            else -> return
+        val ref = d.int("msg_ref") ?: return
+        val state = d.str("state") ?: return
+        val updated = refMutex.withLock {
+            // Only refs of the current session: a ref from an earlier boot must never touch a newer message.
+            val session = currentSession ?: return
+            val m = db.messages().byMsgRef(ref, session) ?: return
+            OutboxReconciler.applyEvent(m, state, d.str("reason"), DeliveryDetails.parse(d))?.also { db.messages().update(it) } ?: return
         }
-        // Group messages have no end-to-end ACK, so "sent" is their final state.
-        val done = status == MessageStatus.DELIVERED || status == MessageStatus.FAILED || (m.groupId != null && status == MessageStatus.SENT)
-        db.messages().update(m.copy(status = status, failReason = d.str("reason"), msgRef = if (done) null else m.msgRef))
-        if (status == MessageStatus.DELIVERED) {
-            m.contactId?.let { db.contacts().byId(it) }?.let { db.contacts().update(it.copy(lastSeenAt = now())) }
+        if (updated.status == MessageStatus.DELIVERED) {
+            updated.contactId?.let { db.contacts().byId(it) }?.let { db.contacts().update(it.copy(lastSeenAt = now())) }
         }
+        // A final state frees a slot in the antenna's queue; messages that met E_QUEUE_FULL can go now.
+        if (updated.msgRef == null) scope.launch { flushQueue() }
     }
 
     private suspend fun onReceived(d: JsonObject) {
         val c = contactForSlot(d.int("from")) ?: return
-        val rssi = d.int("rssi")
+        val rssi = d.dbm("rssi")
         db.contacts().update(c.copy(lastRssi = rssi ?: c.lastRssi, lastSnr = d.double("snr") ?: c.lastSnr, lastSeenAt = now()))
         val groupSlot = d.int("group")
         val group = groupSlot?.let { gs -> currentDevice?.let { db.groups().byDeviceGroup(it, gs) } }
@@ -361,6 +435,7 @@ class Messaging(
             senderContactId = if (group != null) c.id else null,
             senderName = if (group != null) c.displayName else null,
             direction = "in", kind = "text", status = MessageStatus.DELIVERED, ctr = d.int("ctr"), rssi = rssi, sentAt = now(),
+            snr = d.double("snr"), hops = d.int("hops"), retry = d.int("retry"), compressed = d.bool("compressed"),
         )
         val message = when (d.str("type")) {
             "text" -> base.copy(text = d.str("text") ?: return)
@@ -387,6 +462,9 @@ class Messaging(
     companion object {
         /** Slot of a contact the device no longer holds (device slots are 1 to 32). */
         const val NO_SLOT = 0
+
+        /** Local contact state: the antenna lost this contact's keys (reset, reflash); pair again. */
+        const val UNPAIRED = "unpaired"
 
         /** Empty "remove my reaction" packet after pairing; the peer's first valid packet activates the contact. */
         fun pingArgs(slot: Int) = buildJsonObject {

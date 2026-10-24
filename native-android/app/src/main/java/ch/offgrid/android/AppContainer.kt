@@ -8,6 +8,8 @@ import android.util.Log
 import androidx.room.Room
 import ch.offgrid.android.analytics.Analytics
 import ch.offgrid.android.crypto.KeystoreUnlockTokenSource
+import ch.offgrid.android.data.MIGRATION_1_2
+import ch.offgrid.android.data.MIGRATION_2_3
 import ch.offgrid.android.data.OffGridDatabase
 import ch.offgrid.android.domain.AntennaManager
 import ch.offgrid.android.domain.BackupService
@@ -29,15 +31,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
 import java.io.File
 import java.util.UUID
 
 /** Manual dependency container; one per process. */
 class AppContainer(private val context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val db: OffGridDatabase = Room.databaseBuilder(context, OffGridDatabase::class.java, "offgrid.db").build()
+    val db: OffGridDatabase = Room.databaseBuilder(context, OffGridDatabase::class.java, "offgrid.db")
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .build()
     val settings = Settings(db.settings(), scope)
 
     val simDevice = SimulatedHeltec(SimFlashStore(File(context.filesDir, "sim-heltec.json")), scope)
@@ -66,11 +72,14 @@ class AppContainer(private val context: Context) {
             ?: UUID.randomUUID().toString().also { analyticsPrefs.edit().putString(ANALYTICS_ID, it).apply() }
     })
     val notifier = MessageNotifier(context, db)
-    val messaging = Messaging(db, antenna, scope, onIncoming = { message ->
+    val messaging = Messaging(db, antenna, scope, settings, onIncoming = { message ->
         vibrate()
         scope.launch { notifier.onIncoming(message) }
     }, track = analytics::track)
-    val pairing = Pairing(antenna, messaging, db, scope, track = analytics::track)
+    val pairing = Pairing(antenna, object : Pairing.Store {
+        override suspend fun save(deviceId: String, contact: JsonObject) = messaging.upsertFromDevice(deviceId, contact, keepName = false)
+        override fun contactState(contactId: Long) = db.contacts().observe(contactId).map { it?.state }
+    }, scope, track = analytics::track)
     val location = LocationService(context) { _linkKind.value == LinkKind.SIMULATED }
     val backup = BackupService(db, settings, antenna)
 

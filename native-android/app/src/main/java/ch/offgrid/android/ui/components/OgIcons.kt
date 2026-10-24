@@ -32,6 +32,7 @@ enum class OgIcon(val size: Dp, val stroke: Float, vararg val paths: String) {
     Download(22.dp, 2f, "M12 3v12", "M7 10l5 5 5-5", "M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"),
     File(20.dp, 2f, "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z", "M14 3v5h5"),
     Info(18.dp, 2f, circle(12f, 12f, 9f), "M12 8v5", "M12 16.5v.01"),
+    Clock(14.dp, 2.2f, circle(12f, 12f, 9f), "M12 7v5l3 2"),
     Warning(18.dp, 2f, "M12 3l9.5 17h-19z", "M12 10v4", "M12 17v.01"),
     Pin(22.dp, 2f, "M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z", circle(12f, 10f, 2.5f)),
     Map(20.dp, 2.2f, "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z", "M9 4v14", "M15 6v14"),
