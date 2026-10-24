@@ -1,5 +1,15 @@
 # Änderungen
 
+## T09 – Screens Verbinden und Name, Onboarding-Guard
+*2026-10-24*
+
+- Der Screen „Verbinden“ startet die Antennenverbindung, zeigt den Fortschritt als Live-Schrittliste und bietet „Weiter“ sowie „Erneut suchen“. „SCHRITT 1 VON 2“ erscheint nur im Onboarding.
+- „Erneut suchen“ entsperrt ein gesperrtes Gerät neu (`unlock()`), statt `connect()` zu rufen: Bei einem gesperrten, aber verbundenen Gerät kehrt `connect()` sofort zurück, ein fehlgeschlagenes Entsperren war darüber nicht wiederholbar. In allen anderen Zuständen sucht die Schaltfläche die Antenne weiterhin mit `connect()`.
+- Der Screen „Name“ prüft den Anzeigamen nach 1 bis 24 UTF-8-Bytes, richtet ein frisches Gerät ein oder gibt den Namen an ein entsperrtes Gerät. Danach schliesst er das Onboarding ab und wechselt zu den Kontakten.
+- Der funktionale Onboarding-Guard schützt alle Routen ausser `/verbinden` und `/name`. Ohne abgeschlossenes Onboarding führt er zu `/verbinden`; bei einem laufenden App-Start wartet er auf die geladenen Einstellungen.
+- Mit `localStorage og.noseed = '1'` startet die Browser-Demo ohne Demo-Daten und mit einem frischen Mock-Gerät.
+- Neue Tests prüfen Guard, Verbindungszustände, Navigation, Bytegrenzierung, Geräteeinrichtung und die sichtbaren Fehlertexte beider Screens.
+
 ## T02 – UI-Basis 2: Zustandskomponenten
 *2026-10-24*
 
