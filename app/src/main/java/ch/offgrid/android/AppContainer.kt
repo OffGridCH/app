@@ -12,6 +12,7 @@ import ch.offgrid.android.data.OffGridDatabase
 import ch.offgrid.android.domain.AntennaManager
 import ch.offgrid.android.domain.BackupService
 import ch.offgrid.android.domain.LocationService
+import ch.offgrid.android.domain.MessageNotifier
 import ch.offgrid.android.domain.Messaging
 import ch.offgrid.android.domain.Pairing
 import ch.offgrid.android.domain.Settings
@@ -64,7 +65,11 @@ class AppContainer(private val context: Context) {
         analyticsPrefs.getString(ANALYTICS_ID, null)
             ?: UUID.randomUUID().toString().also { analyticsPrefs.edit().putString(ANALYTICS_ID, it).apply() }
     })
-    val messaging = Messaging(db, antenna, scope, onIncoming = { vibrate() }, track = analytics::track)
+    val notifier = MessageNotifier(context, db)
+    val messaging = Messaging(db, antenna, scope, onIncoming = { message ->
+        vibrate()
+        scope.launch { notifier.onIncoming(message) }
+    }, track = analytics::track)
     val pairing = Pairing(antenna, messaging, db, scope, track = analytics::track)
     val location = LocationService(context) { _linkKind.value == LinkKind.SIMULATED }
     val backup = BackupService(db, settings, antenna)

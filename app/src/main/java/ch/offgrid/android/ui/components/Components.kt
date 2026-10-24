@@ -1,11 +1,24 @@
 package ch.offgrid.android.ui.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,20 +32,25 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,35 +58,44 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ch.offgrid.android.ui.theme.Grotesk
+import ch.offgrid.android.ui.theme.LocalReducedMotion
 import ch.offgrid.android.ui.theme.Og
 import ch.offgrid.android.ui.theme.OgType
 
@@ -87,38 +114,52 @@ fun OgButton(
     icon: OgIcon? = null,
     fullWidth: Boolean = true,
     containerColor: Color? = null,
+    height: Dp? = null,
+    radius: Dp? = null,
+    bordered: Boolean = variant == ButtonVariant.Secondary,
 ) {
-    val (height, shape) = when (variant) {
-        ButtonVariant.Primary -> Og.btnH to RoundedCornerShape(Og.rBtn)
-        ButtonVariant.Secondary -> Og.btn2H to RoundedCornerShape(Og.rBtn2)
-        ButtonVariant.DangerText -> 56.dp to RoundedCornerShape(0.dp)
+    val defaultHeight = when (variant) {
+        ButtonVariant.Primary -> Og.btnH
+        ButtonVariant.Secondary -> Og.btn2H
+        ButtonVariant.DangerText -> 56.dp
     }
+    val shape = RoundedCornerShape(
+        radius ?: when (variant) {
+            ButtonVariant.Primary -> Og.rBtn
+            ButtonVariant.Secondary -> Og.rBtn2
+            ButtonVariant.DangerText -> 0.dp
+        },
+    )
     val textColor = when (variant) {
         ButtonVariant.Primary -> Og.onAccent
         ButtonVariant.Secondary -> Og.text
         ButtonVariant.DangerText -> Og.danger
     }
+    // Disabled buttons fade instead of jumping between 100 % and 40 %.
+    val alpha by animateFloatAsState(if (enabled) 1f else 0.4f, tween(150), label = "enabled")
     Row(
         modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
-            .height(height)
-            .alpha(if (enabled) 1f else 0.4f)
+            // A minimum instead of a fixed height, so labels can wrap at large font scales.
+            .heightIn(min = height ?: defaultHeight)
+            .alpha(alpha)
             .clip(shape)
             .then(
                 when (variant) {
                     ButtonVariant.Primary -> Modifier.background(containerColor ?: Og.accent)
-                    ButtonVariant.Secondary -> Modifier.background(containerColor ?: Color.Transparent).border(1.dp, Og.border, shape)
+                    ButtonVariant.Secondary -> Modifier.background(containerColor ?: Color.Transparent)
                     ButtonVariant.DangerText -> Modifier
                 },
             )
+            .then(if (bordered) Modifier.border(1.dp, Og.border, shape) else Modifier)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalArrangement = if (variant == ButtonVariant.DangerText) Arrangement.Start else Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
             OgIconView(icon, textColor, size = if (variant == ButtonVariant.Primary) 20.dp else 18.dp)
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(if (variant == ButtonVariant.Primary) 10.dp else 8.dp))
         }
         Text(
             text,
@@ -127,6 +168,7 @@ fun OgButton(
                 fontSize = if (variant == ButtonVariant.Secondary) 15.sp else 16.sp,
                 fontWeight = FontWeight(if (variant == ButtonVariant.Primary) 700 else 600),
                 color = textColor,
+                textAlign = if (variant == ButtonVariant.DangerText) TextAlign.Start else TextAlign.Center,
             ),
         )
     }
@@ -134,11 +176,19 @@ fun OgButton(
 
 /** `og-icon-button`: 44x44, `round` on surface with border, `plain` for the back arrow. */
 @Composable
-fun OgIconButton(icon: OgIcon, label: String, onClick: () -> Unit, round: Boolean = true, modifier: Modifier = Modifier, tint: Color = Og.text) {
+fun OgIconButton(
+    icon: OgIcon,
+    label: String,
+    onClick: () -> Unit,
+    round: Boolean = true,
+    modifier: Modifier = Modifier,
+    tint: Color = Og.text,
+    plainRadius: Dp = 14.dp,
+) {
     Box(
         modifier = modifier
             .size(44.dp)
-            .clip(if (round) CircleShape else RoundedCornerShape(14.dp))
+            .clip(if (round) CircleShape else RoundedCornerShape(plainRadius))
             .then(if (round) Modifier.background(Og.surface).border(1.dp, Og.border, CircleShape) else Modifier)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = label },
@@ -163,17 +213,23 @@ fun OgTopBar(title: String, onBack: () -> Unit, backLabel: String, trailing: @Co
 }
 
 @Composable
-fun SectionLabel(text: String, list: Boolean = false, color: Color = Og.text3) {
+fun SectionLabel(text: String, list: Boolean = false, color: Color = Og.text3, top: Dp = 26.dp, weight: Int = 400) {
     Text(
         text.uppercase(),
-        style = OgType.section.copy(color = color),
-        modifier = Modifier.padding(start = if (list) 20.dp else 28.dp, top = 26.dp, end = 28.dp, bottom = 8.dp),
+        style = OgType.section.copy(color = color, fontWeight = FontWeight(weight)),
+        modifier = Modifier.padding(start = if (list) 20.dp else 28.dp, top = top, end = 28.dp, bottom = 8.dp).semantics { heading() },
     )
 }
 
 /** `og-card`: surface, 1px border, radius 20, side margin 16. */
 @Composable
-fun OgCard(modifier: Modifier = Modifier, padded: Boolean = false, gap: Dp = 14.dp, content: @Composable ColumnScope.() -> Unit) {
+fun OgCard(
+    modifier: Modifier = Modifier,
+    padded: Boolean = false,
+    gap: Dp = 14.dp,
+    padding: PaddingValues = PaddingValues(16.dp),
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(
         modifier = modifier
             .padding(horizontal = Og.gutter)
@@ -181,7 +237,7 @@ fun OgCard(modifier: Modifier = Modifier, padded: Boolean = false, gap: Dp = 14.
             .clip(RoundedCornerShape(Og.rCard))
             .background(Og.surface)
             .border(1.dp, Og.border, RoundedCornerShape(Og.rCard))
-            .then(if (padded) Modifier.padding(16.dp) else Modifier),
+            .then(if (padded) Modifier.padding(padding) else Modifier),
         verticalArrangement = if (padded) Arrangement.spacedBy(gap) else Arrangement.Top,
         content = content,
     )
@@ -192,15 +248,23 @@ fun CardDivider() = HorizontalDivider(thickness = 1.dp, color = Og.line)
 
 /** `og-info-row`: label left (row style, text-2), value right (mono 13). */
 @Composable
-fun InfoRow(label: String, value: String? = null, last: Boolean = false, content: (@Composable () -> Unit)? = null) {
+fun InfoRow(
+    label: String,
+    value: String? = null,
+    last: Boolean = false,
+    minHeight: Dp = Og.rowMin,
+    content: (@Composable () -> Unit)? = null,
+) {
     Column {
         Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = Og.rowMin).padding(horizontal = 16.dp),
+            // One TalkBack stop per row: "Firmware, 0.1.0".
+            modifier = Modifier.fillMaxWidth().heightIn(min = minHeight).padding(horizontal = 16.dp, vertical = 6.dp)
+                .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(label, style = OgType.row.copy(fontSize = 15.sp))
-            if (content != null) content() else if (value != null) Text(value, style = OgType.value)
+            Text(label, style = OgType.row.copy(fontSize = 15.sp), modifier = Modifier.weight(1f))
+            if (content != null) content() else if (value != null) Text(value, style = OgType.value, textAlign = TextAlign.End)
         }
         if (!last) CardDivider()
     }
@@ -212,7 +276,13 @@ enum class AvatarVariant { Normal, Pending, Square }
 
 /** `og-avatar`: 5x5 key pattern in a circle; dashed circle while the key exchange is pending. */
 @Composable
-fun OgAvatar(pattern: BooleanArray?, size: Dp, variant: AvatarVariant = AvatarVariant.Normal, modifier: Modifier = Modifier) {
+fun OgAvatar(
+    pattern: BooleanArray?,
+    size: Dp,
+    variant: AvatarVariant = AvatarVariant.Normal,
+    modifier: Modifier = Modifier,
+    background: Color = Og.surface,
+) {
     val (cell, gap) = when {
         size >= 96.dp -> 9.dp to 2.dp
         size >= 72.dp -> 7.dp to 1.5.dp
@@ -236,13 +306,17 @@ fun OgAvatar(pattern: BooleanArray?, size: Dp, variant: AvatarVariant = AvatarVa
     }
     val cellColor = if (variant == AvatarVariant.Square) Og.accent else Og.text2
     Box(
-        modifier = modifier.size(size).clip(shape).background(Og.surface).border(1.dp, Og.border, shape),
+        modifier = modifier.size(size).clip(shape).background(background).border(1.dp, Og.border, shape),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(cell * 5 + gap * 4)) {
             val c = cell.toPx()
             val g = gap.toPx()
-            val radius = if (size >= 96.dp) 2.dp.toPx() else 1.dp.toPx()
+            val radius = when {
+                size >= 96.dp -> 2.dp.toPx()
+                size >= 72.dp -> 1.5.dp.toPx()
+                else -> 1.dp.toPx()
+            }
             pattern?.forEachIndexed { index, on ->
                 if (on) {
                     val x = (index % 5) * (c + g)
@@ -259,6 +333,14 @@ fun OgAvatar(pattern: BooleanArray?, size: Dp, variant: AvatarVariant = AvatarVa
 fun SignalBars(level: Int, modifier: Modifier = Modifier, small: Boolean = false, label: String? = null) {
     val w = if (small) 15.dp else 20.dp
     val h = if (small) 11.dp else 14.dp
+    // Bars light up one after another when the level rises (sent → delivered, signal changes).
+    val colors = List(4) { i ->
+        animateColorAsState(
+            if (i < level) Og.accent else Og.signalOff,
+            tween(durationMillis = 180, delayMillis = 60 * i),
+            label = "bar$i",
+        ).value
+    }
     Canvas(
         modifier
             .size(w, h)
@@ -269,7 +351,7 @@ fun SignalBars(level: Int, modifier: Modifier = Modifier, small: Boolean = false
         val bars = listOf(0f to 10f, 5.5f to 7f, 11f to 4f, 16.5f to 0f)
         bars.forEachIndexed { i, (x, y) ->
             drawRoundRect(
-                color = if (i < level) Og.accent else Og.signalOff,
+                color = colors[i],
                 topLeft = Offset(x * sx, y * sy),
                 size = Size(3.5f * sx, (14f - y) * sy),
                 cornerRadius = CornerRadius(1f * sx, 1f * sy),
@@ -280,19 +362,28 @@ fun SignalBars(level: Int, modifier: Modifier = Modifier, small: Boolean = false
 
 @Composable
 fun StatusDot(ok: Boolean) {
-    Box(Modifier.size(8.dp).clip(CircleShape).background(if (ok) Og.ok else Og.danger))
+    val color by animateColorAsState(if (ok) Og.ok else Og.danger, tween(250), label = "status")
+    Box(Modifier.size(8.dp).clip(CircleShape).background(color))
 }
 
-/** Unread badge: min 18x18 pill on accent, 11/700. */
+/** Unread badge: min 18x18 pill on accent, 11/700. Pops in when the first unread message arrives. */
 @Composable
 fun OgBadge(count: Int) {
-    if (count <= 0) return
-    Box(
-        Modifier.heightIn(min = 18.dp).widthIn(min = 18.dp).clip(RoundedCornerShape(999.dp)).background(Og.accent)
-            .padding(horizontal = 5.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(if (count > 99) "99+" else count.toString(), style = TextStyle(fontFamily = Grotesk, fontSize = 11.sp, fontWeight = FontWeight(700), color = Og.onAccent))
+    // Keeps the last count on screen while the badge animates out.
+    val shown = remember { mutableIntStateOf(count) }
+    if (count > 0 && shown.intValue != count) shown.intValue = count
+    AnimatedVisibility(count > 0, enter = scaleIn(tween(180)) + fadeIn(tween(180)), exit = scaleOut(tween(120)) + fadeOut(tween(120))) {
+        Box(
+            Modifier.heightIn(min = 18.dp).widthIn(min = 18.dp).clip(RoundedCornerShape(999.dp)).background(Og.accent)
+                .padding(horizontal = 5.dp)
+                .semantics { contentDescription = "${shown.intValue} ungelesen" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                if (shown.intValue > 99) "99+" else shown.intValue.toString(),
+                style = TextStyle(fontFamily = Grotesk, fontSize = 11.sp, fontWeight = FontWeight(700), color = Og.onAccent),
+            )
+        }
     }
 }
 
@@ -312,13 +403,14 @@ fun OgBanner(title: String, text: String, actionLabel: String?, onAction: () -> 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // role="status": TalkBack announces the banner when it appears.
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(title, style = TextStyle(fontFamily = Grotesk, fontSize = 15.sp, fontWeight = FontWeight(650), color = Og.dangerTitle))
             Text(text, style = TextStyle(fontFamily = Grotesk, fontSize = 13.sp, lineHeight = 18.sp, color = Og.dangerText))
         }
         if (actionLabel != null) {
             Box(
-                Modifier.height(40.dp).clip(RoundedCornerShape(12.dp)).background(Og.text)
+                Modifier.heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp)).background(Og.text)
                     .clickable(role = Role.Button, onClick = onAction).padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center,
             ) { Text(actionLabel, style = TextStyle(fontFamily = Grotesk, fontSize = 14.sp, fontWeight = FontWeight(700), color = Og.bg)) }
@@ -336,7 +428,8 @@ fun OgNote(text: String, modifier: Modifier = Modifier) {
             .clip(RoundedCornerShape(Og.rBtn))
             .background(Og.dangerBg)
             .border(1.dp, Og.dangerBorder, RoundedCornerShape(Og.rBtn))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         OgIconView(OgIcon.Warning, Og.dangerTitle, Modifier.padding(top = 1.dp))
@@ -374,23 +467,35 @@ fun StepList(steps: List<Step>, compact: Boolean = false, spinner: Boolean = tru
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
-                    when (step.state) {
-                        StepState.Done -> Box(
-                            Modifier.size(26.dp).clip(RoundedCornerShape(Og.rXs)).background(Og.accent),
-                            contentAlignment = Alignment.Center,
-                        ) { OgIconView(OgIcon.Check, Og.onAccent) }
-                        StepState.Active -> if (spinner) Spinner() else PulseDot()
-                        StepState.Todo -> Box(Modifier.size(26.dp).border(1.5.dp, Og.borderMuted, RoundedCornerShape(9.dp)))
+                // The box pops from spinner/pulse to the check when a step completes.
+                AnimatedContent(
+                    targetState = step.state,
+                    transitionSpec = {
+                        (scaleIn(tween(220), initialScale = 0.6f) + fadeIn(tween(220))) togetherWith fadeOut(tween(120))
+                    },
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(26.dp),
+                    label = "step",
+                ) { state ->
+                    Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
+                        when (state) {
+                            StepState.Done -> Box(
+                                Modifier.size(26.dp).clip(RoundedCornerShape(Og.rXs)).background(Og.accent),
+                                contentAlignment = Alignment.Center,
+                            ) { OgIconView(OgIcon.Check, Og.onAccent) }
+                            StepState.Active -> if (spinner) Spinner() else PulseDot()
+                            StepState.Todo -> Box(Modifier.size(26.dp).border(1.5.dp, Og.borderMuted, RoundedCornerShape(9.dp)))
+                        }
                     }
                 }
+                val textColor by animateColorAsState(if (step.state == StepState.Todo) Og.text3 else Og.text, tween(220), label = "stepText")
                 Text(
                     step.label,
                     modifier = Modifier.weight(1f),
                     style = TextStyle(
                         fontFamily = Grotesk, fontSize = 15.sp,
                         fontWeight = FontWeight(if (step.state == StepState.Active) 600 else 400),
-                        color = if (step.state == StepState.Todo) Og.text3 else Og.text,
+                        color = textColor,
                     ),
                 )
                 if (step.meta != null) {
@@ -402,25 +507,40 @@ fun StepList(steps: List<Step>, compact: Boolean = false, spinner: Boolean = tru
     }
 }
 
+/** CSS `ease-out`, used by the design's pulse keyframes. */
+val CssEaseOut = CubicBezierEasing(0f, 0f, 0.58f, 1f)
+
+/** 18x18 ring with an accent quarter turning in 0.9 s (`og-spin`); still when motion is reduced. */
 @Composable
 fun Spinner(size: Dp = 18.dp) {
-    val transition = rememberInfiniteTransition(label = "spin")
-    val angle by transition.animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "angle")
+    val angle = if (LocalReducedMotion.current) {
+        0f
+    } else {
+        val transition = rememberInfiniteTransition(label = "spin")
+        transition.animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "angle").value
+    }
     Canvas(Modifier.size(size)) {
         val stroke = 2.5.dp.toPx()
-        drawCircle(Og.borderMuted, radius = this.size.minDimension / 2 - stroke / 2, style = Stroke(stroke))
-        drawArc(Og.accent, angle - 90f, 90f, false, style = Stroke(stroke),
+        // Track colour from `Antenne.dc.html` (#2E3440).
+        drawCircle(Og.signalOff, radius = this.size.minDimension / 2 - stroke / 2, style = Stroke(stroke))
+        drawArc(Og.accent, angle - 135f, 90f, false, style = Stroke(stroke),
             topLeft = Offset(stroke / 2, stroke / 2), size = Size(this.size.width - stroke, this.size.height - stroke))
     }
 }
 
+/** 12 px accent dot whose shadow grows from 0 to 10 px and fades out (`og-pulse`, 1.6 s ease-out). */
 @Composable
 private fun PulseDot() {
-    val transition = rememberInfiniteTransition(label = "pulse")
-    val t by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Restart), label = "t")
+    val t = if (LocalReducedMotion.current) {
+        0f
+    } else {
+        val transition = rememberInfiniteTransition(label = "pulse")
+        transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1600, easing = CssEaseOut), RepeatMode.Restart), label = "t").value
+    }
     Canvas(Modifier.size(32.dp)) {
         val base = 6.dp.toPx()
-        drawCircle(Og.accentPulse.copy(alpha = 0.55f * (1 - t)), radius = base + 10.dp.toPx() * t)
+        // accentPulse already carries the 0.55 start opacity; it fades to 0 as the ring grows.
+        drawCircle(Og.accentPulse.copy(alpha = Og.accentPulse.alpha * (1 - t)), radius = base + 10.dp.toPx() * t)
         drawCircle(Og.accent, radius = base)
     }
 }
@@ -440,9 +560,14 @@ fun OgTextField(
     hint: String? = null,
     error: String? = null,
     onBlur: () -> Unit = {},
+    gap: Dp = 6.dp,
+    capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
+    imeAction: ImeAction = ImeAction.Default,
+    onImeAction: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val borderColor by animateColorAsState(if (focused) Og.accent else Og.border, tween(150), label = "focus")
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
         Text(
             buildAnnotatedString {
                 append(label)
@@ -454,13 +579,18 @@ fun OgTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            textStyle = TextStyle(fontFamily = Grotesk, fontSize = 16.sp, color = Og.text, letterSpacing = if (password) 2.sp else 0.sp),
+            textStyle = TextStyle(fontFamily = Grotesk, fontSize = 16.sp, color = Og.text),
             cursorBrush = SolidColor(Og.accent),
             visualTransformation = if (password) PasswordVisualTransformation('•') else VisualTransformation.None,
-            keyboardOptions = if (password) KeyboardOptions(keyboardType = KeyboardType.Password) else KeyboardOptions.Default,
+            keyboardOptions = KeyboardOptions(
+                capitalization = capitalization,
+                keyboardType = if (password) KeyboardType.Password else KeyboardType.Text,
+                imeAction = imeAction,
+            ),
+            keyboardActions = KeyboardActions(onAny = { onImeAction?.invoke() ?: defaultKeyboardAction(imeAction) }),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(Og.inputH)
+                .heightIn(min = Og.inputH)
                 .onFocusChanged {
                     if (focused && !it.isFocused) onBlur()
                     focused = it.isFocused
@@ -468,9 +598,9 @@ fun OgTextField(
                 .semantics { contentDescription = label },
             decorationBox = { inner ->
                 Box(
-                    Modifier.fillMaxWidth().height(Og.inputH).clip(RoundedCornerShape(Og.rInput)).background(Og.input)
-                        .border(1.dp, if (focused) Og.accent else Og.border, RoundedCornerShape(Og.rInput))
-                        .padding(horizontal = 14.dp),
+                    Modifier.fillMaxWidth().heightIn(min = Og.inputH).clip(RoundedCornerShape(Og.rInput)).background(Og.input)
+                        .border(1.dp, borderColor, RoundedCornerShape(Og.rInput))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     contentAlignment = Alignment.CenterStart,
                 ) {
                     if (value.isEmpty() && placeholder != null) {
@@ -485,47 +615,70 @@ fun OgTextField(
     }
 }
 
-/** `og-switch`: 52x32 track, 26 knob. */
+/**
+ * `og-switch`: 52x32 track, 26 knob, 150 ms transition. Without [onCheckedChange] it only draws,
+ * for rows that are toggleable as a whole (bigger touch target, one TalkBack stop).
+ */
 @Composable
-fun OgSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, label: String) {
+fun OgSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, label: String? = null) {
+    val spec = tween<Dp>(150)
+    val knobX by animateDpAsState(if (checked) 20.dp else 0.dp, spec, label = "knob")
+    val track by animateColorAsState(if (checked) Og.accent else Og.signalOff, tween(150), label = "track")
+    val knob by animateColorAsState(if (checked) Og.onAccent else Og.text3, tween(150), label = "knobColor")
     Box(
         Modifier
             .size(52.dp, 32.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(if (checked) Og.accent else Og.signalOff)
-            .clickable(role = Role.Switch) { onCheckedChange(!checked) }
-            .semantics { contentDescription = label; stateDescription = if (checked) "an" else "aus" }
+            .background(track)
+            .then(
+                if (onCheckedChange != null) {
+                    Modifier.toggleable(checked, role = Role.Switch, onValueChange = onCheckedChange)
+                        .semantics { if (label != null) contentDescription = label }
+                } else {
+                    Modifier
+                },
+            )
             .padding(3.dp),
-        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Box(Modifier.size(26.dp).clip(CircleShape).background(if (checked) Og.onAccent else Og.text3))
+        Box(Modifier.offset { IntOffset(knobX.roundToPx(), 0) }.size(26.dp).clip(CircleShape).background(knob))
     }
 }
 
-/** `og-segmented`: two tabs, the active one on light ground. */
+/** `og-segmented`: two tabs, the active one on light ground; the highlight slides between them. */
 @Composable
-fun OgSegmented(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
-    Row(
+fun OgSegmented(options: List<Pair<String, String>>, selected: String, label: String, onSelect: (String) -> Unit) {
+    val index = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
+    val position by animateFloatAsState(index.toFloat(), tween(200, easing = FastOutSlowInEasing), label = "segment")
+    Box(
         Modifier
             .padding(start = 16.dp, top = 8.dp, end = 16.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(Og.surface)
             .border(1.dp, Og.border, RoundedCornerShape(16.dp))
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(4.dp)
+            .semantics { contentDescription = label }
+            .selectableGroup(),
     ) {
-        options.forEach { (value, label) ->
-            val active = value == selected
-            Box(
-                Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
-                    .background(if (active) Og.text else Color.Transparent)
-                    .clickable(role = Role.Tab) { onSelect(value) }
-                    .semantics { this.selected = active },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(label, style = TextStyle(fontFamily = Grotesk, fontSize = 15.sp, fontWeight = FontWeight(if (active) 700 else 500),
-                    color = if (active) Og.bg else Og.text2))
+        // Sliding light segment behind the labels.
+        Canvas(Modifier.matchParentSize()) {
+            val gap = 4.dp.toPx()
+            val w = (size.width - gap * (options.size - 1)) / options.size
+            drawRoundRect(Og.text, Offset(position * (w + gap), 0f), Size(w, size.height), CornerRadius(12.dp.toPx()))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            options.forEach { (value, text) ->
+                val active = value == selected
+                val color by animateColorAsState(if (active) Og.bg else Og.text2, tween(200), label = "segText")
+                Box(
+                    Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
+                        .selectable(active, role = Role.Tab) { onSelect(value) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(text, textAlign = TextAlign.Center, style = TextStyle(fontFamily = Grotesk, fontSize = 15.sp,
+                        fontWeight = FontWeight(if (active) 700 else 500), color = color))
+                }
             }
         }
     }
@@ -534,23 +687,25 @@ fun OgSegmented(options: List<Pair<String, String>>, selected: String, onSelect:
 /** `og-check-row` for the member picker. */
 @Composable
 fun CheckRow(name: String, pattern: BooleanArray?, checked: Boolean, enabled: Boolean, last: Boolean, onToggle: () -> Unit) {
+    val alpha by animateFloatAsState(if (enabled) 1f else 0.4f, tween(150), label = "enabled")
     Column {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 64.dp).alpha(if (enabled) 1f else 0.4f)
-                .clickable(enabled = enabled, role = Role.Checkbox, onClick = onToggle)
-                .semantics { stateDescription = if (checked) "ausgewählt" else "nicht ausgewählt" }
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).alpha(alpha)
+                .toggleable(checked, enabled = enabled, role = Role.Checkbox) { onToggle() }
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            OgAvatar(pattern, 40.dp)
+            OgAvatar(pattern, 40.dp, background = Og.bg)
             Text(name, modifier = Modifier.weight(1f), style = TextStyle(fontFamily = Grotesk, fontSize = 16.sp, fontWeight = FontWeight(600), color = Og.text))
-            if (checked) {
-                Box(Modifier.size(24.dp).clip(RoundedCornerShape(7.dp)).background(Og.accent), contentAlignment = Alignment.Center) {
-                    OgIconView(OgIcon.Check, Og.onAccent)
+            Crossfade(checked, animationSpec = tween(150), label = "check") { on ->
+                if (on) {
+                    Box(Modifier.size(24.dp).clip(RoundedCornerShape(7.dp)).background(Og.accent), contentAlignment = Alignment.Center) {
+                        OgIconView(OgIcon.Check, Og.onAccent)
+                    }
+                } else {
+                    Box(Modifier.size(24.dp).border(1.5.dp, Og.borderMuted, RoundedCornerShape(7.dp)))
                 }
-            } else {
-                Box(Modifier.size(24.dp).border(1.5.dp, Og.borderMuted, RoundedCornerShape(7.dp)))
             }
         }
         if (!last) CardDivider()
@@ -572,14 +727,16 @@ fun CenteredBody(text: String, modifier: Modifier = Modifier, color: Color = Og.
     Text(text, modifier = modifier, style = OgType.body2.copy(color = color, textAlign = TextAlign.Center))
 }
 
-/** Dashed border for queued bubbles (`1.5px dashed accent`). */
-fun Modifier.dashedBorder(color: Color, width: Dp, radius: Dp, dash: Dp = 6.dp, gapLen: Dp = 4.dp): Modifier = drawBehind {
+/**
+ * Dashed border for queued bubbles (`1.5px dashed accent`) that follows [shape], so the small tail
+ * corner stays small. The outline is inset by half the stroke so the clip does not cut it.
+ */
+fun Modifier.dashedBorder(color: Color, width: Dp, shape: Shape, dash: Dp = 6.dp, gapLen: Dp = 4.dp): Modifier = drawWithCache {
     val stroke = width.toPx()
-    drawRoundRect(
-        color = color,
-        topLeft = Offset(stroke / 2, stroke / 2),
-        size = Size(size.width - stroke, size.height - stroke),
-        cornerRadius = CornerRadius(radius.toPx(), radius.toPx()),
-        style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash.toPx(), gapLen.toPx()))),
-    )
+    val inner = Size(size.width - stroke, size.height - stroke)
+    val path = Path().apply { addOutline(shape.createOutline(inner, layoutDirection, this@drawWithCache)) }
+    val style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash.toPx(), gapLen.toPx())))
+    onDrawBehind {
+        translate(stroke / 2, stroke / 2) { drawPath(path, color, style = style) }
+    }
 }

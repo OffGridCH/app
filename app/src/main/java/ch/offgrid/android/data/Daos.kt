@@ -93,6 +93,9 @@ interface MessageDao {
     @Update
     suspend fun update(message: MessageEntity)
 
+    @Query("UPDATE messages SET peerReaction = :emoji WHERE id = :id")
+    suspend fun setReaction(id: Long, emoji: String?)
+
     @Query("UPDATE messages SET readAt = :at WHERE contactId = :contactId AND direction = 'in' AND readAt IS NULL")
     suspend fun markContactRead(contactId: Long, at: Long)
 

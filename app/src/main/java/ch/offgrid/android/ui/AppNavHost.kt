@@ -1,5 +1,11 @@
 package ch.offgrid.android.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -8,6 +14,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -17,6 +25,7 @@ import androidx.navigation.navArgument
 import ch.offgrid.android.AppContainer
 import ch.offgrid.android.analytics.AnalyticsEvent
 import ch.offgrid.android.analytics.Screen
+import ch.offgrid.android.domain.Conversation
 import ch.offgrid.android.domain.Settings
 import ch.offgrid.android.ui.screens.AddContactScreen
 import ch.offgrid.android.ui.screens.ChatScreen
@@ -31,6 +40,7 @@ import ch.offgrid.android.ui.screens.NameScreen
 import ch.offgrid.android.ui.screens.NewGroupScreen
 import ch.offgrid.android.ui.screens.SettingsScreen
 import ch.offgrid.android.ui.theme.Og
+import kotlinx.coroutines.flow.MutableStateFlow
 
 val LocalApp = staticCompositionLocalOf<AppContainer> { error("AppContainer not provided") }
 
@@ -56,8 +66,12 @@ object Routes {
     fun group(id: Long) = "gruppe/$id"
 }
 
+/** Shared-axis step between screens: 30 dp slide plus fade, reversed on back. */
+private const val AXIS_MS = 300
+private val axisEasing = FastOutSlowInEasing
+
 @Composable
-fun AppNavHost() {
+fun AppNavHost(openRequest: MutableStateFlow<Conversation?>) {
     val app = LocalApp.current
     val onboarded by produceState<Boolean?>(null) { value = app.settings.get(Settings.ONBOARDED) == "true" }
     val done = onboarded ?: return
@@ -69,10 +83,31 @@ fun AppNavHost() {
             Screen.fromRoute(entry.destination.route)?.let { app.analytics.track(AnalyticsEvent.ScreenViewed(it)) }
         }
     }
+    LaunchedEffect(nav, done) {
+        // Notification taps open the conversation on top of the contact list. Before onboarding
+        // there is nothing to open.
+        openRequest.collect { conversation ->
+            if (conversation == null || !done) return@collect
+            val route = when (conversation) {
+                is Conversation.Direct -> Routes.chat(conversation.contactId)
+                is Conversation.Group -> Routes.group(conversation.groupId)
+            }
+            nav.navigate(route) {
+                popUpTo(Routes.CONTACTS)
+                launchSingleTop = true
+            }
+            openRequest.value = null
+        }
+    }
+    val shift = with(LocalDensity.current) { 30.dp.roundToPx() }
     NavHost(
         navController = nav,
         startDestination = if (done) Routes.CONTACTS else Routes.CONNECT,
         modifier = Modifier.fillMaxSize().background(Og.bg),
+        enterTransition = { slideInHorizontally(tween(AXIS_MS, easing = axisEasing)) { shift } + fadeIn(tween(AXIS_MS)) },
+        exitTransition = { slideOutHorizontally(tween(AXIS_MS, easing = axisEasing)) { -shift } + fadeOut(tween(AXIS_MS / 2)) },
+        popEnterTransition = { slideInHorizontally(tween(AXIS_MS, easing = axisEasing)) { -shift } + fadeIn(tween(AXIS_MS)) },
+        popExitTransition = { slideOutHorizontally(tween(AXIS_MS, easing = axisEasing)) { shift } + fadeOut(tween(AXIS_MS / 2)) },
     ) {
         composable(Routes.CONNECT) {
             ConnectScreen(onNext = { onboardingDone ->

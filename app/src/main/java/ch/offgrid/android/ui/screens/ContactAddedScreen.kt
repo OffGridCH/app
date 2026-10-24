@@ -86,18 +86,26 @@ fun ContactAddedScreen(nav: NavHostController, contactId: Long) {
             ) {
                 Box {
                     OgAvatar(patternFor(c.fingerprint), 96.dp)
+                    // `right: -2px; bottom: -2px` in KontaktBenennen.dc.html; the check is drawn 3.2 wide there.
                     Box(
-                        Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 2.dp).size(32.dp).clip(CircleShape)
+                        Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp).size(32.dp).clip(CircleShape)
                             .background(Og.ok).border(3.dp, Og.bg, CircleShape),
                         contentAlignment = Alignment.Center,
-                    ) { OgIconView(OgIcon.Check, Og.onAccent, size = 14.dp) }
+                    ) { OgIconView(OgIcon.Check, Og.onAccent, size = 14.dp, strokeWidth = 3.2f) }
                 }
-                Text("Schlüssel ausgetauscht", style = OgType.hero, modifier = Modifier.semantics { heading() })
-                Text(
-                    "Vergleicht das Muster auf beiden Handys. Sieht es gleich aus, hat alles geklappt.",
-                    style = OgType.body2.copy(textAlign = TextAlign.Center),
-                    modifier = Modifier.widthIn(max = 300.dp),
-                )
+                // Heading and text form their own group with gap 8 under the 16 below the avatar.
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Schlüssel ausgetauscht",
+                        style = OgType.hero.copy(textAlign = TextAlign.Center),
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        "Vergleicht das Muster auf beiden Handys. Sieht es gleich aus, hat alles geklappt.",
+                        style = OgType.body2.copy(textAlign = TextAlign.Center),
+                        modifier = Modifier.widthIn(max = 300.dp),
+                    )
+                }
             }
             Spacer(Modifier.height(32.dp))
             OgCard(padded = true) {
@@ -111,7 +119,8 @@ fun ContactAddedScreen(nav: NavHostController, contactId: Long) {
                 }
             }
         }
-        Footer {
+        // The design has no gap above the buttons (`padding: 0 16px 26px`); the flexible space does it.
+        Footer(top = 0.dp) {
             OgButton("Speichern und schreiben", enabled = nameValid, onClick = {
                 scope.launch {
                     app.messaging.renameContact(c.id, displayName, firstName, lastName)

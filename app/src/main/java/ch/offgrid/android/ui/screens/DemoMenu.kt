@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -35,14 +36,13 @@ import kotlinx.serialization.json.put
  * radio range, switching between simulated and USB link, and the firmware mock's `mock.receive`.
  */
 @Composable
-fun BoxScope.DemoMenu(onClose: () -> Unit) {
+fun BoxScope.DemoMenu(visible: Boolean, onClose: () -> Unit) {
     val app = LocalApp.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val kind by app.linkKind.collectAsStateWithLifecycle()
     val antenna by app.antenna.state.collectAsStateWithLifecycle()
     var status by remember { mutableStateOf<String?>(null) }
-    var inRange by remember { mutableStateOf(true) }
     val demo = remember { DemoData(app) }
     fun run(label: String, block: suspend () -> Unit) {
         status = "$label …"
@@ -51,7 +51,7 @@ fun BoxScope.DemoMenu(onClose: () -> Unit) {
         }
     }
 
-    OgSheet("Testmenü", onClose = onClose) {
+    OgSheet(visible, "Testmenü", onClose = onClose) {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 "Antenne: ${if (kind == LinkKind.SIMULATED) "simuliert" else "USB"} · ${antenna.phase.name.lowercase()}",
@@ -66,10 +66,14 @@ fun BoxScope.DemoMenu(onClose: () -> Unit) {
                     clipboard.setPrimaryClip(ClipData.newPlainText("OffGrid-Code", code))
                     status = "Code kopiert"
                 }, variant = ButtonVariant.Secondary)
-                OgButton(if (inRange) "Alle ausser Reichweite" else "Alle in Reichweite", {
-                    inRange = !inRange
-                    run("Reichweite") { demo.setAllInRange(inRange) }
-                }, variant = ButtonVariant.Secondary)
+                // Two buttons instead of a toggle: the simulated antenna keeps the range in its flash
+                // across restarts, so a toggle state kept here would start out wrong.
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OgButton("Alle ausser Reichweite", { run("Ausser Reichweite") { demo.setAllInRange(false) } },
+                        Modifier.weight(1f), variant = ButtonVariant.Secondary)
+                    OgButton("Alle in Reichweite", { run("In Reichweite") { demo.setAllInRange(true) } },
+                        Modifier.weight(1f), variant = ButtonVariant.Secondary)
+                }
                 OgButton(if (app.simLink.pluggedIn) "Antenne ausstecken" else "Antenne einstecken", {
                     if (app.simLink.pluggedIn) {
                         app.simLink.unplug()

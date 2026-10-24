@@ -1,8 +1,20 @@
 package ch.offgrid.android.ui.theme
 
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
@@ -41,6 +53,9 @@ object Og {
 
     val signalOff = Color(0xFF2E3440)
     val ok = Color(0xFF7FD6A4)
+
+    /** Innermost hero ring on "Antenne verbinden"; the design reference (`Antenne.dc.html`) uses this value. */
+    val ringAccent = Color(0xFF3E4D80)
 
     val danger = Color(0xFFFF8F87)
     val dangerTitle = Color(0xFFFFB4AD)
@@ -91,17 +106,44 @@ object OgType {
     val preview = TextStyle(fontFamily = Grotesk, fontSize = 14.sp, fontWeight = FontWeight(400), color = Og.text3)
     val help = TextStyle(fontFamily = Grotesk, fontSize = 13.sp, lineHeight = 1.4.em, fontWeight = FontWeight(400), color = Og.text3)
     val meta = TextStyle(fontFamily = Mono, fontSize = 11.sp, fontWeight = FontWeight(400), color = Og.text3)
-    val section = TextStyle(fontFamily = Mono, fontSize = 11.sp, fontWeight = FontWeight(500), letterSpacing = 0.12.em, color = Og.text3)
+    // The design reference sets no weight on section labels (only "MITGLIEDER" uses 500), so 400 here.
+    val section = TextStyle(fontFamily = Mono, fontSize = 11.sp, fontWeight = FontWeight(400), letterSpacing = 0.12.em, color = Og.text3)
     val value = TextStyle(fontFamily = Mono, fontSize = 13.sp, fontWeight = FontWeight(400), color = Og.text)
+}
+
+/**
+ * True when the system asks for no motion ("Animationen entfernen" sets the animator duration scale
+ * to 0). Infinite animations (spinner, pulse, search ripple) then show a still frame, as the design
+ * system's `prefers-reduced-motion` rule asks; finite transitions are scaled by Compose itself.
+ */
+val LocalReducedMotion = staticCompositionLocalOf { false }
+
+@Composable
+private fun rememberReducedMotion(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    fun read() = Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    var reduced by remember { mutableStateOf(read()) }
+    DisposableEffect(resolver) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                reduced = read()
+            }
+        }
+        resolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer)
+        onDispose { resolver.unregisterContentObserver(observer) }
+    }
+    return reduced
 }
 
 @Composable
 fun OffGridTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            background = Og.bg, surface = Og.surface, primary = Og.accent, onPrimary = Og.onAccent,
-            onBackground = Og.text, onSurface = Og.text, error = Og.danger,
-        ),
-        content = content,
-    )
+    CompositionLocalProvider(LocalReducedMotion provides rememberReducedMotion()) {
+        MaterialTheme(
+            colorScheme = darkColorScheme(
+                background = Og.bg, surface = Og.surface, primary = Og.accent, onPrimary = Og.onAccent,
+                onBackground = Og.text, onSurface = Og.text, error = Og.danger,
+            ),
+            content = content,
+        )
+    }
 }

@@ -15,10 +15,13 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import ch.offgrid.android.domain.AntennaError
+import ch.offgrid.android.domain.Conversation
 import ch.offgrid.android.domain.KeyPattern
 import ch.offgrid.android.domain.LocationError
 import ch.offgrid.android.domain.PairingError
+import ch.offgrid.android.ui.LocalApp
 import ch.offgrid.android.ui.theme.Og
 import kotlinx.coroutines.delay
 
@@ -70,4 +73,18 @@ fun LocationError.text(): String = when (this) {
     LocationError.TIMEOUT -> "Kein GPS-Signal. Geh ins Freie und versuch es erneut."
     LocationError.UNAVAILABLE -> "Der Standort ist gerade nicht verfügbar."
     LocationError.NO_MAPS_APP -> "Keine Karten-App gefunden. Die Koordinaten sind kopiert."
+}
+
+/**
+ * Marks [conversation] as on screen while this screen is resumed: its notifications are cleared
+ * and new ones are not posted.
+ */
+@Composable
+fun ConversationOnScreen(conversation: Conversation) {
+    val notifier = LocalApp.current.notifier
+    LifecycleResumeEffect(conversation) {
+        notifier.visible = conversation
+        notifier.cancel(conversation)
+        onPauseOrDispose { if (notifier.visible == conversation) notifier.visible = null }
+    }
 }

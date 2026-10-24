@@ -38,6 +38,9 @@ android {
     buildTypes {
         release {
             buildConfigField("String", "TCP_LINK", "\"\"")
+            // Release-style APK for demos, signed with the SDK debug key so it installs without a
+            // keystore. A real release key is an open decision; no key was created.
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

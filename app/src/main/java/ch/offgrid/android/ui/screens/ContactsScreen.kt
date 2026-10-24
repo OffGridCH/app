@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,7 +36,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import ch.offgrid.android.BuildConfig
@@ -85,8 +86,14 @@ fun ContactsScreen(nav: NavHostController) {
                 Text(
                     "OffGrid",
                     style = OgType.appTitle,
-                    modifier = Modifier.semantics { heading() }
-                        .combinedClickable(onClick = {}, onLongClick = { if (BuildConfig.DEBUG) demoMenu = true }),
+                    // Debug builds open the test menu with a long press; release builds keep a plain heading.
+                    modifier = Modifier.semantics { heading() }.then(
+                        if (BuildConfig.DEBUG) {
+                            Modifier.combinedClickable(onClick = {}, onLongClick = { demoMenu = true }, onLongClickLabel = "Testmenü öffnen")
+                        } else {
+                            Modifier
+                        },
+                    ),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OgIconButton(OgIcon.Settings, "Einstellungen", { nav.navigate(Routes.SETTINGS) })
@@ -99,7 +106,7 @@ fun ContactsScreen(nav: NavHostController) {
                 }
             }
             AntennaStatusLine(antenna.ready, antenna.kind, antenna.freqMhz) { nav.navigate(Routes.CONNECT) }
-            HorizontalDivider(Modifier.padding(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 8.dp), thickness = 1.dp, color = Og.line)
+            HorizontalDivider(Modifier.padding(start = 20.dp, top = 6.dp, end = 20.dp, bottom = if (empty) 0.dp else 8.dp), thickness = 1.dp, color = Og.line)
 
             if (empty) {
                 EmptyState(ownPattern, Modifier.weight(1f))
@@ -107,8 +114,13 @@ fun ContactsScreen(nav: NavHostController) {
                 LazyColumn(Modifier.weight(1f).padding(horizontal = 8.dp)) {
                     items(list, key = { (it.contact?.id ?: -(it.group?.id ?: 0)).toString() + (it.group != null) }) { item ->
                         ConversationRow(item, now, onOpen = {
-                            item.contact?.let { nav.navigate(Routes.chat(it.id)) }
-                            item.group?.let { nav.navigate(Routes.group(it.id)) }
+                            val contact = item.contact
+                            when {
+                                // A pending contact still needs our code (Kontakte.dc.html links it to the handshake).
+                                contact?.state == "pending" -> nav.navigate(Routes.add())
+                                contact != null -> nav.navigate(Routes.chat(contact.id))
+                                else -> item.group?.let { nav.navigate(Routes.group(it.id)) }
+                            }
                         })
                     }
                 }
@@ -117,26 +129,34 @@ fun ContactsScreen(nav: NavHostController) {
                 OgButton(if (empty) "Ersten Kontakt hinzufügen" else "Kontakt hinzufügen", { nav.navigate(Routes.add()) }, icon = OgIcon.Qr)
             }
         }
-        if (demoMenu) DemoMenu(onClose = { demoMenu = false })
+        if (BuildConfig.DEBUG) DemoMenu(demoMenu, onClose = { demoMenu = false })
     }
 }
 
-/** "● Antenne verbunden · USB-C · 868 MHz", tappable to the connect screen. */
+/**
+ * "● Antenne verbunden · USB-C · 868 MHz", tappable to the connect screen. With large fonts the
+ * meta part moves to its own line as a whole instead of breaking word by word.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AntennaStatusLine(ready: Boolean, kind: LinkKind, freqMhz: Double?, onClick: () -> Unit) {
     Row(
         Modifier.padding(horizontal = 12.dp).fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 8.dp),
+            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         StatusDot(ready)
-        Text(if (ready) "Antenne verbunden" else "Antenne getrennt", style = OgType.preview.copy(color = Og.text2))
-        val transport = if (kind == LinkKind.SIMULATED) "Simuliert" else "USB-C"
-        Text(
-            if (ready) "· $transport · ${freqMhz?.let(Formats::band) ?: "868"} MHz" else "· Tippen zum Verbinden",
-            style = OgType.meta.copy(fontSize = 12.sp),
-        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.Center) {
+            Text(if (ready) "Antenne verbunden" else "Antenne getrennt", style = OgType.preview.copy(color = Og.text2),
+                modifier = Modifier.align(Alignment.CenterVertically))
+            val transport = if (kind == LinkKind.SIMULATED) "Simuliert" else "USB-C"
+            Text(
+                if (ready) "· $transport · ${freqMhz?.let(Formats::band) ?: "868"} MHz" else "· Tippen zum Verbinden",
+                style = OgType.meta,
+                modifier = Modifier.align(Alignment.CenterVertically),
+            )
+        }
     }
 }
 
@@ -146,7 +166,7 @@ private fun ConversationRow(item: ConversationItem, now: Long, onOpen: () -> Uni
     val pending = contact?.state == "pending"
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(Og.rBtn))
-            .then(if (pending) Modifier else Modifier.clickable(role = Role.Button, onClick = onOpen))
+            .clickable(role = Role.Button, onClick = onOpen)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -158,7 +178,7 @@ private fun ConversationRow(item: ConversationItem, now: Long, onOpen: () -> Uni
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(item.group?.name ?: contact!!.displayName, style = OgType.bodyStrong.copy(fontSize = 17.sp), maxLines = 1,
+                Text(item.group?.name ?: contact!!.displayName, style = OgType.bodyStrong, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (contact != null) {
                     val level = if (pending) 0 else Formats.signalLevel(contact.lastRssi, contact.lastSeenAt, now)
@@ -167,16 +187,16 @@ private fun ConversationRow(item: ConversationItem, now: Long, onOpen: () -> Uni
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (pending) {
-                    Text("Schlüssel ausstehend", style = OgType.preview.copy(color = Og.accent, fontSize = 15.sp), modifier = Modifier.weight(1f))
+                    Text("Schlüssel ausstehend", style = OgType.preview.copy(color = Og.accent), modifier = Modifier.weight(1f))
                 } else {
                     Text(
                         preview(item),
-                        style = OgType.preview.copy(fontSize = 15.sp, color = if (item.unread > 0) Og.text2 else Og.text3),
+                        style = OgType.preview.copy(color = if (item.unread > 0) Og.text2 else Og.text3),
                         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         OgBadge(item.unread)
-                        item.last?.let { Text(Formats.listTime(it.sentAt, now), style = OgType.meta.copy(fontSize = 12.sp)) }
+                        item.last?.let { Text(Formats.listTime(it.sentAt, now), style = OgType.meta) }
                     }
                 }
             }

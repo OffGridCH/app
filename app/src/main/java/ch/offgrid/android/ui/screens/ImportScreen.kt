@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,6 +58,7 @@ import ch.offgrid.android.ui.theme.Mono
 import ch.offgrid.android.ui.theme.Og
 import ch.offgrid.android.ui.theme.OgType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -68,11 +71,12 @@ fun ImportScreen(nav: NavHostController) {
     val app = LocalApp.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var uri by remember { mutableStateOf<Uri?>(null) }
-    var fileName by remember { mutableStateOf<String?>(null) }
-    var password by remember { mutableStateOf("") }
+    // The picked document stays readable until reboot, so the saved Uri survives process death.
+    var uri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var fileName by rememberSaveable { mutableStateOf<String?>(null) }
+    var password by rememberSaveable { mutableStateOf("") }
+    var error by rememberSaveable { mutableStateOf<BackupError?>(null) }
     var working by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<BackupError?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { picked ->
         if (picked != null) {
             uri = picked
@@ -95,17 +99,17 @@ fun ImportScreen(nav: NavHostController) {
                 Modifier.padding(start = 16.dp, top = 22.dp, end = 16.dp).fillMaxWidth().heightIn(min = 72.dp)
                     .clip(RoundedCornerShape(Og.rCard)).background(Og.surface).border(1.dp, Og.border, RoundedCornerShape(Og.rCard))
                     .clickable(role = Role.Button) { picker.launch(arrayOf("*/*")) }
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Og.accentSoft), contentAlignment = Alignment.Center) {
-                    OgIconView(OgIcon.File, Og.accent)
+                    OgIconView(OgIcon.File, Og.accent, size = 20.dp)
                 }
                 if (fileName == null) {
                     Text("Datei wählen", style = TextStyle(fontFamily = Grotesk, fontSize = 16.sp, fontWeight = FontWeight(600), color = Og.text))
                 } else {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(fileName!!, style = TextStyle(fontFamily = Mono, fontSize = 14.sp, color = Og.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("Andere Datei wählen", style = OgType.help)
                     }
@@ -113,33 +117,33 @@ fun ImportScreen(nav: NavHostController) {
             }
             Spacer(Modifier.height(14.dp))
             OgCard(padded = true) {
-                OgTextField("Passwort der Export-Datei", password, { password = it; error = null }, password = true, error = error?.text())
+                OgTextField(
+                    "Passwort der Export-Datei", password, { password = it; error = null }, password = true,
+                    error = error?.text(), imeAction = ImeAction.Done,
+                )
             }
             OgNote("Der Import ersetzt alle Kontakte und Nachrichten auf diesem Handy.")
         }
-        Footer {
+        Footer(top = 0.dp) {
             OgButton(
                 if (working) "Wird importiert …" else "Importieren",
                 enabled = uri != null && password.isNotEmpty() && !working,
                 onClick = {
                     val source = uri ?: return@OgButton
                     working = true
+                    error = null
                     scope.launch {
                         try {
                             val text = withContext(Dispatchers.IO) {
                                 context.contentResolver.openInputStream(source)?.use { input ->
-                                    val bytes = input.readNBytesCompat(MAX_BACKUP_BYTES + 1)
-                                    if (bytes.size > MAX_BACKUP_BYTES) null else bytes.toString(Charsets.UTF_8)
+                                    backupText(input.readNBytesCompat(MAX_BACKUP_BYTES + 1), MAX_BACKUP_BYTES)
                                 }
                             } ?: throw BackupException(BackupError.INVALID_FILE)
-                            app.backup.import(text, password)
+                            // Replacing all data must not stop halfway when a rotation cancels this scope.
+                            withContext(NonCancellable) { app.backup.import(text, password) }
                             nav.navigate(Routes.CONTACTS) { popUpTo(0) }
-                        } catch (e: BackupException) {
-                            error = e.error
-                        } catch (_: java.io.IOException) {
-                            error = BackupError.INVALID_FILE
-                        } catch (_: SecurityException) {
-                            error = BackupError.INVALID_FILE
+                        } catch (e: Exception) {
+                            error = importError(e) ?: throw e
                         } finally {
                             working = false
                         }

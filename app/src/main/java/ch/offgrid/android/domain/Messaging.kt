@@ -187,7 +187,10 @@ class Messaging(
         }
     }
 
-    /** Sends a reaction to a message the peer wrote (`target.author = "peer"`). */
+    /**
+     * Sends a reaction to a message the peer wrote (`target.author = "peer"`), or removes it with a
+     * null [emoji]. Once the antenna accepted it, the reaction also shows under the bubble here.
+     */
     fun react(message: MessageEntity, emoji: String?) {
         scope.launch {
             val c = message.contactId?.let { db.contacts().byId(it) } ?: return@launch
@@ -198,7 +201,7 @@ class Messaging(
                     putJsonObject("target") { put("author", "peer"); put("ref", ref and 0xFFFF) }
                     put("emoji", emoji)
                 })
-            }
+            }.onSuccess { db.messages().setReaction(message.id, emoji) }
         }
     }
 
