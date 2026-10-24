@@ -1,6 +1,6 @@
 # Tests
 
-Stand: **nach T01, T02, T03, T04, T17, T23**. Der Test-Runner ist Vitest mit jsdom über den Angular-Builder. Einmal, headless:
+Stand: **nach T01, T02, T03, T04, T09, T17, T23**. Der Test-Runner ist Vitest mit jsdom über den Angular-Builder. Einmal, headless:
 `npm run test:ci`. WebCrypto kommt aus dem Node-Modul `node:crypto` und wird in `src/test-setup.ts` bereitgestellt.
 
 Jede Testdatei (`*.spec.ts`) liegt neben dem Code, den sie prüft.
@@ -8,6 +8,7 @@ Jede Testdatei (`*.spec.ts`) liegt neben dem Code, den sie prüft.
 | Testdatei | Prüft |
 |---|---|
 | `src/app/app.component.spec.ts` | Die App-Komponente wird mit den Datenbank- und Repository-Providern aus `app.config.ts` erstellt. |
+| `src/app/core/onboarding.guard.spec.ts` | `onboardingGuard`: geschützte Routen werden nach abgeschlossenem Onboarding freigegeben, ohne Onboarding führt der Guard zu `/verbinden`. Bei noch nicht geladenen Einstellungen wartet er auf den App-Start. Alle Routen ausser `/verbinden` und `/name` tragen den Guard (T09). |
 | `src/app/ui/index.spec.ts` | die og-Grund- und Zustandskomponenten: der Barrel `src/app/ui/index.ts` exportiert alle 22 Komponenten sowie `avatarPattern` und `AVATAR_PATTERN_SIZE`; `og-button` rendert ein `<button>` und meldet Klicks, `og-link-button` ein `<a>` mit `routerLink`, `og-icon-button` je nach Route ein `<button>` oder ein `<a>`, `og-switch` die Rolle `switch` mit `aria-checked`, `og-segmented` eine `tablist` mit `aria-selected`, `og-text-field` die Zwei-Wege-Bindung des Werts und `og-icon` die Standardgrösse des gewählten Namens (T01, T02) |
 | `src/app/ui/avatar/avatar-pattern.spec.ts` | `avatarPattern`: 25 Zellwerte, Spiegelsymmetrie, gleiches Raster für denselben Seed, mindestens fünf aktive Zellen (T02) |
 | `src/app/ui/avatar/avatar.component.spec.ts` | `og-avatar`: 5 × 5-Raster, aktive Zellen aus dem Muster, dekoratives `aria-hidden`, Masse aller fünf Grössen und Zustand `pending` ohne Raster (T02) |
@@ -16,6 +17,8 @@ Jede Testdatei (`*.spec.ts`) liegt neben dem Code, den sie prüft.
 | `src/app/ui/message-bubble/message-bubble.component.spec.ts` | `og-message-bubble`: Status `queued`, `sent`, `delivered` und `failed`, Signalstufen, eingehende Zeitzeile, Ausrichtung, `groupStart` und der Button „Erneut senden“ mit `retry` (T02) |
 | `src/app/ui/composer/composer.component.spec.ts` | `og-composer`: Senden bei leerem Text, Byte-Limit mit und ohne `blockOverLimit`, roter Zähler, Enter-Senden, leeres Feld nach dem Senden und Zählen nur über `countBytes` (T02) |
 | `src/app/ui/qr/qr.component.spec.ts` | `og-qr`: QR-Code als SVG auf der Karte, 230 × 230px, `role="img"` mit Beschriftung und ohne `innerHTML` oder `DomSanitizer` (T02) |
+| `src/app/features/verbinden/verbinden.page.spec.ts` | `VerbindenPage`: Verbindungsstart, Onboarding-Hinweis, live aktualisierte Schrittliste, Aktivzustände von „Weiter“ und „Erneut suchen“, Zielrouten, frisches Gerät sowie der sichtbare Fehlertext bei verlorener Verbindung (T09). „Erneut suchen“ entsperrt ein gesperrtes Gerät mit `unlock()` statt mit `connect()`: Der Zustand wechselt von `locked` auf `unlocked`, der Fehlertext verschwindet und „Weiter“ wird aktiv. Ein blosses `connect()` bleibt bei einem gesperrten Gerät wirkungslos (T09). |
+| `src/app/features/name/name.page.spec.ts` | `NamePage`: Onboarding-Hinweis, Bytegrenzierung von 1 bis 24 UTF-8-Bytes ohne `maxlength`, Feld- und Seitenfehler, Speichern und Abschliessen des Onboardings, Einrichtung eines frischen Geräts und Weitergabe des Namens an die Antenne (T09). |
 | `src/app/core/format/time.spec.ts` | `formatTime`, `formatListTime`, `formatLastSeen`, `formatDay`: 24-Stunden-Format, „Gestern“, kurzer Wochentag, Datum, Sommerzeit, Zeitumstellung im Frühling und Herbst und der Kalendertag in `Europe/Zurich` statt UTC. |
 | `src/app/core/format/radio.spec.ts` | `formatMHz`: `868100000` → „868“ und Abrunden nach unten. |
 | `src/app/core/crypto/hex.spec.ts` | `toHex` und `fromHex`: Hin- und Rückweg ohne Verlust, leere Eingabe, Hex in Kleinbuchstaben, Fehler bei ungültigem Hex. |
@@ -39,13 +42,14 @@ Jede Testdatei (`*.spec.ts`) liegt neben dem Code, den sie prüft.
 | `src/app/core/location/geo.spec.ts` | Die Geo-Funktionen: Entfernung nach Haversine (Luzern–Zürich, Luzern–Demo-Kontakt, 0 zu sich selbst), Anfangskurs (0 = Norden, 90 = Osten), die acht Himmelsrichtungen samt Grenzen und 359°, Entfernung als Text („850 m“, „1.0 km“, „12 km“), Koordinate mit Hemisphäre und ohne, Genauigkeit („±8 m“, mindestens 1 m), Alter des Fixes („gerade eben“, „vor 12 Min.“, „vor 3 Std.“, Listenformat ab einem Tag) und Runden auf sechs Nachkommastellen (T17) |
 | `src/app/core/location/location.service.spec.ts` | `LocationService`: `locate()` setzt `myFix` aus dem GPS (Genauigkeit auf ganze Meter gerundet, `at` aus dem Zeitstempel), fragt eine fehlende Berechtigung an, meldet `location-denied`, `location-unavailable` und `location-timeout` und liefert im Browser nach 600 ms den Demo-Fix, ohne die Geolocation-API aufzurufen; `isFresh` gilt bis 10 Minuten nach der Messung als frisch (T17) |
 
-Die Spec-Dateien prüfen die reinen Funktionen und Services ohne Oberfläche. Für die Zustandskomponenten aus T02
-kommen gezielte Tests der sichtbaren Zustände und Interaktionen dazu. Die Migrationen werden statisch anhand ihrer DDL und
+Die Spec-Dateien prüfen die reinen Funktionen und Services. Für die Zustandskomponenten aus T02 und die Onboarding-Screens
+aus T09 kommen gezielte Tests der sichtbaren Zustände und Interaktionen dazu. Die Migrationen werden statisch anhand ihrer DDL und
 Parameter und zusätzlich gegen eine echte SQLite-Datenbank geprüft; das Verhalten der Repositories wird über die
 Memory-Implementierungen getestet. Die Dienste für Antenne, Nachrichten und Kontakte laufen gegen das **simulierte Gerät** (`MockDevice`), das dieselbe
-Host-API spricht wie die echte Antenne; der Test-Helfer `src/app/core/antenna/antenna-harness.testing.ts` richtet es ein. Der Standort-Kern (T17) wird ohne
-Oberfläche geprüft: `geo.spec.ts` testet die reinen Geo-Funktionen, `location.service.spec.ts` den Dienst mit einem nachgebauten Geolocation-Plugin. Tests für die
-Seiten kommen mit den Tickets, die die Screens bauen (T09 bis T13).
+Host-API spricht wie die echte Antenne; der Test-Helfer `src/app/core/antenna/antenna-harness.testing.ts` richtet es ein.
+Für die Onboarding-Screens aus T09 richtet `src/testing/onboarding-harness.ts` die Memory-Datenbank, die simulierte
+Antenne, den Browser-Schlüsselspeicher und eine gemockte Navigation ein. Weitere Screen-Tests kommen mit T10 bis T13.
+Der Standort-Kern (T17) wird ohne Oberfläche geprüft: `geo.spec.ts` testet die reinen Geo-Funktionen, `location.service.spec.ts` den Dienst mit einem nachgebauten Geolocation-Plugin.
 
 !!! note "Datenbankschicht"
 

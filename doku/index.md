@@ -46,7 +46,8 @@ Hinweis steht, ist im Code dieses Branches vorhanden.
 | Host-API v1: Serial-Client, Antennen-Port, Mock-Gerät, Entsperr-Schlüssel, Nachrichten- und Kontaktdienste (ersetzt T05, T07, T08) | fertig | T23 |
 | Natives USB-Serial-Plugin und natives Keystore-Plugin für Android | geplant | T06 |
 | Seiten Kontakt hinzufügen und Kontakt benennen | geplant | T11 |
-| Screens (Verbinden, Name, Kontakte, Chat, Einstellungen) | geplant | T09 bis T13 |
+| Screens „Verbinden“ und „Name“ mit Onboarding-Guard | fertig | T09 |
+| Weitere Screens (Kontakte, Chat, Einstellungen) | geplant | T10, T12, T13 |
 | Backup (Export und Import) | geplant | T14 |
 | Standort-Kern (GPS, Entfernung, Richtung) | fertig | T17 |
 | Standort-Oberfläche (Senden und Anzeigen) | geplant | T18 |
