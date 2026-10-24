@@ -10,6 +10,15 @@ Install with `adb install -r <apk>`; details in the [README](README.md). Everyth
 the simulated antenna on the emulator; a real Heltec is the hardware agent's lane on `main`,
 which is merged in (last merge: `1b19e72`, OGZ1 text codec).
 
+## Lab.3 adaptation (0.1.0-lab3)
+
+The app follows the lab image 0.2.0-lab.3 and the team stack `feature/mesh-direct`: real token checks
+with their own error texts, the authenticated factory reset behind «Alle Daten löschen», reflashed
+boards set up again with their contacts marked «Neu koppeln», and the lost-message fix (waiting state
+«Wartet auf <Name>», reconnect reconciliation with `msg.pending`, «Nicht zugestellt» instead of a
+permanent «gesendet»). Database version 2. Checked against the firmware source, independent vectors and
+the simulator only; see [`docs/hardware.md`](docs/hardware.md), "App against lab.3".
+
 ## Done
 
 - **Shared components** match the HTML designs and animate their state changes: buttons,

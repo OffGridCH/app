@@ -7,7 +7,8 @@ contacts, messages and settings.
 
 This is a standalone experiment next to the team app in `OffGridCH/app`. It has no remote.
 
-- Package `ch.offgrid.android`, minSdk 26, target/compile SDK 35, version 0.1.0
+- Package `ch.offgrid.android`, minSdk 26, target/compile SDK 35, version 0.1.0-lab3 (versionCode 2),
+  written against the lab firmware image 0.2.0-lab.3 and the team stack `feature/mesh-direct`
 - Specs followed: `OffGridCH/firmware/docs/offgrid-link.md` (link), `offgrid-protocol.md`
   (radio protocol, crypto test vectors), designs in `offgrid-landing/design/*.png`
 
@@ -31,6 +32,10 @@ POSTHOG_KEY=phc_...
 | Debug | `app/build/outputs/apk/debug/app-debug.apk` | Development: test menu, simulated contacts, debug pairing buttons |
 | Release-style | `app/build/outputs/apk/release/app-release.apk` | Demos: no test menu, no debug buttons. Signed with the SDK debug key (`CN=Android Debug`), so it installs without a keystore. A real release key is an open decision; none was created. |
 
+The lab test APK for phones with a lab board is the debug build with `OFFGRID_TEXT_CODEC=ogz1` and
+without `OFFGRID_TCP_LINK` in `local.properties`: it switches a lab image to OGZ1 with `lab.set` after
+unlocking and counts bytes with the codec, and it uses USB, not the TCP bridge.
+
 ## Install
 
 1. Enable USB debugging on the phone (Settings, About phone, tap "Build number" seven times,
@@ -47,9 +52,13 @@ A long press on the antenna picture in "Antenne verbinden" switches a debug buil
 simulated antenna on a phone as well.
 
 Unit tests cover line framing and the 2048-byte limit, the request/response/event codec and
-client (timeouts, parse errors without id, unplugging), the simulated antenna end to end
-(provision, pair, send, deliver, wrong token), the crypto test vectors from the protocol spec
-(fingerprint, node ids, token wrap), message and name limits, backup encryption, geo
+client (timeouts, parse errors without id, unplugging, float RSSI), the simulated antenna end to
+end (provision, pair, send, deliver, wrong token) and its lab.3 behaviour (random refs, waiting,
+`recent`, cancel, authenticated factory reset, OGZ1), the crypto test vectors from the protocol
+spec (fingerprint, node ids, token wrap) and vectors for the unlock and reset wrap computed with
+Python `cryptography` from the firmware's `Security::unwrap` (`tools/wrap_vectors.py`), the
+outbox reconciliation, the antenna session against the simulator (wrong phone, rate limit,
+auto-lock, factory reset, backup token), message and name limits, backup encryption, geo
 formatting and analytics.
 
 ## Architecture
@@ -150,7 +159,30 @@ next try.
 
 - **Keys stay on the antenna.** The phone holds only an unlock token derived from a Keystore
   key (`HMAC(K_phone, "og-unlock-v1" || device_id)`), wrapped per session with X25519 + HKDF +
-  AES-GCM as link spec 6 describes. Every `sec.*` call uses a fresh `sys.hello` session.
+  AES-GCM as link spec 6 describes (label `og-unlock-wrap-v1`, salt the 16-byte session nonce,
+  AAD the 6-byte device_id, envelope iv || ciphertext || tag = 60 bytes). Every `sec.*` call uses a
+  fresh `sys.hello` session; a session that expired or a state that changed in between gets one
+  more try. `E_UNLOCK_FAILED`, `E_RATE_LIMITED`, `E_NO_SESSION` and `E_INTERNAL` each have their
+  own text on "Antenne verbinden", other codes are shown with the code, and the reason of an
+  auto-lock (`sec.state`) is shown until the antenna is open again.
+- **"Alle Daten löschen" erases the antenna** with `sys.factory_reset` (`method: "app"`, token
+  wrapped with the label `og-reset-wrap-v1`, link spec 6.11). The phone's data is only deleted
+  when the antenna confirmed; afterwards the app sets the empty antenna up again for this phone.
+  Without an antenna only the phone is cleared and the dialog says that the antenna keeps its
+  contacts.
+- **Reflashed or reset antenna:** a known antenna that reports `unprovisioned` is provisioned
+  again. The token is derived each time, so nothing stored has to be replaced; a token from a
+  backup import for that antenna is dropped. Contacts the antenna no longer lists become
+  "Neu koppeln" (slot detached, history kept) with a banner on the contact list; pairing the same
+  key again reuses the row.
+- **Delivery state survives reconnects.** A `msg_ref` is only valid within one boot of one antenna,
+  and `msg.status` events are lost while the phone is away. Each accepted message stores the link
+  session its ref belongs to; events only update messages of the current session. After every
+  connect (antenna ready, contacts synced) the app compares its open messages with `msg.pending`:
+  still queued takes over the antenna state, an entry in `recent` (lab.3) applies its final state,
+  and anything else becomes "Nicht zugestellt" (reason `lost`) with "Erneut senden". The app never
+  resends on its own. The lab image's `waiting` state shows a clock and "Wartet auf <Name>"
+  instead of a check mark. See `domain/OutboxReconciler.kt`.
 - **Pairing is mutual QR.** Both phones scan each other (`pair.begin`/`pair.complete`). The
   contact stays "pending" until the first delivered message; the app sends a small ping after
   pairing so the firmware can activate it.
@@ -172,8 +204,6 @@ next try.
   "Diese Antennen-Firmware kennt noch keine Gruppen."
 - **Composer placeholder** uses the contact's display name ("Nachricht an Anna Meier"), as the
   screens skill says. `Chat.png` shows only the first name, `chat-standort.png` the full name.
-- **Firmware reset:** contacts the antenna no longer lists become "pending" (slot detached)
-  instead of being deleted, so history stays and the user can pair again.
 
 ## Firmware status
 
@@ -183,12 +213,13 @@ image (`lab_radio`) and what only a second board can show. It is kept by the age
 
 ## Missing for a real antenna
 
-- Firmware: real token authentication, identity and contacts that survive a reboot, real LoRa
-  delivery in the team image, the reaction fix (`JsonObjectConst`), a boot animation that does
-  not block `setup()`, and `group.*` if groups stay in scope.
-- App: a test on a physical phone with a Heltec (only the emulator was used so far), battery use
-  of the background receive service, a release signing key, and a decision on the 83-byte
-  versus 153-character conflict.
+- Firmware: `group.*` if groups stay in scope. Real token authentication, persistent contacts and
+  real delivery come with the team stack `feature/mesh-direct` and the lab image 0.2.0-lab.3; the
+  app's side of them was checked against the firmware source, independent vectors and the
+  simulator, not on a board.
+- App: a test on a physical phone with a lab.3 board (security, factory reset, reconnect
+  reconciliation), battery use of the background receive service, a release signing key, and a
+  decision on the 83-byte versus 153-character conflict.
 
 ## Screenshots
 

@@ -16,8 +16,9 @@ android {
         applicationId = "ch.offgrid.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // 2: database version 2 (messages.refSession) and the lab.3 security and delivery handling.
+        versionCode = 2
+        versionName = "0.1.0-lab3"
 
         // PostHog project key from the untracked local.properties (`POSTHOG_KEY=phc_...`). Empty means
         // analytics is a no-op, which is the default for every checkout.
