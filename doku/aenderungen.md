@@ -1,5 +1,21 @@
 # Änderungen
 
+## T02 – UI-Basis 2: Zustandskomponenten
+*2026-10-24*
+
+- Neun Zustandskomponenten liegen unter `src/app/ui/`: `og-avatar`, `og-signal-bars`, `og-banner` mit Aktion und Hinweis,
+  `og-step-list`, `og-message-bubble`, `og-composer` und `og-qr`. Der Barrel `src/app/ui/index.ts` exportiert sie zusammen mit ihren Typen.
+- `og-avatar` zeigt ein 5 × 5-Schlüsselraster in fünf Grössen und im Zustand `pending`. `avatarPattern(seed)` erzeugt
+  deterministisch 25 spiegelsymmetrische Zellwerte mit mindestens fünf aktiven Zellen.
+- `og-signal-bars` zeigt die Stufen 0 bis 4 in den Grössen `md` und `sm`. `og-step-list` unterstützt die Zustände
+  `done`, `active` und `todo` mit Puls oder Spinner; bei reduzierter Bewegung sind die Animationen ausgeschaltet.
+- `og-message-bubble` bildet eingehende und ausgehende Nachrichten in den Zuständen `queued`, `sent`, `delivered` und
+  `failed` ab. Der fehlgeschlagene Zustand bietet „Erneut senden“ und löst `retry` aus.
+- `og-composer` zählt Bytes ausschliesslich über den Input `countBytes`, sperrt leere oder zu lange Texte standardmässig
+  und sendet mit Enter. Mit `blockOverLimit=false` bleibt das Senden bei einer Überschreitung möglich.
+- `og-qr` erzeugt aus `data` ein SVG-Raster mit dem Paket `qrcode` und den Typen aus `@types/qrcode`. Die benötigten
+  Farbwerte sind als einzige Hex-Ausnahme in `ui/qr/qr-colors.ts` ausgelagert.
+
 ## T23 – Protokoll auf Offgrid Link v1 umgestellt
 *2026-10-24*
 

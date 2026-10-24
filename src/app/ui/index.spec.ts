@@ -3,19 +3,30 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import {
+  AVATAR_PATTERN_SIZE,
+  OgAvatarComponent,
   OgBadgeComponent,
+  OgBannerActionComponent,
+  OgBannerComponent,
   OgButtonComponent,
   OgCardComponent,
+  OgComposerComponent,
   OgIconButtonComponent,
   OgIconComponent,
   OgInfoRowComponent,
   OgLinkButtonComponent,
+  OgMessageBubbleComponent,
+  OgNoteComponent,
+  OgQrComponent,
   OgSectionLabelComponent,
   OgSegmentedComponent,
+  OgSignalBarsComponent,
   OgStatusDotComponent,
+  OgStepListComponent,
   OgSwitchComponent,
   OgTextFieldComponent,
   OgTopbarComponent,
+  avatarPattern,
 } from './index';
 
 @Component({
@@ -207,5 +218,30 @@ describe('UI-Basis (src/app/ui)', () => {
     expect(svg.getAttribute('aria-hidden')).toBe('true');
     expect(svg.getAttribute('width')).toBe('14');
     expect(svg.getAttribute('stroke-width')).toBe('3');
+  });
+
+  it('exportiert die Zustandskomponenten über den Barrel', () => {
+    const components = [
+      OgAvatarComponent,
+      OgBannerComponent,
+      OgBannerActionComponent,
+      OgNoteComponent,
+      OgComposerComponent,
+      OgMessageBubbleComponent,
+      OgQrComponent,
+      OgSignalBarsComponent,
+      OgStepListComponent,
+      avatarPattern,
+    ];
+
+    expect(components).toHaveLength(10);
+    for (const component of components) {
+      expect(component).toBeTypeOf('function');
+    }
+  });
+
+  it('exportiert das Avatar-Muster mit 25 Werten', () => {
+    expect(AVATAR_PATTERN_SIZE).toBe(25);
+    expect(avatarPattern(11)).toHaveLength(AVATAR_PATTERN_SIZE);
   });
 });
