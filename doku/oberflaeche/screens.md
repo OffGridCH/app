@@ -7,6 +7,9 @@ Diese Seite beschreibt die gebauten Screens der App. Weitere Screens folgen mit 
     Die Screens „Kontakte“, „Kontakt hinzufügen“, „Kontakt benennen“, „Chat“ und „Einstellungen“ werden mit
     T10 bis T13 dokumentiert.
 
+    Der Standort-Kern (T17) hat noch keine Oberfläche: er liegt nur im Kern (`src/app/core/location/`). Die
+    Standort-Screens folgen mit T18, der Live-Standort mit T19.
+
 ## Verbinden (`/verbinden`)
 
 Der Screen ist Onboarding-Schritt 1 und dient zugleich für eine neue Verbindung aus den Einstellungen. Beim Öffnen

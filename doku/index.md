@@ -49,6 +49,7 @@ Hinweis steht, ist im Code dieses Branches vorhanden.
 | Screens „Verbinden“ und „Name“ mit Onboarding-Guard | fertig | T09 |
 | Weitere Screens (Kontakte, Chat, Einstellungen) | geplant | T10, T12, T13 |
 | Backup (Export und Import) | geplant | T14 |
-| Standort (GPS, Entfernung, Richtung) | geplant | T17, T18 |
+| Standort-Kern (GPS, Entfernung, Richtung) | fertig | T17 |
+| Standort-Oberfläche (Senden und Anzeigen) | geplant | T18 |
 | Live-Standort (optional) | geplant | T19 |
 | Gruppenchat (optional) | geplant | T20 |

@@ -73,6 +73,19 @@ verschlüsselt nichts. Details in [Nachrichten](../funktionen/nachrichten.md).
 | `cancel(messageId)` | `Promise<void>` | Nachricht abbrechen (`msg.cancel`). |
 | `markRead(contactId)` | `Promise<void>` | Eingehende Nachrichten eines Kontakts als gelesen markieren. |
 
+## LocationService
+
+Datei: `src/app/core/location/location.service.ts`. Ein Singleton (`providedIn: 'root'`). Bestimmt den eigenen Standort
+und hält den letzten Fix. Details in [Standort](../funktionen/standort.md).
+
+| Name | Typ | Beschreibung |
+|---|---|---|
+| `myFix` | `Signal<GeoFix \| null>` | Der eigene Standort, falls schon bestimmt. |
+| `locating` | `Signal<boolean>` | `true`, solange `locate()` läuft. |
+| `error` | `Signal<LocationErrorCode \| null>` | Der Fehler der letzten Ortung. |
+| `locate()` | `Promise<GeoFix \| null>` | Berechtigung holen und den GPS fragen; im Browser nach 600 ms der Demo-Fix. |
+| `isFresh(fix, now)` | `boolean` | `true`, wenn der Fix höchstens 10 Minuten alt ist. |
+
 ## HandshakeService
 
 Datei: `src/app/core/handshake/handshake.service.ts`. Ein Singleton (`providedIn: 'root'`). Das Pairing macht das Gerät; der Dienst
@@ -267,6 +280,7 @@ Entsperr-Schlüssel als `antennaProviders`. `useExisting` bindet das abstrakte T
 | `src/app/core/antenna/device-parse.ts` | `parseHello`, `parseContact`, `parseEvent`, … | Prüft Antworten und Ereignisse des Geräts und macht daraus Typen. |
 | `src/app/core/keystore/unlock-wrap.ts`, `x25519.ts` | `wrapToken`, `unwrapToken`, `x25519` | Einpacken des Entsperr-Tokens (WebCrypto) und X25519 (RFC 7748). |
 | `src/app/core/messaging/signal.ts` | `signalLevel`, `signalLabel` | Signal-Level eines Kontakts und der Text dazu. |
+| `src/app/core/location/geo.ts` | `distanceMeters`, `bearingDegrees`, `compassName`, `formatDistance`, `formatCoordinate`, `formatCoordinatePlain`, `formatAccuracy`, `formatAgo`, `roundCoord` | Entfernung, Richtung und die Texte für die Koordinaten. |
 
 Die Formate und die Signalstärke sind in [Nachrichten](../funktionen/nachrichten.md) beschrieben.
 
@@ -281,5 +295,6 @@ Die Formate und die Signalstärke sind in [Nachrichten](../funktionen/nachrichte
 | `MessagingService` | `AntennaPort`, `ContactRepository`, `MessageRepository`, `CoordinateRepository`, `HandshakeService`, `DataChangedService` |
 | `HandshakeService` | `AntennaPort`, `ContactRepository`, `DataChangedService` |
 | `SettingsService` | `SettingsRepository` |
+| `LocationService` | `@capacitor/geolocation` (nur nativ) |
 | SQLite-Repositories | `SqliteDatabaseService` |
 | `MemoryDatabaseService` | alle Memory-Repositories |

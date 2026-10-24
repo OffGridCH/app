@@ -1,10 +1,11 @@
 # Überblick
 
-Stand: **nach T01, T03, T04, T06, T23** (Projektgerüst, Theme, og-Grundkomponenten, Zeitformate, Datenbank, native Anbindung an die Antenne,
-Host-API zur Antenne). Gebaut sind
+Stand: **nach T01, T03, T04, T06, T17, T23** (Projektgerüst, Theme, og-Grundkomponenten, Zeitformate, Datenbank, native Anbindung an die Antenne,
+Standort-Kern, Host-API zur Antenne). Gebaut sind
 das App-Gerüst, die Kern-Grundlagen (`log.ts`, `platform.ts`, `models/`), das Theme, die 13 Grundkomponenten in `src/app/ui/`, die
 Daten-Schicht, der Serial-Client mit Antennen-Port und Mock-Gerät, der Entsperr-Schlüssel, die native USB-Serial-Anbindung für Android sowie
 die Nachrichten- und Kontaktdienste.
+Der Standort-Kern (`src/app/core/location/`) bestimmt den eigenen Standort und rechnet Entfernung und Richtung.
 Die Seiten unter `features/` sind leere Stubs; ihr Inhalt kommt mit dem jeweiligen Ticket. Alles, was noch fehlt, trägt im Diagramm und im
 Ordnerbaum den Vermerk „geplant: Txx".
 
@@ -35,7 +36,7 @@ flowchart TD
         Messaging["messaging/<br>Nachrichten, Limits, Signal-Level<br/>(T03, T23)"]
         Handshake["handshake/<br>Kontakte, Pairing<br>(T23), geplant: T11"]
         Backup["backup/<br>geplant: T14"]
-        Location["location/<br>geplant: T17"]
+        Location["location/<br>GPS-Kern, Geo-Funktionen<br>(T17)"]
         Groups["groups/<br>geplant: T20"]
     end
     Root --> Routes
@@ -80,7 +81,7 @@ src/
       groups/                 geplant: T20
       handshake/              Kontakte spiegeln, Pairing (T23), Scanner geplant: T11
       keystore/               Entsperr-Token, X25519, Wrap (T23), natives Plugin (T06)
-      location/               geplant: T17
+      location/               GPS-Kern, Geo-Funktionen (T17)
       messaging/              Limits, Signal-Level (T03), Nachrichten, Reaktionen (T23)
       settings/               Einstellungen (T04)
     features/
@@ -106,7 +107,7 @@ src/
 |---|---|---|---|
 | App | `src/app/app.*.ts` | Wurzel-Komponente, Provider, Routen | fertig (T00) |
 | Oberfläche | `src/app/features/`, `src/app/ui/` | Screens und wiederverwendbare `og-`-Komponenten | Grundkomponenten fertig (T01), Zustandskomponenten ab T02, Seiten ab T09 |
-| Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Entsperr-Schlüssel, Messaging | Grundgerüst (T00), Formate (T03), Daten (T04), Antenne und Nachrichten (T23), native Plugins (T06) |
+| Kern | `src/app/core/` | Services ohne Oberfläche: Daten, Antenne, Entsperr-Schlüssel, Messaging, Standort | Grundgerüst (T00), Formate (T03), Daten (T04), Antenne und Nachrichten (T23), native Plugins (T06), Standort-Kern (T17) |
 | Typen | `src/app/core/models/` | Kontakt, Nachricht, Antenne, Gerät (Host-API), Handshake-Fehler, Settings, Fehlercodes | fertig (T00, T23) |
 | Theme | `src/theme/` | Design-Tokens, Schriften, globales Styling | fertig (T00) |
 
@@ -129,6 +130,9 @@ Die Weiche liegt in `app.config.ts` auf Provider-Ebene und betrifft nur die Leit
 App nach einem `resume` erneut, wenn die Antenne `disconnected` ist (`src/app/app.config.ts`). Zusätzlich gilt: Ist
 `localStorage.getItem('og.mock') === '1'`, laufen auch auf Android das simulierte Gerät und der Arbeitsspeicher-Schlüssel (Vorführen ohne
 Hardware). Das Einstellen und Zurücksetzen passiert nur über die Entwickler-Konsole, es gibt dafür keine Oberfläche.
+
+Auch der Standort hat eine Weiche: Im Browser und im Mock gibt es keinen echten GPS, dort liefert `LocationService` nach 600 ms den
+Demo-Fix aus Luzern. Nur nativ fragt der Dienst den GPS und die Berechtigung ab (Details in [Standort](../funktionen/standort.md)).
 
 ## Konventionen
 
