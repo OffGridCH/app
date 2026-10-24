@@ -182,7 +182,7 @@ fun AdvancedScreen(nav: NavHostController) {
                             OgTextField(
                                 "NodeID hinzufügen", nodeInput, { nodeInput = it.take(6); nodeError = null },
                                 placeholder = "z. B. 3F2A",
-                                hint = "4 Hex-Ziffern, höchstens ${LabConfig.MAX_IGNORE_NODES}. Die NodeID eines Kontakts steht in der Kontaktliste der Antenne.",
+                                hint = "4 Hex-Ziffern, höchstens ${LabConfig.MAX_IGNORE_NODES}. Jedes Board zeigt seine NodeID hier unter «Eigene NodeID».",
                                 error = nodeError,
                                 capitalization = KeyboardCapitalization.Characters,
                                 imeAction = ImeAction.Done,
