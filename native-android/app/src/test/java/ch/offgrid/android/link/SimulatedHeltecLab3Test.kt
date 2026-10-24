@@ -226,12 +226,14 @@ class SimulatedHeltecLab3Test {
         val again = c.call("pair.begin")
         assertEquals(first.str("qr"), again.str("qr"))
         assertTrue(again.int("expires_s")!! <= 300)
+        c.call("pair.cancel")
+        val second = c.call("pair.begin").str("qr")
+        assertNotEquals(first.str("qr"), second)
         val qr = device.addVirtualPeer("Anna", -80)
         c.call("pair.complete", buildJsonObject { put("qr", qr) })
-        // The lab image keeps the salt after a completion; cancel wipes it.
-        assertEquals(first.str("qr"), c.call("pair.begin").str("qr"))
-        c.call("pair.cancel")
-        assertNotEquals(first.str("qr"), c.call("pair.begin").str("qr"))
+        // A completion ends the session, and the same peer code is refused within the window.
+        assertNotEquals(second, c.call("pair.begin").str("qr"))
+        assertEquals("E_NO_PAIRING", c.errorOf("pair.complete", buildJsonObject { put("qr", qr); put("replace", true) }))
         c.close()
     }
 

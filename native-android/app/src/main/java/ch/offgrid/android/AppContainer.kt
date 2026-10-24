@@ -30,8 +30,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
 import java.io.File
 import java.util.UUID
 
@@ -73,7 +75,10 @@ class AppContainer(private val context: Context) {
         vibrate()
         scope.launch { notifier.onIncoming(message) }
     }, track = analytics::track)
-    val pairing = Pairing(antenna, messaging, db, scope, track = analytics::track)
+    val pairing = Pairing(antenna, object : Pairing.Store {
+        override suspend fun save(deviceId: String, contact: JsonObject) = messaging.upsertFromDevice(deviceId, contact, keepName = false)
+        override fun contactState(contactId: Long) = db.contacts().observe(contactId).map { it?.state }
+    }, scope, track = analytics::track)
     val location = LocationService(context) { _linkKind.value == LinkKind.SIMULATED }
     val backup = BackupService(db, settings, antenna)
 

@@ -87,6 +87,8 @@ class SimulatedHeltec(
     private var identityPrivate: ByteArray? = null
     private var session: Pair<ByteArray, ByteArray>? = null // device_eph_private, nonce
     private var pairing: Pair<ByteArray, Long>? = null // salt, expiry
+    /** Lab: peer codes completed in the current window, with the time they may be used again. */
+    private val usedPeerCodes = HashMap<String, Long>()
     private var failedUnlocks = 0
     private var rateLimitedUntil = 0L
     private var lastActivity = clock()
@@ -293,6 +295,7 @@ class SimulatedHeltec(
         identityPrivate = null
         session = null
         pairing = null
+        usedPeerCodes.clear()
         resetAuthorized = false
         bootAt = clock()
         emitEvent("sys.boot", bootData(reason))
@@ -496,7 +499,7 @@ class SimulatedHeltec(
 
     /**
      * `pair.begin`. The lab image keeps one salt per 5-minute window and draws a new one only when less than 60 s
-     * are left, so opening the pairing screen again shows the same code. Nils' firmware 0.3.0 draws a new salt on
+     * are left, so opening the pairing screen again shows the same code; a completion ends it. Nils' firmware 0.3.0 draws a new salt on
      * every call (link spec 5, "Starts/replaces the device's five-minute pairing session").
      */
     private fun pairBegin(): JsonObject {
@@ -524,6 +527,9 @@ class SimulatedHeltec(
         if (clock() > expiry) throw CommandError("E_NO_PAIRING", "pairing expired")
         val qr = a.str("qr") ?: throw CommandError("E_INVALID_ARG", "qr missing", "qr")
         val parsed = parseQr(qr) ?: throw CommandError("E_INVALID_QR", "bad QR payload", "qr")
+        // Lab: the same peer code is completed only once per window, so keys and counters are never reused.
+        usedPeerCodes.entries.removeAll { it.value < clock() }
+        if (labRadio && qr.trim() in usedPeerCodes) throw CommandError("E_NO_PAIRING", "peer code already used")
         val (peerPub, _, qrName) = parsed
         if (peerPub.contentEquals(publicKey())) throw CommandError("E_SELF_PAIR", "QR contains my own key")
         val pubB64 = OgCrypto.b64(peerPub)
@@ -538,8 +544,9 @@ class SimulatedHeltec(
             fingerprint = OgCrypto.fingerprint(publicKey(), peerPub),
         )
         save(flash.copy(contacts = flash.contacts.filter { it.contactId != id } + contact))
-        // Team firmware: success ends the pairing session. The lab image keeps the salt for its window.
-        if (!labRadio) pairing = null
+        // Success ends the pairing session (the lab image too since its salt fix of 2026-10-24).
+        pairing = null
+        usedPeerCodes[qr.trim()] = clock() + PAIR_WINDOW_MS
         val warnings = if (flash.contacts.count { it.nodeId == contact.nodeId } > 1) listOf("node_id_collision") else emptyList()
         if (peer != null && peer.scansBack && peer.inRange) {
             // The peer scans our code too and its app pings us; the first valid packet activates the contact.

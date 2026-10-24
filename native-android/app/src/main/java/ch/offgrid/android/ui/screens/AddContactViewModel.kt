@@ -54,31 +54,37 @@ class AddContactViewModel(
 
     fun clearError() = pairing.clearError()
 
+    /** "Neu koppeln" after `E_CONTACT_EXISTS`: replaces the keys of that contact; the peer has to do the same. */
+    fun replace() {
+        val code = pairing.state.value.replaceCode ?: return
+        pairing.complete(code, replace = true)
+    }
+
     /** The contact is confirmed: end the session before the screen navigates on. */
     fun finish() {
         if (finished) return
         finished = true
-        pairing.cancel()
+        pairing.finish()
     }
 
     private suspend fun onReconnected() {
         if (finished) return
         val before = pairing.state.value
         val code = waitingCode
-        // Unplugging the antenna restarts it and loses the pending salt behind the shown code, so
-        // fetch a fresh one. After our own scan the contact is stored with that salt and the code
-        // must stay the same until the other side has scanned it (link spec 7.4).
+        // Unplugging the antenna restarts it and loses the pending salt behind the shown code; Pairing then
+        // fetches a fresh one (it keeps the code when the antenna stayed unlocked). After our own scan the
+        // contact is stored with that salt and the code must stay the same until the other side has scanned it.
         val freshCode = before.scannedName == null
         if (freshCode && before.qr != null) pairing.begin()
         if (code == null) return
         // `pair.complete` must run against the pairing that belongs to the code on screen.
-        if (freshCode) pairing.state.first { it.qr != null && it.qr != before.qr }
+        if (freshCode) pairing.state.first { it.qr != null && it.codeVersion > before.codeVersion }
         waitingCode = null
         pairing.complete(code)
     }
 
     override fun onCleared() {
-        if (!finished) pairing.cancel()
+        if (!finished) pairing.leave()
     }
 }
 
@@ -87,6 +93,10 @@ data class AddContactUi(
     /** QR text to render; null while it loads or while the antenna is away and the code may be stale. */
     val qr: String?,
     val error: PairingError?,
+    /** The code changed after it may have been scanned; the other side has to scan it again. */
+    val codeRenewed: Boolean = false,
+    /** "Neu koppeln" is offered for a contact the antenna already has. */
+    val canReplace: Boolean = false,
     val scannedName: String?,
     val pingSent: Boolean,
     val confirmedContactId: Long?,
@@ -101,6 +111,8 @@ fun addContactUi(pairing: PairingState, antennaReady: Boolean): AddContactUi {
         qr = pairing.qr.takeIf { antennaReady || scanned },
         // Pairing only notices a lost antenna at its next refresh, so the screen reports it at once.
         error = pairing.error ?: PairingError.ANTENNA_NOT_READY.takeIf { !antennaReady },
+        codeRenewed = pairing.codeRenewed,
+        canReplace = pairing.replaceCode != null && antennaReady,
         scannedName = pairing.scannedName,
         pingSent = pairing.pingSent,
         confirmedContactId = pairing.confirmedContactId,

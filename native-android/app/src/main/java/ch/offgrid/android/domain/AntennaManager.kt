@@ -136,7 +136,10 @@ data class AntennaState(
     val lastLock: LockEvent? = null,
     /** Code of the last unsolicited `error` event (storage, RF, lost events). */
     val lastDeviceError: String? = null,
-    /** Counts every successful unlock or provisioning; a change means the antenna's RAM state (pairing salt, refs) is new. */
+    /**
+     * Counts the times this app opened a locked or empty vault. A change means the antenna's RAM state (pairing
+     * session, refs) is new; reconnecting to an antenna that stayed unlocked keeps it.
+     */
     val unlockCount: Int = 0,
 ) {
     val ready: Boolean get() = phase == AntennaPhase.READY
@@ -335,7 +338,8 @@ class AntennaManager(
                 secureBoot = status?.obj("security")?.bool("secure_boot"),
                 flashEncryption = status?.obj("security")?.bool("flash_encryption"),
                 lockTimeoutS = policy?.int("lock_timeout_s"),
-                error = null, errorCode = null, lockReason = null, retryAt = null, unlockCount = it.unlockCount + 1)
+                error = null, errorCode = null, lockReason = null, retryAt = null,
+                unlockCount = if (deviceState == "unlocked") it.unlockCount else it.unlockCount + 1)
         }
         listener.onReady(this, deviceId)
     }
