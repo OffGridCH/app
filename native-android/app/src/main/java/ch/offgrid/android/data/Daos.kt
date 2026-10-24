@@ -75,8 +75,13 @@ interface MessageDao {
     @Query("SELECT COUNT(*) FROM messages")
     fun observeCount(): Flow<Int>
 
-    @Query("SELECT * FROM messages WHERE msgRef = :ref AND status IN (1, 2) ORDER BY id DESC LIMIT 1")
-    suspend fun byMsgRef(ref: Int): MessageEntity?
+    /** The open message the antenna knows as [ref] in the current link [session] (statuses 1, 2 and 5). */
+    @Query("SELECT * FROM messages WHERE msgRef = :ref AND refSession = :session AND status IN (1, 2, 5) ORDER BY id DESC LIMIT 1")
+    suspend fun byMsgRef(ref: Int, session: String): MessageEntity?
+
+    /** Outgoing messages the antenna had and that have no final state yet. */
+    @Query("SELECT * FROM messages WHERE direction = 'out' AND msgRef IS NOT NULL AND status IN (1, 2, 5) ORDER BY id")
+    suspend fun openOutgoing(): List<MessageEntity>
 
     @Query("SELECT * FROM messages WHERE status = 0 AND direction = 'out' ORDER BY sentAt, id")
     suspend fun localQueue(): List<MessageEntity>
@@ -101,13 +106,6 @@ interface MessageDao {
 
     @Query("UPDATE messages SET readAt = :at WHERE groupId = :groupId AND direction = 'in' AND readAt IS NULL")
     suspend fun markGroupRead(groupId: Long, at: Long)
-
-    /** Link spec 7.5: after a device reboot every unfinished message is gone from its queue. */
-    @Query("UPDATE messages SET status = 4, failReason = 'reboot', msgRef = NULL WHERE status = 1")
-    suspend fun failDeviceQueued()
-
-    @Query("UPDATE messages SET msgRef = NULL WHERE msgRef IS NOT NULL")
-    suspend fun clearRefs()
 
     @Query("DELETE FROM messages WHERE contactId = :contactId")
     suspend fun deleteForContact(contactId: Long)
@@ -210,7 +208,7 @@ interface MaintenanceDao {
 
 @Database(
     entities = [ContactEntity::class, MessageEntity::class, GroupEntity::class, GroupMemberEntity::class, SettingEntity::class],
-    version = 1,
+    version = 3,
     exportSchema = true,
 )
 abstract class OffGridDatabase : RoomDatabase() {

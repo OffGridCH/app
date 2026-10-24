@@ -41,19 +41,34 @@ class FixedKeyUnlockTokenSource(private val kPhone: ByteArray) : UnlockTokenSour
     override fun token(deviceId: ByteArray): ByteArray = OgCrypto.hmacSha256(kPhone, TOKEN_LABEL, deviceId)
 }
 
-/** The wrapped token envelope sent with `sec.provision`, `sec.unlock` and `sec.rotate_token`. */
+/** The wrapped token envelope sent with `sec.provision`, `sec.unlock`, `sec.rotate_token` and `sys.factory_reset`. */
 data class WrappedToken(val appEphPub: ByteArray, val wrapped: ByteArray)
 
 /**
- * Link spec 6.5:
+ * What a wrapped token authorizes. The HKDF label differs, so an envelope made for one purpose never
+ * verifies for the other (link spec 6.11: "a normal unlock envelope cannot authorize reset").
+ */
+enum class WrapPurpose(label: String) {
+    /** `sec.provision`, `sec.unlock`, `sec.rotate_token`. */
+    UNLOCK("og-unlock-wrap-v1"),
+
+    /** `sys.factory_reset` with `method: "app"`. */
+    RESET("og-reset-wrap-v1"),
+    ;
+
+    val label: ByteArray = label.toByteArray(Charsets.US_ASCII)
+}
+
+/**
+ * Link spec 6.5 and 6.11, byte for byte as `Security::unwrap` on the firmware reads it:
  * ```
  * shared   = X25519(app_eph_private, device_eph_public)
- * wrap_key = HKDF-SHA256(ikm = shared, salt = nonce, info = "og-unlock-wrap-v1" || device_id_bytes, L = 32)
- * wrapped  = iv (12 B) || AES-256-GCM(wrap_key, iv, token, aad = device_id_bytes)   = 60 bytes
+ * wrap_key = HKDF-SHA256(ikm = shared, salt = nonce (16 B), info = label || device_id_bytes (6 B), L = 32)
+ * wrapped  = iv (12 B) || AES-256-GCM(wrap_key, iv, token (32 B), aad = device_id_bytes)   = 60 bytes
  * ```
+ * `label` is `og-unlock-wrap-v1` or `og-reset-wrap-v1` ([WrapPurpose]).
  */
 object TokenWrap {
-    private val WRAP_LABEL = "og-unlock-wrap-v1".toByteArray(Charsets.US_ASCII)
     const val WRAPPED_SIZE = 60
 
     fun wrap(
@@ -61,23 +76,34 @@ object TokenWrap {
         deviceId: ByteArray,
         deviceEphPub: ByteArray,
         nonce: ByteArray,
+        purpose: WrapPurpose = WrapPurpose.UNLOCK,
         appEphPrivate: ByteArray = OgCrypto.x25519PrivateKey(),
         iv: ByteArray = OgCrypto.randomBytes(12),
     ): WrappedToken {
+        require(token.size == 32) { "unlock token must be 32 bytes" }
+        require(deviceId.size == 6) { "device_id must be 6 bytes" }
+        require(nonce.size == 16) { "session nonce must be 16 bytes" }
         val shared = OgCrypto.x25519Shared(appEphPrivate, deviceEphPub)
-        val key = wrapKey(shared, nonce, deviceId)
+        val key = wrapKey(shared, nonce, deviceId, purpose)
         val sealed = OgCrypto.aesGcmEncrypt(key, iv, token, aad = deviceId)
         return WrappedToken(OgCrypto.x25519PublicKey(appEphPrivate), iv + sealed)
     }
 
-    /** Device side, used by the simulator. Throws when the envelope does not verify. */
-    fun unwrap(wrapped: ByteArray, deviceId: ByteArray, deviceEphPrivate: ByteArray, appEphPub: ByteArray, nonce: ByteArray): ByteArray {
+    /** Device side, used by the simulator. Throws when the envelope does not verify for [purpose]. */
+    fun unwrap(
+        wrapped: ByteArray,
+        deviceId: ByteArray,
+        deviceEphPrivate: ByteArray,
+        appEphPub: ByteArray,
+        nonce: ByteArray,
+        purpose: WrapPurpose = WrapPurpose.UNLOCK,
+    ): ByteArray {
         require(wrapped.size == WRAPPED_SIZE) { "wrapped token must be $WRAPPED_SIZE bytes" }
         val shared = OgCrypto.x25519Shared(deviceEphPrivate, appEphPub)
-        val key = wrapKey(shared, nonce, deviceId)
+        val key = wrapKey(shared, nonce, deviceId, purpose)
         return OgCrypto.aesGcmDecrypt(key, wrapped.copyOfRange(0, 12), wrapped.copyOfRange(12, wrapped.size), aad = deviceId)
     }
 
-    private fun wrapKey(shared: ByteArray, nonce: ByteArray, deviceId: ByteArray): ByteArray =
-        OgCrypto.hkdfSha256(shared, nonce, WRAP_LABEL + deviceId, 32)
+    private fun wrapKey(shared: ByteArray, nonce: ByteArray, deviceId: ByteArray, purpose: WrapPurpose): ByteArray =
+        OgCrypto.hkdfSha256(shared, nonce, purpose.label + deviceId, 32)
 }

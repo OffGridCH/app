@@ -63,7 +63,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -79,10 +78,8 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -123,7 +120,10 @@ fun DayDivider(label: String) {
     }
 }
 
-/** Meta line under outgoing bubbles: time, status word and small signal bars, or the retry row. */
+/**
+ * Meta line under outgoing bubbles: time, status word and small signal bars, a clock while the antenna
+ * waits for the contact, or the failure word from [meta] with the retry button.
+ */
 @Composable
 private fun OutMeta(status: Int, meta: String, onRetry: () -> Unit) {
     AnimatedContent(
@@ -134,7 +134,7 @@ private fun OutMeta(status: Int, meta: String, onRetry: () -> Unit) {
     ) { failed ->
         if (failed) {
             Row(Modifier.padding(end = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Nicht gesendet", style = OgType.meta.copy(color = Og.danger))
+                Text(meta, style = OgType.meta.copy(color = Og.danger))
                 Box(
                     Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(10.dp)).background(Og.surface)
                         .border(1.dp, Og.border, RoundedCornerShape(10.dp))
@@ -149,8 +149,14 @@ private fun OutMeta(status: Int, meta: String, onRetry: () -> Unit) {
                 else -> 0
             }
             Row(Modifier.padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(meta, style = OgType.meta)
-                SignalBars(level, small = true)
+                if (status == MessageStatus.WAITING) {
+                    // No check mark: the antenna sent it but has no ACK yet and tries again when the contact is heard.
+                    OgIconView(OgIcon.Clock, Og.text3)
+                    Text(meta, style = OgType.meta)
+                } else {
+                    Text(meta, style = OgType.meta)
+                    SignalBars(level, small = true)
+                }
             }
         }
     }
@@ -211,6 +217,7 @@ fun MessageBubble(
     reaction: String? = null,
     onRetry: () -> Unit = {},
     onLongPress: (() -> Unit)? = null,
+    longPressLabel: String = "Details",
 ) {
     Column(Modifier.fillMaxWidth().padding(top = if (groupStart) 8.dp else 0.dp), horizontalAlignment = if (out) Alignment.End else Alignment.Start) {
         Column(
@@ -229,7 +236,7 @@ fun MessageBubble(
             Box(
                 Modifier
                     .then(if (out) Modifier.outBubble(status, shape) else Modifier.clip(shape).background(Og.surface).border(1.dp, Og.border, shape))
-                    .then(if (onLongPress != null) Modifier.longPressAction("Reagieren", onLongPress) else Modifier)
+                    .then(if (onLongPress != null) Modifier.longPressAction(longPressLabel, onLongPress) else Modifier)
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(
@@ -350,8 +357,11 @@ fun Composer(
     maxBytes: Int,
     onSend: () -> Unit,
     onLocation: (() -> Unit)?,
+    parts: Int = 1,
+    maxParts: Int = 1,
 ) {
-    val over = usedBytes > maxBytes
+    // A text longer than one radio message is split by the app into up to maxParts messages.
+    val over = parts > maxParts || (maxParts == 1 && usedBytes > maxBytes)
     val canSend = text.isNotBlank() && !over
     // The design keeps the send button at full colour while the field is empty; only an
     // over-long text dims it.
@@ -399,7 +409,11 @@ fun Composer(
                     },
                 )
                 Text(
-                    "$usedBytes / $maxBytes Zeichen pro Funkspruch",
+                    when {
+                        parts > maxParts -> "Zu lang: höchstens $maxParts Funksprüche"
+                        parts > 1 -> "Wird als $parts Funksprüche gesendet"
+                        else -> "$usedBytes / $maxBytes Zeichen pro Funkspruch"
+                    },
                     style = OgType.meta.copy(color = counterColor),
                     modifier = Modifier.padding(start = 4.dp).onSizeChanged { counterHeight = it.height },
                 )
@@ -466,44 +480,6 @@ private fun Modifier.topBorder(color: Color, width: Dp, radius: Dp) = drawWithCo
         arcTo(Rect(size.width - 2 * r + half, half, size.width - half, 2 * r - half), 270f, 90f, false)
     }
     drawPath(path, color, style = Stroke(w))
-}
-
-/** `og-bearing-dial`: compass rose with north up and the arrow turned to the target bearing. */
-@Composable
-fun BearingDial(bearing: Double?, label: String) {
-    val measurer = rememberTextMeasurer()
-    val angle by rememberBearingAngle(bearing)
-    Canvas(Modifier.size(232.dp).semantics { contentDescription = label; role = Role.Image }) {
-        val s = size.width / 240f
-        val c = Offset(120 * s, 120 * s)
-        drawCircle(Og.surface2, 116 * s, c)
-        drawCircle(Og.border, 116 * s, c, style = Stroke(1.5.dp.toPx()))
-        drawCircle(Og.line, 78 * s, c, style = Stroke(1.dp.toPx()))
-        listOf(30, 60, 120, 150, 210, 240, 300, 330).forEach { deg ->
-            rotate(deg.toFloat(), c) {
-                drawLine(Og.borderMuted, Offset(120 * s, 8 * s), Offset(120 * s, 16 * s), 2.dp.toPx(), StrokeCap.Round)
-            }
-        }
-        fun letter(t: String, x: Float, y: Float, color: Color, weight: Int) {
-            val layout = measurer.measure(t, TextStyle(fontFamily = Mono, fontSize = 13.sp, fontWeight = FontWeight(weight), color = color))
-            drawText(layout, topLeft = Offset(x * s - layout.size.width / 2f, y * s - layout.size.height / 2f))
-        }
-        letter("N", 120f, 30f, Og.accent, 600)
-        letter("O", 212f, 120f, Og.text3, 400)
-        letter("S", 120f, 214f, Og.text3, 400)
-        letter("W", 28f, 120f, Og.text3, 400)
-        if (bearing != null) {
-            rotate(angle, c) {
-                val p = Path().apply {
-                    moveTo(120 * s, 54 * s); lineTo(148 * s, 154 * s); lineTo(120 * s, 138 * s); lineTo(92 * s, 154 * s); close()
-                }
-                drawPath(p, Og.accent)
-            }
-            drawCircle(Og.bg, 4 * s, c)
-        } else {
-            letter("?", 120f, 120f, Og.text3, 400)
-        }
-    }
 }
 
 /** `Handshake.dc.html`: 25 modules of 9 px. */

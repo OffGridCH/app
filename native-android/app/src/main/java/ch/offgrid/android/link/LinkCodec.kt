@@ -9,6 +9,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
+import kotlin.math.roundToInt
 
 /** Error object of a failed response (link spec 4.2). */
 data class LinkError(val code: String, val message: String?, val field: String?)
@@ -131,6 +132,11 @@ fun JsonObject.long(key: String): Long? = this[key]?.takeIf { it !is JsonNull }?
 fun JsonObject.int(key: String): Int? = long(key)?.toInt()
 fun JsonObject.double(key: String): Double? =
     (this[key] as? JsonPrimitive)?.takeIf { !it.isString && it !is JsonNull }?.content?.toDoubleOrNull()
+/**
+ * A signal value in whole dB. The firmware writes RSSI as a float (`"rssi": -91.5`, `Contacts::View::rssi`),
+ * which [int] rejects as not an integer.
+ */
+fun JsonObject.dbm(key: String): Int? = double(key)?.roundToInt()
 fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
 fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
 fun JsonObject.isNull(key: String): Boolean = this[key] is JsonNull
