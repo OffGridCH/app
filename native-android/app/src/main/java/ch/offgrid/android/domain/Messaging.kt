@@ -58,7 +58,14 @@ class Messaging(
     private val now: () -> Long = System::currentTimeMillis,
 ) : AntennaListener {
     private val sendMutex = Mutex()
+
+    /** Held while refs are handed out, matched or reconciled, so an event never sees half an update. */
+    private val refMutex = Mutex()
     private var currentDevice: String? = null
+
+    /** Link session whose refs `msg.status` events may update; null until the outbox was reconciled. */
+    @Volatile
+    private var currentSession: String? = null
 
     val conversations: Flow<List<ConversationItem>> = combine(
         db.contacts().observeAll(),
@@ -118,7 +125,8 @@ class Messaging(
     fun retry(messageId: Long) {
         scope.launch {
             val m = db.messages().byId(messageId) ?: return@launch
-            db.messages().update(m.copy(status = MessageStatus.LOCAL_QUEUED, failReason = null, msgRef = null))
+            // A new attempt: the antenna gives it a new ref and counter, the old outcome is forgotten.
+            db.messages().update(m.copy(status = MessageStatus.LOCAL_QUEUED, failReason = null, msgRef = null, refSession = null))
             flushQueue()
         }
     }
@@ -134,26 +142,31 @@ class Messaging(
         }
     }
 
-    /** Hands every locally queued message to the device, oldest first. */
+    /** Hands every locally queued message to the device, oldest first, once the outbox was reconciled. */
     suspend fun flushQueue() = sendMutex.withLock {
         if (!antenna.state.value.ready) return@withLock
+        val session = currentSession ?: return@withLock
         for (m in db.messages().localQueue()) {
-            if (!handOver(m)) break
+            if (!handOver(m, session)) break
         }
     }
 
     /** Returns false when the link went away; the message then stays queued locally. */
-    private suspend fun handOver(m: MessageEntity): Boolean {
+    private suspend fun handOver(m: MessageEntity, session: String): Boolean {
         val args = argsFor(m) ?: run {
             db.messages().update(m.copy(status = MessageStatus.FAILED, failReason = "no_contact"))
             return true
         }
         return try {
             val cmd = if (m.groupId != null) "group.send" else "msg.send"
-            val result = antenna.call(cmd, args)
-            db.messages().update(
-                m.copy(status = MessageStatus.DEVICE_QUEUED, msgRef = result.int("msg_ref"), ctr = result.int("ctr") ?: m.ctr),
-            )
+            // Under refMutex: a msg.status event for the new ref waits until the ref is stored.
+            refMutex.withLock {
+                val result = antenna.call(cmd, args)
+                db.messages().update(
+                    m.copy(status = MessageStatus.DEVICE_QUEUED, msgRef = result.int("msg_ref"), refSession = session,
+                        ctr = result.int("ctr") ?: m.ctr),
+                )
+            }
             true
         } catch (e: LinkCommandException) {
             when (e.error.code) {
@@ -259,12 +272,40 @@ class Messaging(
     override suspend fun onReady(antenna: AntennaManager, deviceId: String) {
         currentDevice = deviceId
         syncContacts(deviceId)
+        reconcileOutbox(deviceId)
         flushQueue()
     }
 
+    /**
+     * The antenna restarted while connected: its queue is gone (link spec 7.5), so every message it had
+     * is lost, and until the next [onReady] no ref is valid.
+     */
     override suspend fun onDeviceRebooted() {
-        db.messages().failDeviceQueued()
-        db.messages().clearRefs()
+        val device = currentDevice ?: return
+        refMutex.withLock {
+            currentSession = null
+            OutboxReconciler.reconcile(db.messages().openOutgoing(), device, PendingSnapshot.EMPTY, session = "")
+                .forEach { db.messages().update(it) }
+        }
+    }
+
+    /** Settles messages of earlier link sessions with `msg.pending` and starts a new session (see [OutboxReconciler]). */
+    private suspend fun reconcileOutbox(deviceId: String) = refMutex.withLock {
+        currentSession = null
+        val session = OutboxReconciler.newSession(deviceId)
+        val snapshot = try {
+            PendingSnapshot.parse(antenna.call("msg.pending"))
+        } catch (_: LinkCommandException) {
+            // Without the queue nothing can be settled; the messages keep their state until the next connect.
+            currentSession = session
+            return@withLock
+        } catch (_: LinkClosedException) {
+            return@withLock
+        } catch (_: LinkTimeoutException) {
+            return@withLock
+        }
+        OutboxReconciler.reconcile(db.messages().openOutgoing(), deviceId, snapshot, session).forEach { db.messages().update(it) }
+        currentSession = session
     }
 
     /**
@@ -333,19 +374,16 @@ class Messaging(
     }
 
     private suspend fun onStatus(d: JsonObject) {
-        val m = d.int("msg_ref")?.let { db.messages().byMsgRef(it) } ?: return
-        val status = when (d.str("state")) {
-            "queued" -> MessageStatus.DEVICE_QUEUED
-            "sent", "relayed", "retrying" -> MessageStatus.SENT
-            "delivered" -> MessageStatus.DELIVERED
-            "failed", "cancelled" -> MessageStatus.FAILED
-            else -> return
+        val ref = d.int("msg_ref") ?: return
+        val state = d.str("state") ?: return
+        val updated = refMutex.withLock {
+            // Only refs of the current session: a ref from an earlier boot must never touch a newer message.
+            val session = currentSession ?: return
+            val m = db.messages().byMsgRef(ref, session) ?: return
+            OutboxReconciler.applyEvent(m, state, d.str("reason"))?.also { db.messages().update(it) } ?: return
         }
-        // Group messages have no end-to-end ACK, so "sent" is their final state.
-        val done = status == MessageStatus.DELIVERED || status == MessageStatus.FAILED || (m.groupId != null && status == MessageStatus.SENT)
-        db.messages().update(m.copy(status = status, failReason = d.str("reason"), msgRef = if (done) null else m.msgRef))
-        if (status == MessageStatus.DELIVERED) {
-            m.contactId?.let { db.contacts().byId(it) }?.let { db.contacts().update(it.copy(lastSeenAt = now())) }
+        if (updated.status == MessageStatus.DELIVERED) {
+            updated.contactId?.let { db.contacts().byId(it) }?.let { db.contacts().update(it.copy(lastSeenAt = now())) }
         }
     }
 

@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.room.Room
 import ch.offgrid.android.analytics.Analytics
 import ch.offgrid.android.crypto.KeystoreUnlockTokenSource
+import ch.offgrid.android.data.MIGRATION_1_2
 import ch.offgrid.android.data.OffGridDatabase
 import ch.offgrid.android.domain.AntennaManager
 import ch.offgrid.android.domain.BackupService
@@ -37,7 +38,9 @@ import java.util.UUID
 /** Manual dependency container; one per process. */
 class AppContainer(private val context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val db: OffGridDatabase = Room.databaseBuilder(context, OffGridDatabase::class.java, "offgrid.db").build()
+    val db: OffGridDatabase = Room.databaseBuilder(context, OffGridDatabase::class.java, "offgrid.db")
+        .addMigrations(MIGRATION_1_2)
+        .build()
     val settings = Settings(db.settings(), scope)
 
     val simDevice = SimulatedHeltec(SimFlashStore(File(context.filesDir, "sim-heltec.json")), scope)

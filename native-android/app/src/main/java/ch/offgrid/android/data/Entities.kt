@@ -45,8 +45,17 @@ object MessageStatus {
     /** End-to-end ACK verified ("zugestellt"). */
     const val DELIVERED = 3
 
-    /** Gave up ("Nicht gesendet"). */
+    /**
+     * Gave up: "Nicht zugestellt" when the antenna had the message (reason from `msg.status`, or `lost`
+     * when it vanished from the antenna's queue), "Nicht gesendet" when the antenna refused it (error code).
+     */
     const val FAILED = 4
+
+    /**
+     * Lab image: no ACK after all retries, the antenna keeps it and sends it again when the contact is
+     * heard, for up to 30 minutes ("Wartet auf …", `msg.status` state `waiting`).
+     */
+    const val WAITING = 5
 }
 
 @Serializable
@@ -70,8 +79,16 @@ data class MessageEntity(
     val ageS: Int? = null,
     val status: Int,
     val failReason: String? = null,
-    /** Device handle from `msg.send`, unique since the device booted. Cleared on `sys.boot`. */
+    /**
+     * Device handle from `msg.send`, unique only within one boot of the antenna. Set while the antenna
+     * has the message and cleared when it reached a final state.
+     */
     val msgRef: Int? = null,
+    /**
+     * `<device_id>/<random>` of the app's link session in which [msgRef] was last confirmed. `msg.status`
+     * events only match messages of the current session; a reconnect re-confirms refs with `msg.pending`.
+     */
+    val refSession: String? = null,
     /** Counter of the message within the conversation direction, used to match reactions. */
     val ctr: Int? = null,
     /** Group messages: who wrote it. */

@@ -119,7 +119,7 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
                         out = m.direction == "out",
                         status = m.status,
                         text = m.text,
-                        meta = metaFor(m, ready),
+                        meta = metaFor(m, ready, c.firstName ?: c.displayName),
                         groupStart = row.groupStart,
                         continued = row.continued,
                         reaction = m.peerReaction,
@@ -231,17 +231,29 @@ fun MessageList(
     }
 }
 
-/** Meta line: in → time; out → "14:03 · zugestellt", "wartet auf Funk …" or "in Warteschlange". */
-fun metaFor(m: MessageEntity, ready: Boolean): String {
+/**
+ * Meta line: in → time; out → "14:03 · zugestellt", "Wartet auf Anna", "wartet auf Funk …",
+ * "in Warteschlange", or the failure word shown next to "Erneut senden".
+ */
+fun metaFor(m: MessageEntity, ready: Boolean, recipient: String? = null): String {
     val time = Formats.time(m.sentAt)
     if (m.direction == "in") return time
     return when (m.status) {
         MessageStatus.DELIVERED -> "$time · zugestellt"
         MessageStatus.SENT -> "$time · gesendet"
+        MessageStatus.WAITING -> "Wartet auf ${recipient ?: "Empfänger"}"
         MessageStatus.LOCAL_QUEUED, MessageStatus.DEVICE_QUEUED -> if (ready) "wartet auf Funk …" else "in Warteschlange"
+        MessageStatus.FAILED -> failureText(m.failReason)
         else -> time
     }
 }
+
+/**
+ * "Nicht gesendet" when the antenna refused the message (an `E_…` code from `msg.send`, or no contact
+ * slot); "Nicht zugestellt" when the antenna had it and gave up or lost it (`timeout`, `locked`, `lost` …).
+ */
+fun failureText(reason: String?): String =
+    if (reason != null && (reason.startsWith("E_") || reason == "no_contact")) "Nicht gesendet" else "Nicht zugestellt"
 
 @Composable
 private fun GeoBubble(row: MessageRow.Msg, c: ContactEntity, myFix: GeoFix?, now: Long, ready: Boolean, onOpen: () -> Unit, onRetry: () -> Unit) {
@@ -258,7 +270,7 @@ private fun GeoBubble(row: MessageRow.Msg, c: ContactEntity, myFix: GeoFix?, now
         title = if (out) "Mein Standort" else "Standort von ${c.firstName ?: c.displayName}",
         coordinate = Geo.formatCoordinate(lat, lon),
         accuracy = m.accuracyM?.let(Geo::formatAccuracy),
-        meta = metaFor(m, ready),
+        meta = metaFor(m, ready, c.firstName ?: c.displayName),
         distance = if (fresh) Geo.formatDistance(Geo.distanceMeters(myFix!!.latitude, myFix.longitude, lat, lon)) else null,
         directionText = bearing?.let { "Richtung ${Geo.compassName(it)}" },
         bearing = bearing,
