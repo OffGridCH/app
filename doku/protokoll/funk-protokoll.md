@@ -17,3 +17,6 @@ Was die App davon wissen muss:
 | Reaktionen | Emoji-Tabelle in Appendix B des Protokolls; auf der Host-API steht das Emoji selbst |
 
 Die Zahlen der Spezifikation stehen auf der Seite [Serial-Protokoll](serial.md). Alles Weitere (Paketformat, Verschlüsselung, Mesh-Regeln) gehört in die Doku des Firmware-Repos.
+
+Der GPS-Kern der App (T17) ändert das Protokoll nicht: er liefert nur die eigene Koordinate, die die App als `msg.send` mit
+`type: "geo"` und den Feldern `lat`, `lon` und `age_s` an die Antenne gibt. Details in [Standort](../funktionen/standort.md).

@@ -1,6 +1,6 @@
 # Tests
 
-Stand: **nach T01, T02, T03, T04, T23**. Der Test-Runner ist Vitest mit jsdom über den Angular-Builder. Einmal, headless:
+Stand: **nach T01, T02, T03, T04, T17, T23**. Der Test-Runner ist Vitest mit jsdom über den Angular-Builder. Einmal, headless:
 `npm run test:ci`. WebCrypto kommt aus dem Node-Modul `node:crypto` und wird in `src/test-setup.ts` bereitgestellt.
 
 Jede Testdatei (`*.spec.ts`) liegt neben dem Code, den sie prüft.
@@ -36,12 +36,16 @@ Jede Testdatei (`*.spec.ts`) liegt neben dem Code, den sie prüft.
 | `src/app/core/messaging/messaging.service.spec.ts` | `MessagingService` gegen das simulierte Gerät: Text speichern und mit `msg.send` übergeben, `ctr` und `msg_ref` eintragen; Status aus `msg.status`; lange Texte an 83 Bytes geteilt; Warteschlange bei nicht entsperrter oder voller Antenne; `sys.boot` lässt Wartendes scheitern; `retry`, `cancel`; Eingang, Duplikate über `ctr`, unbekannter Kontakt, Standort, Reaktionen; `sendReaction`, `sendLocation` (`type: "geo"`). |
 | `src/app/core/handshake/handshake.service.spec.ts` | `HandshakeService`: `looksLikeOffgridQr`; Kontakte spiegeln (mehrere Seiten, wiederholt, Platz mit neuem Schlüssel); `pair.begin` liefert den QR-Text; `pair.complete` liefert den Kontakt mit Fingerabdruck, `pending` wird `active`; Fehler `invalid-qr`, `no-pairing`, `self-pair`, `contact-exists`, `storage-full`; umbenennen und löschen. |
 | `src/app/core/settings/settings.service.spec.ts` | `SettingsService`: Erzeugen und Beibehalten der Install-Id, Standardwerte, Übernahme gespeicherter Werte, Speichern von Anzeigename, Hintergrundempfang und Vibration sowie das Abschliessen des Onboardings. |
+| `src/app/core/location/geo.spec.ts` | Die Geo-Funktionen: Entfernung nach Haversine (Luzern–Zürich, Luzern–Demo-Kontakt, 0 zu sich selbst), Anfangskurs (0 = Norden, 90 = Osten), die acht Himmelsrichtungen samt Grenzen und 359°, Entfernung als Text („850 m“, „1.0 km“, „12 km“), Koordinate mit Hemisphäre und ohne, Genauigkeit („±8 m“, mindestens 1 m), Alter des Fixes („gerade eben“, „vor 12 Min.“, „vor 3 Std.“, Listenformat ab einem Tag) und Runden auf sechs Nachkommastellen (T17) |
+| `src/app/core/location/location.service.spec.ts` | `LocationService`: `locate()` setzt `myFix` aus dem GPS (Genauigkeit auf ganze Meter gerundet, `at` aus dem Zeitstempel), fragt eine fehlende Berechtigung an, meldet `location-denied`, `location-unavailable` und `location-timeout` und liefert im Browser nach 600 ms den Demo-Fix, ohne die Geolocation-API aufzurufen; `isFresh` gilt bis 10 Minuten nach der Messung als frisch (T17) |
 
 Die Spec-Dateien prüfen die reinen Funktionen und Services ohne Oberfläche. Für die Zustandskomponenten aus T02
 kommen gezielte Tests der sichtbaren Zustände und Interaktionen dazu. Die Migrationen werden statisch anhand ihrer DDL und
 Parameter und zusätzlich gegen eine echte SQLite-Datenbank geprüft; das Verhalten der Repositories wird über die
 Memory-Implementierungen getestet. Die Dienste für Antenne, Nachrichten und Kontakte laufen gegen das **simulierte Gerät** (`MockDevice`), das dieselbe
-Host-API spricht wie die echte Antenne; der Test-Helfer `src/app/core/antenna/antenna-harness.testing.ts` richtet es ein. Tests für die Seiten kommen mit den Tickets, die die Screens bauen (T09 bis T13).
+Host-API spricht wie die echte Antenne; der Test-Helfer `src/app/core/antenna/antenna-harness.testing.ts` richtet es ein. Der Standort-Kern (T17) wird ohne
+Oberfläche geprüft: `geo.spec.ts` testet die reinen Geo-Funktionen, `location.service.spec.ts` den Dienst mit einem nachgebauten Geolocation-Plugin. Tests für die
+Seiten kommen mit den Tickets, die die Screens bauen (T09 bis T13).
 
 !!! note "Datenbankschicht"
 

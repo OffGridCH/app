@@ -1,5 +1,20 @@
 # Änderungen
 
+## T17 – Standort: Kern (GPS, Geo-Funktionen)
+*2026-10-24*
+
+- Neu: `LocationService` (`src/app/core/location/location.service.ts`) bestimmt den eigenen Standort. Er holt auf Android die Berechtigung
+  (`location` oder `coarseLocation`), fragt den GPS mit hoher Genauigkeit ab und setzt den Fix in `myFix`. Daneben gibt es die Signale
+  `locating` und `error` mit den Codes `location-denied`, `location-timeout` und `location-unavailable`.
+- Im Browser (und im Mock) gibt es keinen echten GPS: nach 600 ms liefert der Dienst den Demo-Fix aus Luzern
+  (`47.05021`, `8.30934`, Genauigkeit 8 m). Der GPS wartet höchstens 20 Sekunden; ein Fix gilt 10 Minuten lang als frisch (`isFresh`).
+- Neu: `src/app/core/location/geo.ts` mit reinen Funktionen für Entfernung (Haversine), Anfangskurs, die acht Himmelsrichtungen und die Texte für
+  Distanz, Koordinate, Genauigkeit und Alter des Fixes. Die Koordinaten runden auf sechs Nachkommastellen (`roundCoord`).
+- Das Android-Manifest hat die Berechtigungen `ACCESS_COARSE_LOCATION` und `ACCESS_FINE_LOCATION`; der GPS ist als optionales Feature deklariert,
+  damit die App auch ohne GPS läuft. Das Plugin `@capacitor/geolocation` ist eingebunden.
+- Das Senden und Empfangen von Standorten ändert sich nicht: das lief schon mit T23 über die Host-API (`msg.send` mit `type: "geo"`).
+- Noch ohne Oberfläche: die Standort-Screens folgen mit T18, der Live-Standort mit T19.
+
 ## T02 – UI-Basis 2: Zustandskomponenten
 *2026-10-24*
 

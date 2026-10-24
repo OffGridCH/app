@@ -48,6 +48,7 @@ Hinweis steht, ist im Code dieses Branches vorhanden.
 | Seiten Kontakt hinzufügen und Kontakt benennen | geplant | T11 |
 | Screens (Verbinden, Name, Kontakte, Chat, Einstellungen) | geplant | T09 bis T13 |
 | Backup (Export und Import) | geplant | T14 |
-| Standort (GPS, Entfernung, Richtung) | geplant | T17, T18 |
+| Standort-Kern (GPS, Entfernung, Richtung) | fertig | T17 |
+| Standort-Oberfläche (Senden und Anzeigen) | geplant | T18 |
 | Live-Standort (optional) | geplant | T19 |
 | Gruppenchat (optional) | geplant | T20 |
