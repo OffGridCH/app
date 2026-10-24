@@ -359,7 +359,7 @@ public class UsbSerialPlugin extends Plugin {
             call.resolve();
         } catch (RuntimeException error) {
             if (!closeConnection(generation.get())) {
-                // Die Generation war schon veraltet: Port direkt schließen.
+                // Die Generation war schon veraltet: Port direkt schliessen.
                 closePort(port, openedConnection);
             }
             call.reject("USB-Serial konnte nicht gestartet werden", "OPEN_FAILED");
