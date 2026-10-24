@@ -465,6 +465,8 @@ class AntennaManager(
         }
         try {
             authCall(c, "sec.unlock", wrapArgs(hello, tokenSource.token(deviceBytes), deviceBytes))
+            // A rotation whose answer was lost: the antenna already has our token, the old phone's is done with.
+            if (transferTokenFor(deviceId) != null) clearTransferToken()
             return
         } catch (e: LinkCommandException) {
             if (e.error.code != "E_UNLOCK_FAILED") throw e
@@ -472,6 +474,8 @@ class AntennaManager(
         val transfer = transferTokenFor(deviceId) ?: throw UnlockFailure(AntennaError.UNLOCK_FAILED, "E_UNLOCK_FAILED")
         // The backup carries the old phone's token for exactly this device, not its Keystore key.
         authCall(c, "sec.unlock", wrapArgs(c.call("sys.hello", HELLO_ARGS), transfer, deviceBytes))
+        // Both tokens stay known until the antenna confirmed the rotation: if the link drops in between, the next
+        // connect tries ours first and falls back to the old phone's.
         c.call("sec.rotate_token", wrapArgs(c.call("sys.hello", HELLO_ARGS), tokenSource.token(deviceBytes), deviceBytes))
         clearTransferToken()
     }

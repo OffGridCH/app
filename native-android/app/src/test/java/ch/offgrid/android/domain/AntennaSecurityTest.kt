@@ -236,6 +236,34 @@ class AntennaSecurityTest {
     }
 
     @Test
+    fun aBackupImportRotatesToTheNewPhoneAndKeepsBothTokensUntilConfirmed() = runBlocking {
+        val owner = manager("phone-a")
+        owner.connect()
+        assertEquals(AntennaPhase.READY, owner.settle().phase)
+        owner.call("sec.lock")
+        owner.disconnect()
+        val deviceBytes = OgCrypto.unhex(device.deviceIdHex)
+        val oldToken = FixedKeyUnlockTokenSource(OgCrypto.sha256("phone-a".toByteArray())).token(deviceBytes)
+        val settings = Settings(MemorySettingDao(), scope)
+        settings.put(Settings.TRANSFER_TOKEN, OgCrypto.b64(oldToken))
+        settings.put(Settings.TRANSFER_DEVICE, device.deviceIdHex)
+        val newPhone = manager("phone-b", settings)
+        newPhone.connect()
+        assertEquals(AntennaPhase.READY, newPhone.settle().phase)
+        assertNull(settings.get(Settings.TRANSFER_TOKEN))
+        // The rotation's answer got lost: the transfer token is still there, but the antenna takes ours already.
+        settings.put(Settings.TRANSFER_TOKEN, OgCrypto.b64(oldToken))
+        settings.put(Settings.TRANSFER_DEVICE, device.deviceIdHex)
+        newPhone.call("sec.lock")
+        assertEquals(AntennaPhase.READY, newPhone.reconnect().phase)
+        assertNull(settings.get(Settings.TRANSFER_TOKEN))
+        // The old phone's token no longer opens it.
+        newPhone.call("sec.lock")
+        newPhone.disconnect()
+        assertEquals(AntennaError.UNLOCK_FAILED, owner.reconnect().error)
+    }
+
+    @Test
     fun factoryResetErasesTheAntennaAndSetsItUpAgain() = runBlocking {
         val m = manager("phone-a")
         m.connect()
