@@ -40,7 +40,7 @@ Hinweis steht, ist im Code dieses Branches vorhanden.
 | Projektgerüst, dunkles Theme, Design-Tokens | fertig | T00 |
 | CI-Checks (Lint, Tests, Build) und Doku-Website | fertig | T21 |
 | UI-Grundkomponenten (Icons, Buttons, Karten, Eingabefeld, Schalter) | fertig | T01 |
-| UI-Zustandskomponenten (Avatar, Signalbalken, Banner, Schrittliste, Blase, Composer, QR) | geplant | T02 |
+| UI-Zustandskomponenten (Avatar, Signalbalken, Banner, Schrittliste, Blase, Composer, QR) | fertig | T02 |
 | Zeitformate, Hex/Base64, Signal-Level, Längenregeln für Texte | fertig | T03 |
 | Datenbank, Repositories, Settings, App-Start | fertig | T04 |
 | Host-API v1: Serial-Client, Antennen-Port, Mock-Gerät, Entsperr-Schlüssel, Nachrichten- und Kontaktdienste (ersetzt T05, T07, T08) | fertig | T23 |

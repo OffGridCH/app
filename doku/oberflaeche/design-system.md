@@ -1,12 +1,13 @@
 # Design-System
 
-Stand: **nach T01**. Farben, Radien, Grössen und Schriften stehen in den Design-Tokens unter `src/theme/`.
-Die 13 Grundkomponenten aus T01 sind gebaut und liegen in `src/app/ui/`. Die Zustandskomponenten
-(Avatar, Signalbalken, Banner, Schrittliste, Nachrichtenblase, Composer, QR) folgen mit T02.
+Stand: **nach T02**. Farben, Radien, Grössen und Schriften stehen in den Design-Tokens unter `src/theme/`.
+Die 13 Grundkomponenten aus T01 und die 9 Zustandskomponenten aus T02 sind gebaut und liegen in `src/app/ui/`.
 
 Regeln für alle Komponenten:
 
 - Farben, Radien und Grössen kommen ausschliesslich aus `var(--og-…)`. In Komponenten stehen keine Hex-Werte.
+  Einzige Ausnahme sind die beiden Farbwerte in `src/app/ui/qr/qr-colors.ts`, weil das Paket `qrcode` Farben nur
+  als Strings entgegennimmt.
 - Die Typografie kommt aus den Mixins in `src/theme/typography.scss` (`og-type-…`), nicht aus eigenen Angaben.
 - Alle Komponenten sind Standalone, nutzen `ChangeDetectionStrategy.OnPush` und haben nur Inputs und Outputs.
   Sie injizieren keine Services.
@@ -273,11 +274,116 @@ Ein Umschalter mit Segmenten als `role="tablist"` mit `aria-label`.
 
 ## Zustandskomponenten (T02)
 
-!!! info "Geplant"
+Neun Komponenten bilden die Zustände von Profil, Signal, Hinweisen, Schritten, Nachrichten, Eingabe und
+QR-Code ab. Jede Komponente liegt in einem eigenen Ordner unter `src/app/ui/`. Der Barrel
+`src/app/ui/index.ts` exportiert die Komponenten und ihre Typen.
 
-    Diese Komponenten folgen mit T02 und sind im aktuellen Branch noch nicht vorhanden:
-    `og-avatar` (Raster-Profilbild; die Quelle der Zellwerte entscheidet T02), `og-signal-bars` (Signalstärke),
-    `og-banner` (Fehlerhinweis), `og-step-list` (Schrittliste), `og-message-bubble` (Nachrichtenblase),
-    `og-composer` (Eingabeleiste im Chat) und `og-qr` (QR-Code).
+| Selektor | Datei | Inputs | Outputs |
+|---|---|---|---|
+| `og-avatar` | `ui/avatar/avatar.component.ts` | `pattern`, `size` (Pflicht), `variant` | – |
+| `og-signal-bars` | `ui/signal-bars/signal-bars.component.ts` | `level` (Pflicht), `size`, `label` (Pflicht) | – |
+| `og-banner` | `ui/banner/banner.component.ts` | `tone`, `title`, `text` | – |
+| `og-banner-action` | `ui/banner/banner-action.component.ts` | `routerLink` | – |
+| `og-note` | `ui/banner/note.component.ts` | `text` | – |
+| `og-step-list` | `ui/step-list/step-list.component.ts` | `steps` (Pflicht), `compact`, `activeStyle` | – |
+| `og-message-bubble` | `ui/message-bubble/message-bubble.component.ts` | `direction` (Pflicht), `status`, `text`, `meta`, `groupStart` | `retry` |
+| `og-composer` | `ui/composer/composer.component.ts` | `placeholder`, `label` (Pflicht), `sendLabel` (Pflicht), `maxBytes` (Pflicht), `countBytes` (Pflicht), `showLocation`, `blockOverLimit`, `text` (Model) | `send`, `location` |
+| `og-qr` | `ui/qr/qr.component.ts` | `data` (Pflicht) | – |
+
+### og-avatar
+
+Ein rundes Profilbild mit einem zentrierten 5 × 5-Raster. `pattern` enthält 25 booleansche Zellwerte in der
+Reihenfolge von oben nach unten und links nach rechts. Aktive Zellen nutzen `--og-text-2`; inaktive Zellen bleiben
+transparent. Die Komponente ist rein dekorativ und trägt `aria-hidden="true"`.
+
+| `size` | Zelle | Abstand | Zellradius |
+|---|---|---|---|
+| 40 | 4px | 1px | 1px |
+| 48 | 5px | 1px | 1px |
+| 56 | 5px | 1px | 1px |
+| 72 | 7px | 1.5px | 1px |
+| 96 | 9px | 2px | 2px |
+
+`variant="pending"` zeigt statt des Rasters einen transparenten Kreis mit 1.5px gestricheltem Rahmen in
+`--og-dashed`. Die eckige Variante `square` ist für den späteren Gruppenchat (T20) vorbereitet.
+
+Die Zellwerte erzeugt `avatarPattern(seed)` aus `ui/avatar/avatar-pattern.ts`. Die Funktion liefert immer 25 Werte,
+hält die Zeilen spiegelsymmetrisch, schaltet mindestens fünf Zellen an und erzeugt für denselben Seed dasselbe
+Raster. Die Konstante `AVATAR_PATTERN_SIZE` ist ebenfalls im Barrel exportiert.
+
+### og-signal-bars
+
+Vier SVG-Balken zeigen die Signalstufe `level` von 0 bis 4. Die ersten `level` Balken sind aktiv und nutzen
+`--og-accent`; die übrigen Balken nutzen `--og-signal-off`. Das SVG hat die ViewBox `0 0 20 14`.
+
+| `size` | Breite | Höhe |
+|---|---|---|
+| `md` | 20px | 14px |
+| `sm` | 15px | 11px |
+
+`label` ist als Screenreader-Beschriftung vorgesehen. Ist der Wert leer, rendert das SVG dekorativ mit
+`aria-hidden="true"`.
+
+### og-banner, og-banner-action und og-note
+
+`og-banner` zeigt Titel und Text in einem Gefahrenhinweis. Der einzige unterstützte Ton ist `danger`; Grund,
+Rahmen, Titel- und Textfarbe kommen aus `--og-danger-bg`, `--og-danger-border`, `--og-danger-title` und
+`--og-danger-text`. Der Container trägt `role="status"`. Rechts kann eine Aktion projiziert werden.
+
+`og-banner-action` rendert mit `routerLink` einen Link `<a>` mit 40px Höhe. Der Linktext wird projiziert.
+
+`og-note` ist ein kompakter Hinweis ohne Titel. Er zeigt das Icon `warning` mit 18px, den Text und trägt
+`role="note"`.
+
+### og-step-list
+
+Eine geordnete Liste `<ol>` mit den Zuständen `done`, `active` und `todo`. Jeder Schritt kann einen optionalen
+Meta-Text rechts enthalten.
+
+- `done`: gefülltes Kästchen in `--og-accent` mit dem Icon `check`.
+- `active`: hervorgehobener Text und Meta-Text. `activeStyle="pulse"` zeigt einen pulsierenden Punkt,
+  `activeStyle="spinner"` einen rotierenden Kreis. Standard ist `pulse`.
+- `todo`: offenes Kästchen mit Rahmen in `--og-border-muted` und Text in `--og-text-3`.
+
+`compact` verkürzt den oberen Abstand der Liste. Bei `prefers-reduced-motion: reduce` sind Puls und Spinner
+ausgeschaltet.
+
+### og-message-bubble
+
+Eine eingehende (`direction="in"`) oder ausgehende (`direction="out"`) Nachricht. Die Blase hat höchstens 78 %
+Breite. `groupStart` setzt zusätzlich 8px Abstand nach oben, wenn die Nachrichtenrichtung wechselt.
+
+| Ausgehender `status` | Blase | Signalbalken | Zusatz |
+|---|---|---|---|
+| `queued` | transparent, 1.5px gestrichelt in `--og-accent` | Level 0 | – |
+| `sent` | Grund `--og-accent` | Level 2 | – |
+| `delivered` | Grund `--og-accent` | Level 4 | – |
+| `failed` | transparent, 1.5px Rahmen in `--og-danger` | keine | „Nicht gesendet“ und Button „Erneut senden“ |
+
+Der Button „Erneut senden“ löst `retry` aus. Eingehende Nachrichten zeigen in der Meta-Zeile nur den
+übergebenen Text, etwa die Uhrzeit, und keine Signalbalken.
+
+### og-composer
+
+Die Eingabeleiste für Nachrichten. `maxBytes` definiert das erlaubte Limit. Die Komponente zählt den Text nur über
+den Pflicht-Input `countBytes`; sie bringt keine eigene Byte-Zählung mit. Der Zähler zeigt
+`<Zahl> / <maxBytes> Zeichen pro Funkspruch`.
+
+- Leerer oder nur aus Leerzeichen bestehender Text deaktiviert das Senden.
+- Überschreitet die Zahl aus `countBytes` das Limit, wird der Zähler in `--og-danger` dargestellt.
+- `blockOverLimit` ist standardmässig `true` und sperrt dann das Senden. Mit `false` bleibt der Senden-Button aktiv.
+- Enter sendet den getrimmten Text über `send` und leert das Feld.
+- `showLocation` blendet den Button „Standort senden“ ein. Er löst `location` aus.
+
+Das sichtbare Eingabefeld hat ein verstecktes Label. `text` ist ein Model und kann mit `[(text)]` gebunden werden.
+
+### og-qr
+
+`og-qr` erzeugt aus `data` ein QR-Raster als SVG. Das Paket `qrcode` erzeugt die Module mit der Fehlerkorrekturstufe
+`M`; `@types/qrcode` liefert die Typen im Entwicklungsbetrieb. Jedes dunkle Modul wird als SVG-Rechteck gerendert.
+Das QR ist 230 × 230px gross und sitzt auf einer Karte mit 22px Innenabstand und Radius `--og-r-qr`.
+
+Die Karte trägt `role="img"` und `aria-label="QR-Code mit deinem Schlüssel"`. Die beiden Farbwerte liegen in
+`ui/qr/qr-colors.ts`: `QR_DARK` ist `#0F1115`, `QR_LIGHT` ist das transparente `#00000000`.
 
 Siehe dazu auch [Screens](screens.md) und [Überblick](../architektur/ueberblick.md).

@@ -107,3 +107,16 @@
   font-weight: 400;
   color: var(--og-text);
 }
+
+@mixin og-type-action {
+  font-family: var(--og-font);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+@mixin og-type-note {
+  font-family: var(--og-font);
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 400;
+}
