@@ -2,6 +2,7 @@ package ch.offgrid.android.link.sim
 
 import ch.offgrid.android.crypto.OgCrypto
 import ch.offgrid.android.crypto.TokenWrap
+import ch.offgrid.android.crypto.WrapPurpose
 import ch.offgrid.android.domain.MessageLimits
 import ch.offgrid.android.link.FramedLine
 import ch.offgrid.android.link.LineFramer
@@ -10,6 +11,7 @@ import ch.offgrid.android.link.Request
 import ch.offgrid.android.link.bool
 import ch.offgrid.android.link.double
 import ch.offgrid.android.link.int
+import ch.offgrid.android.link.long
 import ch.offgrid.android.link.obj
 import ch.offgrid.android.link.str
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +20,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -27,9 +30,34 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
-import java.util.concurrent.atomic.AtomicInteger
+import kotlin.random.Random
 
 private class CommandError(val code: String, message: String, val field: String? = null) : Exception(message)
+
+/** Mesh timing of the simulated antenna. Defaults follow the lab.3 contract; tests shorten them. */
+data class SimTiming(
+    val firstTxMs: Long = 350,
+    val ackWaitMs: Long = 900,
+    val retryMs: Long = 2_000,
+    val retries: Int = 3,
+    /** Lab.3 item 5: after the last retry a message waits and is sent again this often ... */
+    val resendMs: Long = 60_000,
+    /** ... or at once when its contact sends anything, until this long after it was queued; then `failed timeout`. */
+    val parkMs: Long = 30 * 60_000L,
+)
+
+/** A message in the device's pending queue (`msg.pending` item). */
+private class SimPending(val ref: Int, val to: Int, val type: String, val ctr: Int?, val createdAt: Long) {
+    var state = "queued"
+    var retry = 0
+    var job: Job? = null
+
+    /** A packet from the contact arrived: a waiting message is sent again at once. */
+    val wake = Channel<Unit>(Channel.CONFLATED)
+}
+
+/** A final outcome kept for `msg.pending.recent` (lab.3 item 5). */
+private data class SimRecent(val ref: Int, val state: String, val reason: String?)
 
 /**
  * In-process stand-in for the Heltec V3 firmware. It speaks the JSON Lines link protocol
@@ -43,6 +71,7 @@ class SimulatedHeltec(
     private val store: SimFlashStore,
     private val scope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val timing: SimTiming = SimTiming(),
 ) {
     private var flash: SimFlash = store.load() ?: SimFlash(deviceId = OgCrypto.hex(OgCrypto.randomBytes(6)))
         .also(store::save)
@@ -55,8 +84,15 @@ class SimulatedHeltec(
     private var failedUnlocks = 0
     private var rateLimitedUntil = 0L
     private var lastActivity = clock()
-    private val msgRef = AtomicInteger(0)
-    private val pendingJobs = mutableMapOf<Int, Job>()
+    /** Lab.3: `msg_ref` starts at a random value per boot, so a ref from an earlier boot never matches. */
+    private var nextRef = randomRef()
+    private val pending = LinkedHashMap<Int, SimPending>()
+    private val recent = ArrayDeque<SimRecent>()
+    private var txPackets = 0
+    private var resetAuthorized = false
+
+    /** Events of a command that the firmware writes after its response line. */
+    private val afterResponseEvents = mutableListOf<ByteArray>()
     private var output: Channel<ByteArray>? = null
     private val framer = LineFramer(dropFirstPartialLine = false)
     private var watchdog: Job? = null
@@ -109,7 +145,11 @@ class SimulatedHeltec(
                 LinkCodec.encodeResponseError(request.id, e.code, e.message ?: e.code, e.field)
             }
             send(reply)
-            synchronized(lock) { afterResponse(request) }
+            synchronized(lock) {
+                afterResponseEvents.forEach(::send)
+                afterResponseEvents.clear()
+                afterResponse(request)
+            }
         }
     }
 
@@ -120,6 +160,10 @@ class SimulatedHeltec(
     private fun uptime(): Long = clock() - bootAt
 
     private fun emitEvent(name: String, data: JsonObject) = send(LinkCodec.encodeEvent(name, uptime(), data))
+
+    private fun emitAfterResponse(name: String, data: JsonObject) {
+        afterResponseEvents += LinkCodec.encodeEvent(name, uptime(), data)
+    }
 
     private fun startWatchdog() {
         if (watchdog?.isActive == true) return
@@ -145,10 +189,7 @@ class SimulatedHeltec(
             "sys.status" -> status()
             "sys.ping" -> buildJsonObject { put("uptime_ms", uptime()) }
             "sys.reboot" -> buildJsonObject { put("rebooting", true) }
-            "sys.factory_reset" -> {
-                if (a.str("confirm") != "ERASE") throw CommandError("E_CONFIRM_REQUIRED", "confirm must be ERASE", "confirm")
-                buildJsonObject { put("armed", true); put("expires_s", 10); put("action", "hold PRG button for 3 s") }
-            }
+            "sys.factory_reset" -> factoryReset(a)
             "sys.set_log_level" -> buildJsonObject { put("level", a.str("level") ?: "info") }
             "sec.provision" -> provision(a)
             "sec.unlock" -> unlock(a)
@@ -185,20 +226,34 @@ class SimulatedHeltec(
                 requireUnlocked()
                 val c = contact(a)
                 if (a.bool("confirm") != true) throw CommandError("E_CONFIRM_REQUIRED", "confirm must be true", "confirm")
+                pending.values.filter { it.to == c.contactId }
+                    .forEach { finish(it, "failed", "contact_deleted", afterResponse = true, stop = true) }
                 save(flash.copy(contacts = flash.contacts.filter { it.contactId != c.contactId }))
                 buildJsonObject { put("deleted", true) }
             }
             "msg.send" -> msgSend(a)
             "msg.cancel" -> {
                 requireUnlocked()
-                val ref = a.int("msg_ref") ?: throw CommandError("E_INVALID_ARG", "msg_ref missing", "msg_ref")
-                pendingJobs.remove(ref)?.cancel()
+                val ref = a.long("msg_ref")?.takeIf { it in 1..0xFFFFFFFFL }
+                    ?: throw CommandError("E_INVALID_ARG", "msg_ref must be a positive integer", "msg_ref")
+                val p = pending[ref.toInt()] ?: throw CommandError("E_INVALID_ARG", "message is not pending", "msg_ref")
+                finish(p, "cancelled", null, afterResponse = true, stop = true)
                 buildJsonObject { put("state", "cancelled") }
             }
-            "msg.pending" -> { requireUnlocked(); buildJsonObject { putJsonArray("pending") {} } }
+            "msg.pending" -> { requireUnlocked(); pendingJson() }
             "radio.get" -> radioJson()
             "radio.set" -> { requireUnlocked(); radioSet(a) }
-            "radio.stats" -> { requireUnlocked(); buildJsonObject { put("tx_packets", msgRef.get()); put("rx_packets", 0) } }
+            "radio.stats" -> { requireUnlocked(); buildJsonObject { put("tx_packets", txPackets); put("rx_packets", 0) } }
+            "lab.get" -> { requireUnlocked(); labJson() }
+            "lab.set" -> {
+                requireUnlocked()
+                val codec = a.str("text_codec")
+                if (codec != MessageLimits.CODEC_RAW && codec != MessageLimits.CODEC_OGZ1) {
+                    throw CommandError("E_INVALID_ARG", "text_codec must be raw or ogz1", "text_codec")
+                }
+                save(flash.copy(textCodec = codec))
+                labJson()
+            }
             "mesh.get" -> buildJsonObject {
                 put("hop_default", 3); put("relay_enabled", true); put("relay_when_locked", false)
                 put("cad_enabled", true); put("retries", 3)
@@ -214,6 +269,7 @@ class SimulatedHeltec(
     private fun afterResponse(r: Request) {
         when (r.cmd) {
             "sys.reboot" -> reboot("software")
+            "sys.factory_reset" -> if (resetAuthorized) eraseAndRestart()
         }
     }
 
@@ -224,13 +280,45 @@ class SimulatedHeltec(
         put("reset_reason", reason)
     }
 
+    /** A restart loses the RAM queue without any event; the app learns it from `sys.boot` and `msg.pending`. */
     private fun reboot(reason: String) {
-        failAllPending("locked")
+        pending.values.forEach { it.job?.cancel() }
+        pending.clear()
+        recent.clear()
+        nextRef = randomRef()
         state = if (flash.provisioned) "locked" else "unprovisioned"
         identityPrivate = null
         session = null
+        pairing = null
+        resetAuthorized = false
         bootAt = clock()
         emitEvent("sys.boot", bootData(reason))
+    }
+
+    /**
+     * Link spec 6.11 with `method: "app"`: the reset needs this phone's token wrapped with the reset label.
+     * The firmware locks, answers `{pending: true}`, erases `og_vault` and `og_cfg` and restarts unprovisioned.
+     */
+    private fun factoryReset(a: JsonObject): JsonObject {
+        if (a.str("confirm") != "ERASE") throw CommandError("E_CONFIRM_REQUIRED", "confirm must be ERASE", "confirm")
+        val method = a.str("method")
+        if (a.containsKey("method") && method != "app" && method != "master") {
+            throw CommandError("E_INVALID_ARG", "method must be app or master", "method")
+        }
+        if (method == "master") throw CommandError("E_UNLOCK_FAILED", "the simulator has no master key")
+        authenticate(a, WrapPurpose.RESET)
+        lockVault("factory_reset")
+        resetAuthorized = true
+        return buildJsonObject { put("pending", true) }
+    }
+
+    private fun eraseAndRestart() {
+        store.wipe()
+        // The virtual peers are people around the antenna, not part of its flash.
+        save(SimFlash(deviceId = flash.deviceId, peers = flash.peers))
+        failedUnlocks = 0
+        rateLimitedUntil = 0
+        reboot("software")
     }
 
     private fun hello(): JsonObject {
@@ -241,6 +329,7 @@ class SimulatedHeltec(
             put("device", "heltec_wifi_lora_32_v3"); put("chip", "ESP32-S3"); put("device_id", flash.deviceId)
             putJsonObject("fw") { put("version", FW_VERSION); put("build", "simulator") }
             put("proto", PROTO); put("state", state)
+            put("lab_radio", true); put("text_codec", flash.textCodec)
             putJsonObject("session") {
                 put("device_eph_pub", OgCrypto.b64(OgCrypto.x25519PublicKey(ephPrivate)))
                 put("nonce", OgCrypto.b64(nonce))
@@ -248,6 +337,7 @@ class SimulatedHeltec(
             putJsonObject("limits") {
                 put("max_line", 2048); put("max_contacts", 32)
                 put("max_text_bytes", MessageLimits.DEFAULT_MAX_TEXT_BYTES); put("pending_queue", 8)
+                put("max_text_input_bytes", maxTextInputBytes())
             }
         }
     }
@@ -257,23 +347,46 @@ class SimulatedHeltec(
         put("heap_free", 172304); put("battery_mv", JsonNull)
         putJsonObject("radio") { put("running", state == "unlocked"); put("relay_only", false) }
         if (state == "unlocked") {
-            putJsonObject("queue") { put("pending", pendingJobs.size); put("capacity", 8) }
+            putJsonObject("queue") { put("pending", pending.size); put("capacity", 8) }
             putJsonObject("contacts") { put("used", flash.contacts.size); put("capacity", 32) }
         }
         putJsonObject("security") { put("secure_boot", false); put("flash_encryption", false) }
     }
 
     /** Consumes the `sys.hello` session and returns the unwrapped token (spec 6.7: single use). */
-    private fun consumeToken(a: JsonObject): ByteArray {
+    private fun consumeToken(a: JsonObject, purpose: WrapPurpose = WrapPurpose.UNLOCK): ByteArray {
         val (ephPrivate, nonce) = session ?: throw CommandError("E_NO_SESSION", "call sys.hello first")
         session = null
         val appPub = a.str("app_eph_pub") ?: throw CommandError("E_INVALID_ARG", "app_eph_pub missing", "app_eph_pub")
         val wrapped = a.str("wrapped_token") ?: throw CommandError("E_INVALID_ARG", "wrapped_token missing", "wrapped_token")
         return try {
-            TokenWrap.unwrap(OgCrypto.unb64(wrapped), OgCrypto.unhex(flash.deviceId), ephPrivate, OgCrypto.unb64(appPub), nonce)
+            TokenWrap.unwrap(OgCrypto.unb64(wrapped), OgCrypto.unhex(flash.deviceId), ephPrivate, OgCrypto.unb64(appPub), nonce, purpose)
         } catch (_: Exception) {
             throw CommandError("E_UNLOCK_FAILED", "unlock failed")
         }
+    }
+
+    /**
+     * `Security::authenticate` for unlock and reset: every attempt consumes the session, the rate limit is
+     * checked before the envelope, and a wrong envelope or token counts as a failure.
+     */
+    private fun authenticate(a: JsonObject, purpose: WrapPurpose) {
+        if (session == null) throw CommandError("E_NO_SESSION", "call sys.hello first")
+        if (clock() < rateLimitedUntil) {
+            session = null
+            throw CommandError("E_RATE_LIMITED", "too many failed attempts")
+        }
+        val token = try {
+            consumeToken(a, purpose)
+        } catch (e: CommandError) {
+            if (e.code == "E_UNLOCK_FAILED") registerFailure()
+            throw e
+        }
+        if (!flash.provisioned || vaultCheck(token, OgCrypto.unb64(flash.vaultSalt!!)) != flash.vaultCheck) {
+            registerFailure()
+            throw CommandError("E_UNLOCK_FAILED", "unlock failed")
+        }
+        failedUnlocks = 0
     }
 
     private fun vaultCheck(token: ByteArray, salt: ByteArray): String =
@@ -298,18 +411,7 @@ class SimulatedHeltec(
             "unprovisioned" -> throw CommandError("E_NOT_PROVISIONED", "device has no vault")
             "unlocked" -> throw CommandError("E_ALREADY_UNLOCKED", "already unlocked")
         }
-        if (clock() < rateLimitedUntil) throw CommandError("E_RATE_LIMITED", "too many failed unlocks")
-        val token = try {
-            consumeToken(a)
-        } catch (e: CommandError) {
-            if (e.code == "E_UNLOCK_FAILED") registerFailure()
-            throw e
-        }
-        if (vaultCheck(token, OgCrypto.unb64(flash.vaultSalt!!)) != flash.vaultCheck) {
-            registerFailure()
-            throw CommandError("E_UNLOCK_FAILED", "unlock failed")
-        }
-        failedUnlocks = 0
+        authenticate(a, WrapPurpose.UNLOCK)
         identityPrivate = OgCrypto.unb64(flash.identityPrivate!!)
         state = "unlocked"
         lastActivity = clock()
@@ -339,6 +441,7 @@ class SimulatedHeltec(
     private fun lockVault(reason: String) {
         if (state != "unlocked") return
         failAllPending("locked")
+        pairing = null
         identityPrivate = null
         state = "locked"
         emitEvent("sec.state", buildJsonObject { put("state", "locked"); put("reason", reason) })
@@ -440,7 +543,8 @@ class SimulatedHeltec(
     private fun contactJson(c: SimContact) = buildJsonObject {
         put("contact_id", c.contactId); put("name", c.name); put("node_id", c.nodeId); put("public_key", c.publicKey)
         put("state", c.state); put("fingerprint", c.fingerprint); put("tx_ctr", c.txCtr)
-        put("rx_highest_ctr", c.rxHighestCtr); put("last_rssi", c.lastRssi); put("last_snr", c.lastSnr)
+        // The firmware reports RSSI as a float (`Contacts::View::rssi`), so the simulator does too.
+        put("rx_highest_ctr", c.rxHighestCtr); put("last_rssi", c.lastRssi?.toDouble()); put("last_snr", c.lastSnr)
     }
 
     // ---------------------------------------------------------------- messages
@@ -455,10 +559,13 @@ class SimulatedHeltec(
                 val text = a.str("text") ?: throw CommandError("E_INVALID_ARG", "text missing", "text")
                 val n = MessageLimits.utf8Bytes(text)
                 if (n == 0) throw CommandError("E_INVALID_ARG", "text is empty", "text")
-                if (n > MessageLimits.DEFAULT_MAX_TEXT_BYTES) {
-                    throw CommandError("E_TOO_LONG", "text is $n bytes, max is ${MessageLimits.DEFAULT_MAX_TEXT_BYTES}", "text")
+                // Lab.3 item 3: with ogz1 up to 160 bytes are accepted when the compressed body fits.
+                val max = maxTextInputBytes()
+                val onAir = MessageLimits.onAirTextBytes(text, flash.textCodec, max)
+                if (n > max || onAir > MessageLimits.DEFAULT_MAX_TEXT_BYTES) {
+                    throw CommandError("E_TOO_LONG", "text is $n bytes, max is ${MessageLimits.DEFAULT_MAX_TEXT_BYTES} on air", "text")
                 }
-                n
+                onAir
             }
             "reaction" -> {
                 if (a.obj("target") == null) throw CommandError("E_INVALID_ARG", "target missing", "target")
@@ -474,55 +581,129 @@ class SimulatedHeltec(
             }
             else -> throw CommandError("E_INVALID_ARG", "unknown type", "type")
         }
-        if (pendingJobs.size >= 8) throw CommandError("E_QUEUE_FULL", "pending queue is full")
+        if (pending.size >= 8) throw CommandError("E_QUEUE_FULL", "pending queue is full")
         val ack = a.bool("ack") ?: (type == "text")
         val hops = a.int("hops") ?: 3
-        val ref = msgRef.incrementAndGet()
         val ctr = c.txCtr + 1
         updateContact(c.copy(txCtr = ctr))
+        val p = enqueue(c.contactId, type, ctr)
         val onAir = 17 + bodyBytes
-        pendingJobs[ref] = scope.launch { deliver(ref, c.contactId, ack, a, type) }
+        p.job = scope.launch { deliver(p, ack, a) }
         return buildJsonObject {
-            put("msg_ref", ref); put("ctr", ctr); put("ack_requested", ack); put("hops", hops); put("state", "queued")
+            put("msg_ref", p.ref); put("ctr", ctr); put("ack_requested", ack); put("hops", hops); put("state", "queued")
             put("bytes_on_air", onAir); put("est_airtime_ms", 120 + onAir * 4)
         }
     }
 
-    private fun status(ref: Int, to: Int, state: String, retry: Int, extra: JsonObjectBuilder.() -> Unit = {}) =
-        emitEvent("msg.status", buildJsonObject {
-            put("msg_ref", ref); put("to", to); put("state", state); put("retry", retry); extra()
-        })
+    private fun enqueue(to: Int, type: String, ctr: Int?): SimPending {
+        val p = SimPending(nextRef++, to, type, ctr, clock())
+        pending[p.ref] = p
+        return p
+    }
 
-    private suspend fun deliver(ref: Int, to: Int, ack: Boolean, args: JsonObject, type: String) {
-        delay(350)
-        val peer = synchronized(lock) { peerFor(to) }
-        synchronized(lock) { status(ref, to, "sent", 0) }
+    private fun statusData(p: SimPending, reason: String?, extra: JsonObjectBuilder.() -> Unit = {}) = buildJsonObject {
+        put("msg_ref", p.ref); put("to", p.to); put("state", p.state); put("retry", p.retry)
+        if (reason != null) put("reason", reason)
+        extra()
+    }
+
+    /** Moves a pending message to a non-final state and reports it (`msg.status`). */
+    private fun progress(p: SimPending, state: String, reason: String? = null): Boolean {
+        if (pending[p.ref] !== p) return false
+        p.state = state
+        if (state == "sent" || state == "retrying") txPackets++
+        emitEvent("msg.status", statusData(p, reason))
+        return true
+    }
+
+    /**
+     * Ends a pending message: `msg.status`, then it leaves the queue and enters `recent` (newest first, 16).
+     * Callers outside the message's own coroutine pass [stop] so its delivery loop ends.
+     */
+    private fun finish(
+        p: SimPending,
+        state: String,
+        reason: String?,
+        afterResponse: Boolean = false,
+        stop: Boolean = false,
+        extra: JsonObjectBuilder.() -> Unit = {},
+    ) {
+        if (pending.remove(p.ref) !== p) return
+        if (stop) p.job?.cancel()
+        p.state = state
+        val data = statusData(p, reason, extra)
+        if (afterResponse) emitAfterResponse("msg.status", data) else emitEvent("msg.status", data)
+        recent.addFirst(SimRecent(p.ref, state, reason))
+        while (recent.size > RECENT_CAPACITY) recent.removeLast()
+    }
+
+    private fun pendingJson() = buildJsonObject {
+        putJsonArray("pending") {
+            pending.values.forEach { p ->
+                add(buildJsonObject {
+                    put("msg_ref", p.ref); put("to", p.to); put("type", p.type); put("ctr", p.ctr)
+                    put("state", p.state); put("retry", p.retry)
+                })
+            }
+        }
+        putJsonArray("recent") {
+            recent.forEach { r ->
+                add(buildJsonObject { put("msg_ref", r.ref); put("state", r.state); if (r.reason != null) put("reason", r.reason) })
+            }
+        }
+    }
+
+    /**
+     * MeshEngine with the lab.3 lost-message fix: `sent`, retries, then `waiting` (reason `no_ack`) with the
+     * same counter until the contact shows a sign of life or [SimTiming.resendMs] passed, and `failed timeout`
+     * [SimTiming.parkMs] after it was queued.
+     */
+    private suspend fun deliver(p: SimPending, ack: Boolean, args: JsonObject) {
+        delay(timing.firstTxMs)
+        if (!synchronized(lock) { progress(p, "sent") }) return
         if (!ack) {
-            synchronized(lock) { pendingJobs.remove(ref) }
-            if (peer != null && peer.inRange) reactTo(peer, to, args, type)
+            val peer = synchronized(lock) {
+                finish(p, "sent", null)
+                peerFor(p.to)
+            }
+            if (peer != null && peer.inRange) reactTo(peer, p.to, args, p.type)
             return
         }
-        for (retry in 0..3) {
-            if (retry > 0) synchronized(lock) { status(ref, to, "retrying", retry) }
-            delay(if (retry == 0) 900 else 2_000)
-            val reachable = synchronized(lock) {
-                val p = peerFor(to)
-                p != null && p.inRange && p.scansBack && state == "unlocked"
-            }
-            if (reachable) {
-                synchronized(lock) {
-                    status(ref, to, "delivered", retry) { put("hops", 1); put("rtt_ms", 842) }
-                    pendingJobs.remove(ref)
-                    activate(to, peer!!)
+        for (retry in 0..timing.retries) {
+            if (retry > 0) {
+                val stillPending = synchronized(lock) {
+                    p.retry = retry
+                    progress(p, "retrying")
                 }
-                reactTo(peer!!, to, args, type)
+                if (!stillPending) return
+            }
+            delay(if (retry == 0) timing.ackWaitMs else timing.retryMs)
+            if (tryDeliver(p, args)) return
+        }
+        if (!synchronized(lock) { progress(p, "waiting", "no_ack") }) return
+        while (true) {
+            val left = p.createdAt + timing.parkMs - clock()
+            if (left <= 0) {
+                synchronized(lock) { finish(p, "failed", "timeout") }
                 return
             }
+            withTimeoutOrNull(minOf(timing.resendMs, left)) { p.wake.receive() }
+            synchronized(lock) { if (pending[p.ref] === p) txPackets++ }
+            if (tryDeliver(p, args)) return
         }
-        synchronized(lock) {
-            status(ref, to, "failed", 3) { put("reason", "timeout") }
-            pendingJobs.remove(ref)
+    }
+
+    /** One transmission reached the contact when its peer is in range, has us paired and we are unlocked. */
+    private suspend fun tryDeliver(p: SimPending, args: JsonObject): Boolean {
+        val peer = synchronized(lock) {
+            val peer = peerFor(p.to)
+            if (pending[p.ref] !== p || peer == null || !peer.inRange || !peer.scansBack || state != "unlocked") return false
+            finish(p, "delivered", null) { put("hops", 1); put("rtt_ms", 842) }
+            activate(p.to, peer)
+            peer
         }
+        reactTo(peer, p.to, args, p.type)
+        return true
     }
 
     /** Virtual peers answer questions and share their position back. */
@@ -557,9 +738,11 @@ class SimulatedHeltec(
             put("from", contactId)
             if (group != null) put("group", group)
             body.forEach { (k, v) -> put(k, v) }
-            put("ctr", ctr); put("hops", 1); put("retry", 0); put("rssi", peer.rssi); put("snr", peer.snr)
+            put("ctr", ctr); put("hops", 1); put("retry", 0); put("rssi", peer.rssi.toDouble()); put("snr", peer.snr)
         })
         activate(contactId, peer)
+        // Lab.3 item 5: any authenticated packet from the contact sends its waiting messages again at once.
+        pending.values.filter { it.to == contactId && it.state == "waiting" }.forEach { it.wake.trySend(Unit) }
     }
 
     /** First packet from the peer after it scanned our code: an empty "remove reaction" ping. */
@@ -584,13 +767,7 @@ class SimulatedHeltec(
     }
 
     private fun failAllPending(reason: String) {
-        pendingJobs.forEach { (ref, job) ->
-            job.cancel()
-            emitEvent("msg.status", buildJsonObject {
-                put("msg_ref", ref); put("to", JsonNull); put("state", "failed"); put("retry", 0); put("reason", reason)
-            })
-        }
-        pendingJobs.clear()
+        pending.values.toList().forEach { finish(it, "failed", reason, stop = true) }
     }
 
     // ---------------------------------------------------------------- radio
@@ -645,12 +822,12 @@ class SimulatedHeltec(
         val text = a.str("text") ?: throw CommandError("E_INVALID_ARG", "text missing", "text")
         val n = MessageLimits.utf8Bytes(text)
         if (n == 0 || n > MessageLimits.DEFAULT_MAX_TEXT_BYTES) throw CommandError("E_TOO_LONG", "text is $n bytes", "text")
-        val ref = msgRef.incrementAndGet()
-        pendingJobs[ref] = scope.launch {
+        val p = enqueue(0, "text", null)
+        p.job = scope.launch {
             delay(400)
             synchronized(lock) {
-                status(ref, 0, "sent", 0) { put("group", gid) }
-                pendingJobs.remove(ref)
+                txPackets++
+                finish(p, "sent", null) { put("group", gid) }
             }
             if (text.contains('?')) {
                 val replier = synchronized(lock) {
@@ -666,7 +843,7 @@ class SimulatedHeltec(
                 }
             }
         }
-        return buildJsonObject { put("msg_ref", ref); put("ack_requested", false); put("state", "queued") }
+        return buildJsonObject { put("msg_ref", p.ref); put("ack_requested", false); put("state", "queued") }
     }
 
     // ---------------------------------------------------------------- test harness API (not part of the protocol)
@@ -701,14 +878,14 @@ class SimulatedHeltec(
         save(flash.copy(peers = flash.peers.map { if (it.publicKey == c.publicKey) it.copy(inRange = inRange) else it }))
     }
 
-    /** Factory reset without the button dance, for the "Alle Daten löschen" demo path. */
-    fun wipe() = synchronized(lock) {
-        failAllPending("locked")
-        store.wipe()
-        flash = SimFlash(deviceId = flash.deviceId).also(store::save)
-        state = "unprovisioned"
-        identityPrivate = null
-        emitEvent("sys.boot", bootData("factory_reset"))
+    /** Restarts the simulated board as a power cut would: RAM queue and `recent` are gone, the vault is locked. */
+    fun powerCycle() = synchronized(lock) { reboot("power_on") }
+
+    private fun maxTextInputBytes(): Int =
+        if (flash.textCodec == MessageLimits.CODEC_OGZ1) OGZ1_MAX_TEXT_INPUT_BYTES else MessageLimits.DEFAULT_MAX_TEXT_BYTES
+
+    private fun labJson() = buildJsonObject {
+        put("text_codec", flash.textCodec); put("max_text_input_bytes", maxTextInputBytes()); put("node_id", nodeId())
     }
 
     private fun emitLater(name: String, data: JsonObject) {
@@ -724,7 +901,13 @@ class SimulatedHeltec(
     }
 
     companion object {
-        const val FW_VERSION = "0.1.0-sim"
+        /** Behaves like the lab image 0.2.0-lab.3 (lab contract of 2026-10-24). */
+        const val FW_VERSION = "0.2.0-lab.3-sim"
         const val PROTO = "1.0"
+        private const val RECENT_CAPACITY = 16
+        private const val OGZ1_MAX_TEXT_INPUT_BYTES = 160
+
+        /** 1 .. 2^30, like the lab image's first `msg_ref` after boot. */
+        private fun randomRef(): Int = Random.nextInt(1 shl 30) + 1
     }
 }

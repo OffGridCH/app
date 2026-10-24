@@ -22,6 +22,8 @@ data class SimFlash(
     val bwKhz: Double = 125.0,
     val txPowerDbm: Int = 14,
     val lockTimeoutS: Int = 15,
+    /** Lab image `lab.set {text_codec}`, persisted like the lab settings in NVS. */
+    val textCodec: String = "raw",
 )
 
 @Serializable
