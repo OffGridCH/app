@@ -11,6 +11,7 @@ import ch.offgrid.android.link.Incoming
 import ch.offgrid.android.link.LinkClosedException
 import ch.offgrid.android.link.LinkCommandException
 import ch.offgrid.android.link.LinkTimeoutException
+import ch.offgrid.android.link.bool
 import ch.offgrid.android.link.dbm
 import ch.offgrid.android.link.double
 import ch.offgrid.android.link.int
@@ -135,7 +136,10 @@ class Messaging(
         scope.launch {
             val m = db.messages().byId(messageId) ?: return@launch
             // A new attempt: the antenna gives it a new ref and counter, the old outcome is forgotten.
-            db.messages().update(m.copy(status = MessageStatus.LOCAL_QUEUED, failReason = null, msgRef = null, refSession = null))
+            db.messages().update(
+                m.copy(status = MessageStatus.LOCAL_QUEUED, failReason = null, msgRef = null, refSession = null, deviceState = null,
+                    retry = null, hops = null, rttMs = null, compressed = null, bytesOnAir = null, airtimeMs = null),
+            )
             flushQueue()
         }
     }
@@ -173,7 +177,9 @@ class Messaging(
                 val result = antenna.call(cmd, args)
                 db.messages().update(
                     m.copy(status = MessageStatus.DEVICE_QUEUED, msgRef = result.int("msg_ref"), refSession = session,
-                        ctr = result.int("ctr") ?: m.ctr),
+                        ctr = result.int("ctr") ?: m.ctr, deviceState = result.str("state") ?: "queued",
+                        compressed = result.bool("compressed"), bytesOnAir = result.int("bytes_on_air"),
+                        airtimeMs = result.int("est_airtime_ms")),
                 )
             }
             true
@@ -403,7 +409,7 @@ class Messaging(
             // Only refs of the current session: a ref from an earlier boot must never touch a newer message.
             val session = currentSession ?: return
             val m = db.messages().byMsgRef(ref, session) ?: return
-            OutboxReconciler.applyEvent(m, state, d.str("reason"))?.also { db.messages().update(it) } ?: return
+            OutboxReconciler.applyEvent(m, state, d.str("reason"), DeliveryDetails.parse(d))?.also { db.messages().update(it) } ?: return
         }
         if (updated.status == MessageStatus.DELIVERED) {
             updated.contactId?.let { db.contacts().byId(it) }?.let { db.contacts().update(it.copy(lastSeenAt = now())) }
@@ -424,6 +430,7 @@ class Messaging(
             senderContactId = if (group != null) c.id else null,
             senderName = if (group != null) c.displayName else null,
             direction = "in", kind = "text", status = MessageStatus.DELIVERED, ctr = d.int("ctr"), rssi = rssi, sentAt = now(),
+            snr = d.double("snr"), hops = d.int("hops"), retry = d.int("retry"), compressed = d.bool("compressed"),
         )
         val message = when (d.str("type")) {
             "text" -> base.copy(text = d.str("text") ?: return)

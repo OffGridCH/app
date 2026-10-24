@@ -9,6 +9,7 @@ import androidx.room.Room
 import ch.offgrid.android.analytics.Analytics
 import ch.offgrid.android.crypto.KeystoreUnlockTokenSource
 import ch.offgrid.android.data.MIGRATION_1_2
+import ch.offgrid.android.data.MIGRATION_2_3
 import ch.offgrid.android.data.OffGridDatabase
 import ch.offgrid.android.domain.AntennaManager
 import ch.offgrid.android.domain.BackupService
@@ -41,7 +42,7 @@ import java.util.UUID
 class AppContainer(private val context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val db: OffGridDatabase = Room.databaseBuilder(context, OffGridDatabase::class.java, "offgrid.db")
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
     val settings = Settings(db.settings(), scope)
 

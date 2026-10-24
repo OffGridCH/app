@@ -220,6 +220,7 @@ fun MessageBubble(
     reaction: String? = null,
     onRetry: () -> Unit = {},
     onLongPress: (() -> Unit)? = null,
+    longPressLabel: String = "Details",
 ) {
     Column(Modifier.fillMaxWidth().padding(top = if (groupStart) 8.dp else 0.dp), horizontalAlignment = if (out) Alignment.End else Alignment.Start) {
         Column(
@@ -238,7 +239,7 @@ fun MessageBubble(
             Box(
                 Modifier
                     .then(if (out) Modifier.outBubble(status, shape) else Modifier.clip(shape).background(Og.surface).border(1.dp, Og.border, shape))
-                    .then(if (onLongPress != null) Modifier.longPressAction("Reagieren", onLongPress) else Modifier)
+                    .then(if (onLongPress != null) Modifier.longPressAction(longPressLabel, onLongPress) else Modifier)
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(

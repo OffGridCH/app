@@ -20,3 +20,12 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         )
     }
 }
+
+/** 2 to 3: delivery and signal details per message for the details sheet, and "zugestellt, während offline". */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        listOf("snr REAL", "hops INTEGER", "retry INTEGER", "rttMs INTEGER", "compressed INTEGER", "bytesOnAir INTEGER",
+            "airtimeMs INTEGER", "deviceState TEXT", "deliveredOffline INTEGER NOT NULL DEFAULT 0")
+            .forEach { db.execSQL("ALTER TABLE messages ADD COLUMN $it") }
+    }
+}

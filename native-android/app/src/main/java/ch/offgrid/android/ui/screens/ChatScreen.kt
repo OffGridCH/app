@@ -52,6 +52,7 @@ import ch.offgrid.android.domain.Conversation
 import ch.offgrid.android.domain.Formats
 import ch.offgrid.android.domain.Geo
 import ch.offgrid.android.domain.GeoFix
+import ch.offgrid.android.domain.MessageDetails
 import ch.offgrid.android.domain.MessageLimits
 import ch.offgrid.android.domain.Messaging
 import ch.offgrid.android.domain.REACTIONS
@@ -90,7 +91,7 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
     val now = rememberNow()
     var draft by rememberSaveable { mutableStateOf("") }
     var locationSheet by rememberSaveable { mutableStateOf(false) }
-    var reactTo by remember { mutableStateOf<MessageEntity?>(null) }
+    var detailsFor by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(messages.size) { app.messaging.markRead(contactId) }
     ConversationOnScreen(Conversation.Direct(contactId))
     // Opened from a notification for a contact that was deleted since: nothing to show.
@@ -132,7 +133,8 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
                         continued = row.continued,
                         reaction = m.peerReaction,
                         onRetry = { app.messaging.retry(m.id) },
-                        onLongPress = if (m.direction == "in" && m.ctr != null) ({ reactTo = m }) else null,
+                        onLongPress = { detailsFor = m.id },
+                        longPressLabel = if (m.direction == "in" && m.ctr != null) "Reagieren und Details" else "Details",
                     )
                 }
             }
@@ -154,25 +156,12 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
             app.messaging.sendLocation(c.id, fix)
             locationSheet = false
         }
-        // Keep the last target while the sheet slides out.
-        var lastReactTo by remember { mutableStateOf<MessageEntity?>(null) }
-        reactTo?.let { lastReactTo = it }
-        OgSheet(reactTo != null, "Reaktion", onClose = { reactTo = null }) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                REACTIONS.forEach { emoji ->
-                    val chosen = lastReactTo?.peerReaction == emoji
-                    Box(
-                        Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(if (chosen) Og.accentSoft else Og.surface2)
-                            .clickable(role = Role.Button, onClickLabel = if (chosen) "Reaktion entfernen" else "Reagieren") {
-                                lastReactTo?.let { app.messaging.react(it, if (chosen) null else emoji) }
-                                reactTo = null
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) { Text(emoji, fontSize = 22.sp) }
-                }
-            }
-            OgButton("Abbrechen", { reactTo = null }, variant = ButtonVariant.Secondary)
-        }
+        MessageSheet(
+            message = detailsFor?.let { id -> messages.firstOrNull { it.id == id } },
+            recipient = c.firstName ?: c.displayName,
+            onClose = { detailsFor = null },
+            onReact = { m, emoji -> app.messaging.react(m, emoji) },
+        )
     }
 }
 
@@ -240,15 +229,20 @@ fun MessageList(
 }
 
 /**
- * Meta line: in → time; out → "14:03 · zugestellt", "Wartet auf Anna", "wartet auf Funk …",
+ * Meta line: in → time; out → "14:03 · zugestellt" (", während offline" when only the reconciliation
+ * found the delivery), "14:03 · weitergeleitet", "Wartet auf Anna", "wartet auf Funk …",
  * "in Warteschlange", or the failure word shown next to "Erneut senden".
  */
 fun metaFor(m: MessageEntity, ready: Boolean, recipient: String? = null): String {
     val time = Formats.time(m.sentAt)
     if (m.direction == "in") return time
     return when (m.status) {
-        MessageStatus.DELIVERED -> "$time · zugestellt"
-        MessageStatus.SENT -> "$time · gesendet"
+        MessageStatus.DELIVERED -> if (m.deliveredOffline) "$time · zugestellt, während offline" else "$time · zugestellt"
+        MessageStatus.SENT -> when (m.deviceState) {
+            "relayed" -> "$time · weitergeleitet"
+            "retrying" -> "$time · wird wiederholt"
+            else -> "$time · gesendet"
+        }
         MessageStatus.WAITING -> "Wartet auf ${recipient ?: "Empfänger"}"
         MessageStatus.LOCAL_QUEUED, MessageStatus.DEVICE_QUEUED -> if (ready) "wartet auf Funk …" else "in Warteschlange"
         MessageStatus.FAILED -> failureText(m.failReason)
@@ -260,8 +254,7 @@ fun metaFor(m: MessageEntity, ready: Boolean, recipient: String? = null): String
  * "Nicht gesendet" when the antenna refused the message (an `E_…` code from `msg.send`, or no contact
  * slot); "Nicht zugestellt" when the antenna had it and gave up or lost it (`timeout`, `locked`, `lost` …).
  */
-fun failureText(reason: String?): String =
-    if (reason != null && (reason.startsWith("E_") || reason == "no_contact")) "Nicht gesendet" else "Nicht zugestellt"
+fun failureText(reason: String?): String = if (MessageDetails.failedBeforeSending(reason)) "Nicht gesendet" else "Nicht zugestellt"
 
 @Composable
 private fun GeoBubble(row: MessageRow.Msg, c: ContactEntity, myFix: GeoFix?, now: Long, ready: Boolean, onOpen: () -> Unit, onRetry: () -> Unit) {

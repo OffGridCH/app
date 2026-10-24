@@ -208,7 +208,7 @@ interface MaintenanceDao {
 
 @Database(
     entities = [ContactEntity::class, MessageEntity::class, GroupEntity::class, GroupMemberEntity::class, SettingEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class OffGridDatabase : RoomDatabase() {

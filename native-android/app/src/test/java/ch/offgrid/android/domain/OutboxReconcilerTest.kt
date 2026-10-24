@@ -60,6 +60,29 @@ class OutboxReconcilerTest {
         assertEquals("timeout", changed.byId(2).failReason)
         assertEquals("cancelled", changed.byId(3).failReason)
         assertTrue(changed.all { it.msgRef == null && it.refSession == null })
+        // The delivery was only found afterwards: shown as "zugestellt, während offline", not as lost.
+        assertTrue(changed.byId(1).deliveredOffline)
+        assertTrue(changed.none { it.id != 1L && it.deliveredOffline })
+    }
+
+    @Test
+    fun eventsCarryRetriesHopsAndTheTimeToTheAck() {
+        val sent = out(1, 100, MessageStatus.SENT, session = now).copy(deviceState = "sent")
+        val retrying = OutboxReconciler.applyEvent(sent, "retrying", null, DeliveryDetails(retry = 1))!!
+        assertEquals(MessageStatus.SENT, retrying.status)
+        assertEquals("retrying", retrying.deviceState)
+        assertEquals(1, retrying.retry)
+        val relayed = OutboxReconciler.applyEvent(retrying, "relayed", null)!!
+        assertEquals(1, relayed.retry)
+        val delivered = OutboxReconciler.applyEvent(relayed, "delivered", null, DeliveryDetails(retry = 2, hops = 1, rttMs = 1840))!!
+        assertEquals(MessageStatus.DELIVERED, delivered.status)
+        assertEquals(1, delivered.hops)
+        assertEquals(1840, delivered.rttMs)
+        assertEquals(2, delivered.retry)
+        assertEquals(false, delivered.deliveredOffline)
+        assertEquals(DeliveryDetails(2, 1, 1840), DeliveryDetails.parse(
+            LinkCodec.json.parseToJsonElement("""{"msg_ref":100,"state":"delivered","retry":2,"hops":1,"rtt_ms":1840}""") as JsonObject,
+        ))
     }
 
     @Test
@@ -112,7 +135,7 @@ class OutboxReconcilerTest {
 
     @Test
     fun eventsNeverMoveAMessageBackAndFinalsClearTheRef() {
-        val waiting = out(1, 100, MessageStatus.WAITING, session = now)
+        val waiting = out(1, 100, MessageStatus.WAITING, session = now).copy(deviceState = "waiting")
         assertNull(OutboxReconciler.applyEvent(waiting, "sent", null))
         assertNull(OutboxReconciler.applyEvent(waiting, "waiting", "no_ack"))
         assertNull(OutboxReconciler.applyEvent(waiting, "something_new", null))
@@ -140,7 +163,7 @@ class OutboxReconcilerTest {
             """"recent":[{"msg_ref":536870912,"state":"failed","reason":"timeout"},{"msg_ref":536870911,"state":"delivered"}]}}"""
         val result = (LinkCodec.decodeIncoming(line) as Incoming.Response).result
         val s = PendingSnapshot.parse(result)
-        assertEquals(listOf(DeviceMessage(536870913, "waiting", null, 12)), s.pending)
+        assertEquals(listOf(DeviceMessage(536870913, "waiting", null, 12, retry = 3)), s.pending)
         assertEquals(listOf(DeviceMessage(536870912, "failed", "timeout"), DeviceMessage(536870911, "delivered")), s.recent)
         // The team firmware has no `recent`.
         assertTrue(PendingSnapshot.parse(JsonObject(emptyMap())).recent.isEmpty())

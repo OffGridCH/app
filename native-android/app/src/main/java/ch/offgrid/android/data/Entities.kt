@@ -1,5 +1,6 @@
 package ch.offgrid.android.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -95,6 +96,26 @@ data class MessageEntity(
     val senderContactId: Long? = null,
     val senderName: String? = null,
     val rssi: Int? = null,
+    /** SNR in dB of a received message (`msg.received.snr`). */
+    val snr: Double? = null,
+    /** Hops the ACK of a delivery reported, or the hops a received message took (0 = direct). */
+    val hops: Int? = null,
+    /** RETRY of the received copy, or the retries the antenna needed for an outgoing message. */
+    val retry: Int? = null,
+    /** Time from handing over to the authenticated ACK (`msg.status.rtt_ms`), waits and retries included. */
+    val rttMs: Int? = null,
+    /** Lab image: the TEXT body went on air OGZ1-compressed. Null when the firmware does not say. */
+    val compressed: Boolean? = null,
+    val bytesOnAir: Int? = null,
+    val airtimeMs: Int? = null,
+    /** Last state the antenna reported (`queued`, `sent`, `relayed`, `retrying`, `waiting`, …). */
+    val deviceState: String? = null,
+    /**
+     * The delivery was not reported while the phone was connected; the reconciliation found it in
+     * `msg.pending.recent` afterwards ("zugestellt, während offline").
+     */
+    @ColumnInfo(defaultValue = "0")
+    val deliveredOffline: Boolean = false,
     /**
      * Reaction shown under this message: on our own messages the peer's, on the peer's messages
      * the one we sent. The column name predates the second case; renaming it would need a migration.

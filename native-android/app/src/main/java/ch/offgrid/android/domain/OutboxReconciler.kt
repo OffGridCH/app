@@ -9,7 +9,20 @@ import kotlinx.serialization.json.JsonObject
 import java.util.UUID
 
 /** One `msg.pending` item or `recent` entry. */
-data class DeviceMessage(val ref: Int, val state: String, val reason: String? = null, val ctr: Int? = null)
+data class DeviceMessage(val ref: Int, val state: String, val reason: String? = null, val ctr: Int? = null, val retry: Int? = null)
+
+/**
+ * What a `msg.status` event or a queue item tells about the transport of an outgoing message: the retries so
+ * far and, once delivered, the hops the ACK reported and the time to it (link spec 7.3, lab.3).
+ */
+data class DeliveryDetails(val retry: Int? = null, val hops: Int? = null, val rttMs: Int? = null) {
+    fun applyTo(m: MessageEntity): MessageEntity =
+        m.copy(retry = retry ?: m.retry, hops = hops ?: m.hops, rttMs = rttMs ?: m.rttMs)
+
+    companion object {
+        fun parse(d: JsonObject) = DeliveryDetails(d.int("retry"), d.int("hops"), d.int("rtt_ms"))
+    }
+}
 
 /**
  * A `msg.pending` result: what the antenna still has in its queue and, on the lab image, the last 16
@@ -22,7 +35,8 @@ data class PendingSnapshot(val pending: List<DeviceMessage>, val recent: List<De
         fun parse(result: JsonObject): PendingSnapshot {
             fun list(key: String) = (result[key] as? JsonArray).orEmpty().mapNotNull { item ->
                 val o = item as? JsonObject ?: return@mapNotNull null
-                DeviceMessage(o.int("msg_ref") ?: return@mapNotNull null, o.str("state") ?: return@mapNotNull null, o.str("reason"), o.int("ctr"))
+                DeviceMessage(o.int("msg_ref") ?: return@mapNotNull null, o.str("state") ?: return@mapNotNull null, o.str("reason"),
+                    o.int("ctr"), o.int("retry"))
             }
             return PendingSnapshot(list("pending"), list("recent"))
         }
@@ -39,7 +53,8 @@ data class PendingSnapshot(val pending: List<DeviceMessage>, val recent: List<De
  * `msg.pending`:
  *
  * - still in the queue: take over its state (never backwards) and move it into the new session;
- * - in `recent`: apply the final state the event would have brought;
+ * - in `recent`: apply the final state the event would have brought; a delivery found this way is marked
+ *   [MessageEntity.deliveredOffline] ("zugestellt, während offline");
  * - neither: the antenna lost it (restart, older image without `recent`, or more than 16 outcomes
  *   since), so it fails with reason [REASON_LOST] and the user can send it again. The app never resends
  *   on its own: the receiver could already have it, and a resend gets a new counter.
@@ -74,21 +89,23 @@ object OutboxReconciler {
 
     /**
      * Applies a device state from a `msg.status` event to [m]. Returns the new row, or null when nothing
-     * changes. Group messages have no end-to-end ACK, so "sent" is final for them.
+     * changes. Group messages have no end-to-end ACK, so "sent" is final for them. Within the same rank the
+     * device state and the [details] still update (`sent`, then `retrying` with a higher retry count).
      */
-    fun applyEvent(m: MessageEntity, state: String, reason: String?): MessageEntity? {
+    fun applyEvent(m: MessageEntity, state: String, reason: String?, details: DeliveryDetails = DeliveryDetails()): MessageEntity? {
         if (rank(m.status) == 0) return null // already final, or not yet with the antenna
         val status = statusFor(state) ?: return null
         val final = status == MessageStatus.DELIVERED || status == MessageStatus.FAILED ||
             (m.groupId != null && status == MessageStatus.SENT)
-        if (final) return finished(m, status, state, reason)
-        if (rank(status) <= rank(m.status)) return null
-        return m.copy(status = status, failReason = null)
+        if (final) return details.applyTo(finished(m, status, state, reason))
+        if (rank(status) < rank(m.status)) return null
+        return details.applyTo(m.copy(status = status, failReason = null, deviceState = state)).takeIf { it != m }
     }
 
     private fun finished(m: MessageEntity, status: Int, state: String, reason: String?): MessageEntity = m.copy(
         status = status,
         failReason = if (status == MessageStatus.FAILED) (if (state == "cancelled") "cancelled" else reason ?: "failed") else null,
+        deviceState = state,
         msgRef = null,
         refSession = null,
     )
@@ -112,10 +129,12 @@ object OutboxReconciler {
             val done = recent[ref]?.takeIf { !legacy }
             val updated = when {
                 queued != null -> {
-                    val next = applyEvent(m, queued.state, queued.reason) ?: m
+                    val next = applyEvent(m, queued.state, queued.reason, DeliveryDetails(retry = queued.retry)) ?: m
                     if (next.msgRef == null) next else next.copy(refSession = session)
                 }
-                done != null -> statusFor(done.state)?.let { finished(m, it, done.state, done.reason) } ?: lost(m)
+                done != null -> statusFor(done.state)?.let {
+                    finished(m, it, done.state, done.reason).copy(deliveredOffline = it == MessageStatus.DELIVERED)
+                } ?: lost(m)
                 else -> lost(m)
             }
             updated.takeIf { it != m }
