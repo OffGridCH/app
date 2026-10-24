@@ -304,6 +304,8 @@ fun ChatComposer(
         maxBytes = antenna.maxTextBytes,
         onSend = onSend,
         onLocation = onLocation,
+        parts = MessageLimits.split(draft, antenna).size,
+        maxParts = MessageLimits.MAX_PARTS,
     )
 }
 

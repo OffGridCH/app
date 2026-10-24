@@ -360,8 +360,11 @@ fun Composer(
     maxBytes: Int,
     onSend: () -> Unit,
     onLocation: (() -> Unit)?,
+    parts: Int = 1,
+    maxParts: Int = 1,
 ) {
-    val over = usedBytes > maxBytes
+    // A text longer than one radio message is split by the app into up to maxParts messages.
+    val over = parts > maxParts || (maxParts == 1 && usedBytes > maxBytes)
     val canSend = text.isNotBlank() && !over
     // The design keeps the send button at full colour while the field is empty; only an
     // over-long text dims it.
@@ -409,7 +412,11 @@ fun Composer(
                     },
                 )
                 Text(
-                    "$usedBytes / $maxBytes Zeichen pro Funkspruch",
+                    when {
+                        parts > maxParts -> "Zu lang: höchstens $maxParts Funksprüche"
+                        parts > 1 -> "Wird als $parts Funksprüche gesendet"
+                        else -> "$usedBytes / $maxBytes Zeichen pro Funkspruch"
+                    },
                     style = OgType.meta.copy(color = counterColor),
                     modifier = Modifier.padding(start = 4.dp).onSizeChanged { counterHeight = it.height },
                 )

@@ -70,4 +70,27 @@ class MessageLimitsTest {
         assertFalse(MessageLimits.isValidName("ü".repeat(13)))
         assertFalse(MessageLimits.isValidName("  "))
     }
+
+    @Test
+    fun longTextsAreSplitIntoRawPiecesAtSpaces() {
+        val text = "Wir sind bei der Hütte oben, das Wetter wird schlechter. Kommt bitte nicht mehr hoch, " +
+            "wir treffen uns um 16:30 beim Parkplatz."
+        val parts = MessageLimits.split(text, AntennaState())
+        assertEquals(2, parts.size)
+        assertTrue(parts.all { MessageLimits.utf8Bytes(it) <= 83 })
+        assertTrue(parts[0].endsWith("nicht mehr"))
+        assertEquals(text, parts.joinToString(" "))
+        // A lab image with OGZ1 fits it into one packet, so it is not split.
+        assertEquals(listOf(text), MessageLimits.split(text, AntennaState(textCodec = MessageLimits.CODEC_OGZ1, maxTextInputBytes = 160)))
+        assertEquals(listOf("Hallo"), MessageLimits.split("  Hallo ", AntennaState()))
+        assertTrue(MessageLimits.split("   ", AntennaState()).isEmpty())
+    }
+
+    @Test
+    fun aWordLongerThanAPacketIsCutWithoutBreakingCodePoints() {
+        val parts = MessageLimits.splitRaw("ü".repeat(50) + "😀".repeat(30), 83)
+        assertTrue(parts.all { MessageLimits.utf8Bytes(it) <= 83 })
+        assertEquals("ü".repeat(50) + "😀".repeat(30), parts.joinToString(""))
+        assertEquals(3, parts.size)
+    }
 }

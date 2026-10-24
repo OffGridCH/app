@@ -42,6 +42,38 @@ object MessageLimits {
     fun canSend(text: String, antenna: AntennaState): Boolean =
         text.isNotBlank() && onAirTextBytes(text, antenna.textCodec, antenna.maxTextInputBytes) <= antenna.maxTextBytes
 
+    /** Most radio messages one text is split into; longer drafts cannot be sent. */
+    const val MAX_PARTS = 4
+
+    /**
+     * The radio messages the app sends for [text]: the text itself when it fits one packet of [antenna] (with
+     * OGZ1 on a lab image possibly compressed), else raw pieces of at most `maxTextBytes`. The firmware does not
+     * fragment (link spec 10: longer texts are split by the app). Raw pieces stay readable for boards on the
+     * team firmware, which drop OGZ1 bodies without an ACK.
+     */
+    fun split(text: String, antenna: AntennaState): List<String> {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        if (canSend(trimmed, antenna)) return listOf(trimmed)
+        return splitRaw(trimmed, antenna.maxTextBytes)
+    }
+
+    /** Pieces of at most [maxBytes] UTF-8 bytes, cut after a space or line break when one is in the second half. */
+    fun splitRaw(text: String, maxBytes: Int): List<String> {
+        val parts = mutableListOf<String>()
+        var rest = text.trim()
+        while (rest.isNotEmpty()) {
+            var piece = clampToBytes(rest, maxBytes)
+            if (piece.length < rest.length) {
+                val cut = piece.indexOfLast { it.isWhitespace() }
+                if (cut >= piece.length / 2) piece = piece.substring(0, cut)
+            }
+            parts += piece.trim()
+            rest = rest.substring(piece.length).trimStart()
+        }
+        return parts
+    }
+
     fun isValidName(name: String): Boolean {
         val trimmed = name.trim()
         return trimmed.isNotEmpty() && utf8Bytes(trimmed) <= MAX_NAME_BYTES

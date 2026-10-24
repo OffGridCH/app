@@ -116,20 +116,23 @@ class Messaging(
 
     // ------------------------------------------------------------------ sending
 
+    /** A text longer than one packet goes out as several messages, see [MessageLimits.split]. */
     fun sendText(contactId: Long, text: String) = enqueue(
-        MessageEntity(contactId = contactId, direction = "out", kind = "text", text = text.trim(),
-            status = MessageStatus.LOCAL_QUEUED, sentAt = now()),
+        MessageLimits.split(text, antenna.state.value).map {
+            MessageEntity(contactId = contactId, direction = "out", kind = "text", text = it, status = MessageStatus.LOCAL_QUEUED, sentAt = now())
+        },
     )
 
     fun sendGroupText(groupId: Long, text: String) = enqueue(
-        MessageEntity(groupId = groupId, direction = "out", kind = "text", text = text.trim(),
-            status = MessageStatus.LOCAL_QUEUED, sentAt = now()),
+        MessageLimits.split(text, antenna.state.value).map {
+            MessageEntity(groupId = groupId, direction = "out", kind = "text", text = it, status = MessageStatus.LOCAL_QUEUED, sentAt = now())
+        },
     )
 
     fun sendLocation(contactId: Long, fix: GeoFix) = enqueue(
-        MessageEntity(contactId = contactId, direction = "out", kind = "geo", lat = fix.latitude, lon = fix.longitude,
+        listOf(MessageEntity(contactId = contactId, direction = "out", kind = "geo", lat = fix.latitude, lon = fix.longitude,
             accuracyM = fix.accuracyM, ageS = ((now() - fix.at) / 1000).toInt().coerceIn(0, 2550),
-            status = MessageStatus.LOCAL_QUEUED, sentAt = now()),
+            status = MessageStatus.LOCAL_QUEUED, sentAt = now())),
     )
 
     fun retry(messageId: Long) {
@@ -147,10 +150,12 @@ class Messaging(
     fun markRead(contactId: Long) = scope.launch { db.messages().markContactRead(contactId, now()) }
     fun markGroupRead(groupId: Long) = scope.launch { db.messages().markGroupRead(groupId, now()) }
 
-    private fun enqueue(message: MessageEntity) {
+    /** Inserts in order (the queue sends by `sentAt`, then id), then hands them to the antenna. */
+    private fun enqueue(messages: List<MessageEntity>) {
+        if (messages.isEmpty()) return
         track(AnalyticsEvent.MessageSent)
         scope.launch {
-            db.messages().insert(message)
+            messages.forEach { db.messages().insert(it) }
             flushQueue()
         }
     }
