@@ -30,7 +30,20 @@ POSTHOG_KEY=phc_...
 | APK | Path | Use |
 |---|---|---|
 | Debug | `app/build/outputs/apk/debug/app-debug.apk` | Development: test menu, simulated contacts, debug pairing buttons |
-| Release-style | `app/build/outputs/apk/release/app-release.apk` | Demos: no test menu, no debug buttons. Signed with the SDK debug key (`CN=Android Debug`), so it installs without a keystore. A real release key is an open decision; none was created. |
+| Release | `app/build/outputs/apk/release/app-release.apk` (signed) or `app-release-unsigned.apk` | Download from the landing page: no test menu, no debug buttons, no TCP bridge, no forced codec. Signed only with the release key below; without it the APK is unsigned, never signed with the debug key. |
+
+Release signing reads four values from Gradle properties (`-P…` or `~/.gradle/gradle.properties`) or
+environment variables of the same names; no key or password is in this repository:
+
+```sh
+OFFGRID_RELEASE_STORE_FILE=/path/to/offgrid-release.jks
+OFFGRID_RELEASE_STORE_PASSWORD=…
+OFFGRID_RELEASE_KEY_ALIAS=offgrid
+OFFGRID_RELEASE_KEY_PASSWORD=…
+./gradlew assembleRelease
+```
+
+When only some of them are set, or the keystore file does not exist, the build stops with the missing names.
 
 The lab test APK for phones with a lab board is the debug build with `OFFGRID_TEXT_CODEC=ogz1` and
 without `OFFGRID_TCP_LINK` in `local.properties`: it switches a lab image to OGZ1 with `lab.set` after
@@ -42,8 +55,8 @@ unlocking and counts bytes with the codec, and it uses USB, not the TCP bridge.
    then Developer options, USB debugging) and connect it, or start an emulator.
 2. Check that it shows up: `adb devices`.
 3. Install or update: `adb install -r app/build/outputs/apk/debug/app-debug.apk`
-   (or the release-style APK). Debug and release-style builds share the package name and the
-   signing key, so one replaces the other and keeps the data.
+   (or the signed release APK). Debug and release builds share the package name but not the
+   signing key: switching between them needs an uninstall, which deletes the app's data.
 4. Without adb: copy the APK to the phone and open it in the file manager; Android asks once to
    allow installs from that app.
 
@@ -218,7 +231,7 @@ image (`lab_radio`) and what only a second board can show. It is kept by the age
   app's side of them was checked against the firmware source, independent vectors and the
   simulator, not on a board.
 - App: a test on a physical phone with a lab.3 board (security, factory reset, reconnect
-  reconciliation), battery use of the background receive service, a release signing key, and a
+  reconciliation), battery use of the background receive service, and a
   decision on the 83-byte versus 153-character conflict.
 
 ## Screenshots
