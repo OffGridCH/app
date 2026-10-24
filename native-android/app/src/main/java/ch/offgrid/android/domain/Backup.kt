@@ -80,7 +80,11 @@ object BackupCodec {
             ?.takeIf { it.format == BackupFile.FILE_FORMAT && it.v == 1 && it.kdf == BackupFile.KDF && it.iter in 1..10_000_000 }
             ?: throw BackupException(BackupError.INVALID_FILE)
         val plain = try {
-            OgCrypto.aesGcmDecrypt(deriveKey(password, OgCrypto.unb64(file.salt), file.iter), OgCrypto.unb64(file.iv), OgCrypto.unb64(file.data))
+            val data = OgCrypto.unb64(file.data)
+            // Shorter than the 16-byte GCM tag cannot be a backup. The JDK provider reports such input as
+            // ProviderException(ShortBufferException) instead of a tag failure, so it is rejected here.
+            if (data.size < 16) throw BackupException(BackupError.INVALID_FILE)
+            OgCrypto.aesGcmDecrypt(deriveKey(password, OgCrypto.unb64(file.salt), file.iter), OgCrypto.unb64(file.iv), data)
         } catch (_: AEADBadTagException) {
             throw BackupException(BackupError.WRONG_PASSWORD)
         } catch (_: IllegalArgumentException) {
