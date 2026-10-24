@@ -85,3 +85,6 @@ GitHub Pages veröffentlicht: `https://offgridch.github.io/app/`.
 
 Der USB-C-Port des Handys steckt an der Antenne. Darum verbindet sich Android Studio per WLAN mit dem Handy
 (kabelloses Debugging). Native Meldungen der Antenne erscheinen im Logcat unter dem Filter `UsbSerial`.
+
+Beim ersten Verbinden mit der Antenne fragt Android nach dem Zugriff auf das USB-Gerät. Die App braucht diese
+Berechtigung, um die Leitung zu öffnen; ohne sie meldet sie `permission-denied`.
