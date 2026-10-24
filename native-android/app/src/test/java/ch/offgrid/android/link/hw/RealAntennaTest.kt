@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -197,23 +198,34 @@ class RealAntennaTest {
         log("msg.send: $sent")
         val ref = sent.long("msg_ref")!!
         val states = mutableListOf<String>()
-        // Lab radio image: sent after TxDone, then three retries and failed(timeout) without a second
-        // antenna: about 32 s at SF9 with hops 0, over 2 min with the default 3 hops (protocol 12.2 scales the
-        // timeout with 2 x hops + 2). Team mock: sent, relayed, delivered on short timers. The heartbeat
-        // keeps the board from locking (and failing the message with reason locked) while we wait.
+        val lab = c.call("sys.hello", hello).bool("lab_radio") == true
+        // Lab radio image 0.2.0-lab.3: sent after TxDone, then three retries and, without a second antenna,
+        // waiting (no_ack) instead of failed: about 32 s at SF9 with hops 0, over 2 min with the default 3
+        // hops (protocol 12.2 scales the timeout with 2 x hops + 2). Older lab images end in failed(timeout).
+        // Team mock: sent, relayed, delivered on short timers. The heartbeat keeps the board from locking
+        // (and failing the message with reason locked) while we wait.
         val heartbeat = scope.launch { while (true) { delay(5_000); c.call("sys.ping") } }
         val last = nextEvent(c, 120_000) { e ->
             if (e.name == "msg.status" && e.data.long("msg_ref") == ref) states += e.data.str("state")!!
-            e.name == "msg.status" && e.data.long("msg_ref") == ref && e.data.str("state") in setOf("delivered", "failed")
+            e.name == "msg.status" && e.data.long("msg_ref") == ref && e.data.str("state") in setOf("delivered", "failed", "waiting")
         }
         heartbeat.cancel()
         log("states: $states")
         assertTrue(states.firstOrNull() == "sent")
-        assertTrue(last?.data?.str("state") == "delivered" || last?.data?.str("reason") == "timeout")
+        if (last?.data?.str("state") == "waiting") {
+            // Lab contract item 5: the message keeps its slot as waiting, and msg.pending reports outcomes in recent.
+            assertEquals("no_ack", last.data.str("reason"))
+            val queued = (c.call("msg.pending")["pending"] as JsonArray).map { it as JsonObject }.single { it.long("msg_ref") == ref }
+            assertEquals("waiting", queued.str("state"))
+            c.call("msg.cancel", buildJsonObject { put("msg_ref", ref) })
+            val recent = (c.call("msg.pending")["recent"] as JsonArray).map { it as JsonObject }
+            assertEquals("cancelled", recent.first { it.long("msg_ref") == ref }.str("state"))
+        } else {
+            assertTrue(last?.data?.str("state") == "delivered" || last?.data?.str("reason") == "timeout")
+        }
         // The pairing ping (empty reaction, ref 0) the app sends right after pair.complete. The team mock up
         // to ed9fd57 rejects every reaction ("target must be an object": `is<JsonObject>()` on a const view),
         // so there it is recorded, not asserted; the lab image must accept it.
-        val lab = c.call("sys.hello", hello).bool("lab_radio") == true
         try {
             val ping = c.call("msg.send", Messaging.pingArgs(slot))
             log("ping: $ping")

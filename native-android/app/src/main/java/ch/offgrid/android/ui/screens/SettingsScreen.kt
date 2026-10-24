@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
@@ -42,13 +43,16 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import ch.offgrid.android.BuildConfig
+import ch.offgrid.android.domain.AntennaActivity
 import ch.offgrid.android.domain.Formats
 import ch.offgrid.android.domain.KeyPattern
 import ch.offgrid.android.domain.MessageLimits
+import ch.offgrid.android.domain.ResetResult
 import ch.offgrid.android.domain.Settings
 import ch.offgrid.android.link.LinkKind
 import ch.offgrid.android.ui.LocalApp
@@ -62,11 +66,13 @@ import ch.offgrid.android.ui.components.OgButton
 import ch.offgrid.android.ui.components.OgCard
 import ch.offgrid.android.ui.components.OgIcon
 import ch.offgrid.android.ui.components.OgIconView
+import ch.offgrid.android.ui.components.OgNote
 import ch.offgrid.android.ui.components.OgSwitch
 import ch.offgrid.android.ui.components.OgTextField
 import ch.offgrid.android.ui.components.OgTopBar
 import ch.offgrid.android.ui.components.SectionLabel
 import ch.offgrid.android.ui.components.SignalBars
+import ch.offgrid.android.ui.components.Spinner
 import ch.offgrid.android.ui.components.StatusDot
 import ch.offgrid.android.ui.theme.Grotesk
 import ch.offgrid.android.ui.theme.Og
@@ -92,6 +98,13 @@ fun SettingsScreen(nav: NavHostController) {
     var name by rememberSaveable { mutableStateOf<String?>(null) }
     var nameError by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+    // Antenna reset: 0 = idle, 1 = consequences, 2 = last question; then it runs and ends in a note.
+    var resetStep by rememberSaveable { mutableStateOf(0) }
+    var resetting by remember { mutableStateOf(false) }
+    var resetError by remember { mutableStateOf<String?>(null) }
+    var resetDone by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(settings[Settings.DISPLAY_NAME]) { if (name == null) name = settings[Settings.DISPLAY_NAME] }
     val pattern = remember(settings[Settings.OWN_PUBLIC_KEY], installId) {
         KeyPattern.fromSeed(settings[Settings.OWN_PUBLIC_KEY] ?: installId ?: "")
@@ -164,7 +177,16 @@ fun SettingsScreen(nav: NavHostController) {
                     OgButton("Trennen", { app.antenna.disconnect() }, Modifier.weight(1f),
                         variant = ButtonVariant.Secondary, enabled = antenna.ready, height = 46.dp, radius = 14.dp)
                 }
+                CardDivider()
+                OgButton("Antenne auf Werkseinstellungen zurücksetzen", { resetError = null; resetDone = null; resetStep = 1 },
+                    variant = ButtonVariant.DangerText, enabled = antenna.ready && !resetting)
+                if (!antenna.ready) {
+                    Text("Verbinde zuerst die Antenne, um sie zurückzusetzen.", style = OgType.meta,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp))
+                }
             }
+            resetError?.let { OgNote(it) }
+            resetDone?.let { Text(it, style = OgType.body, modifier = Modifier.padding(start = 28.dp, top = 14.dp, end = 28.dp)) }
 
             SectionLabel("Empfang")
             OgCard {
@@ -186,6 +208,24 @@ fun SettingsScreen(nav: NavHostController) {
                 }
             }
 
+            SectionLabel("Erweitert")
+            OgCard {
+                // Lab boards always show it; for the team firmware it is behind a switch, most people never need it.
+                if (!antenna.labRadio) {
+                    SwitchRow("Erweiterte Einstellungen", "Firmware, Funk, Mesh und Statistik der Antenne.",
+                        settings[Settings.SHOW_ADVANCED] == "true") { on ->
+                        scope.launch { app.settings.put(Settings.SHOW_ADVANCED, on.toString()) }
+                    }
+                }
+                if (antenna.labRadio || settings[Settings.SHOW_ADVANCED] == "true") {
+                    if (!antenna.labRadio) CardDivider()
+                    LinkRow(OgIcon.Antenna, if (antenna.labRadio) "Erweitert / Lab" else "Erweitert",
+                        "Firmware, Funk, Mesh${if (antenna.labRadio) ", Ignorierliste, Codec" else ""} und Funkstatistik.") {
+                        nav.navigate(Routes.ADVANCED)
+                    }
+                }
+            }
+
             SectionLabel("Handywechsel")
             OgCard {
                 LinkRow(OgIcon.Upload, "Daten exportieren", "Kontakte, Schlüssel und Nachrichten als Datei, mit Passwort geschützt.") {
@@ -199,8 +239,10 @@ fun SettingsScreen(nav: NavHostController) {
             OgCard {
                 InfoRow("Kontakte", contacts.size.toString())
                 InfoRow("Nachrichten", messageCount.toString())
-                OgButton("Alle Daten löschen", { confirmDelete = true }, variant = ButtonVariant.DangerText)
+                OgButton(if (deleting) "Wird gelöscht …" else "Alle Daten löschen", { deleteError = null; confirmDelete = true },
+                    variant = ButtonVariant.DangerText, enabled = !deleting)
             }
+            deleteError?.let { OgNote(it) }
             Text(
                 "OffGrid ${BuildConfig.VERSION_NAME}",
                 style = OgType.meta,
@@ -210,6 +252,97 @@ fun SettingsScreen(nav: NavHostController) {
         }
     }
 
+    if (resetStep == 1) {
+        val mine = contacts.count { it.deviceId == antenna.deviceId }
+        AlertDialog(
+            onDismissRequest = { resetStep = 0 },
+            containerColor = Og.surface,
+            shape = RoundedCornerShape(Og.rCard),
+            title = { Text("Antenne zurücksetzen?", style = OgType.bodyStrong) },
+            text = {
+                Text(
+                    "Die Antenne wird auf Werkseinstellungen zurückgesetzt.\n\n" +
+                        "• Ihre Identität und alle Schlüssel werden gelöscht. Sie bekommt eine neue Antennen-ID.\n" +
+                        "• " + (if (mine == 1) "Dein Kontakt muss" else if (mine > 1) "Deine $mine Kontakte müssen" else "Neue Kontakte müssen") +
+                        " neu gekoppelt werden: Ihr scannt eure Codes erneut. Bis dahin kannst du nicht schreiben.\n" +
+                        "• Deine Chats bleiben auf diesem Handy und bleiben lesbar. Nachrichten, die noch unterwegs waren, gelten als nicht zugestellt.\n" +
+                        "• Die Antenne startet neu und wird für dieses Handy eingerichtet. Das dauert einige Sekunden; zieh das Kabel nicht ab.\n\n" +
+                        "Das lässt sich nicht rückgängig machen.",
+                    style = OgType.body,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { resetStep = 2 }) {
+                    Text("Weiter", style = TextStyle(fontFamily = Grotesk, fontWeight = FontWeight(700), color = Og.danger))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { resetStep = 0 }) {
+                    Text("Abbrechen", style = TextStyle(fontFamily = Grotesk, fontWeight = FontWeight(600), color = Og.text))
+                }
+            },
+        )
+    }
+
+    if (resetStep == 2) {
+        AlertDialog(
+            onDismissRequest = { resetStep = 0 },
+            containerColor = Og.surface,
+            shape = RoundedCornerShape(Og.rCard),
+            title = { Text("Wirklich zurücksetzen?", style = OgType.bodyStrong) },
+            text = {
+                Text(
+                    "Das ist die letzte Rückfrage. Die Schlüssel der Antenne sind danach für immer weg, und alle Kontakte müssen neu gekoppelt werden.",
+                    style = OgType.body,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    resetStep = 0
+                    resetting = true
+                    // App scope: the reset must not be cut off when this screen goes away.
+                    app.scope.launch {
+                        val result = app.messaging.resetAntenna()
+                        scope.launch {
+                            resetting = false
+                            if (result == ResetResult.DONE) {
+                                resetDone = "Die Antenne wurde zurückgesetzt und ist bereit. Koppelt eure Kontakte neu, um wieder zu schreiben."
+                            } else {
+                                resetError = result.text()
+                            }
+                        }
+                    }
+                }) { Text("Endgültig zurücksetzen", style = TextStyle(fontFamily = Grotesk, fontWeight = FontWeight(700), color = Og.danger)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { resetStep = 0 }) {
+                    Text("Abbrechen", style = TextStyle(fontFamily = Grotesk, fontWeight = FontWeight(600), color = Og.text))
+                }
+            },
+        )
+    }
+
+    if (resetting) {
+        // Reset and restart take several seconds; the dialog cannot be dismissed so nobody pulls the cable early.
+        AlertDialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            containerColor = Og.surface,
+            shape = RoundedCornerShape(Og.rCard),
+            confirmButton = {},
+            text = {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Spinner(28.dp)
+                    Text(
+                        if (antenna.activity == AntennaActivity.PROVISIONING) "Antenne wird für dieses Handy eingerichtet …"
+                        else "Antenne wird zurückgesetzt. Zieh das Kabel nicht ab …",
+                        style = OgType.body,
+                    )
+                }
+            },
+        )
+    }
+
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -217,17 +350,31 @@ fun SettingsScreen(nav: NavHostController) {
             shape = RoundedCornerShape(Og.rCard),
             text = {
                 Text(
-                    "Alle Kontakte und Nachrichten auf diesem Handy löschen? Das lässt sich nicht rückgängig machen.",
+                    if (antenna.ready) {
+                        "Alle Kontakte und Nachrichten löschen und die Antenne auf Werkseinstellungen zurücksetzen? " +
+                            "Danach müsst ihr euch neu koppeln. Das lässt sich nicht rückgängig machen."
+                    } else {
+                        "Alle Kontakte und Nachrichten auf diesem Handy löschen? Die Antenne ist nicht verbunden und " +
+                            "behält ihre Kontakte; verbinde sie zuerst, um sie mitzulöschen. Das lässt sich nicht rückgängig machen."
+                    },
                     style = OgType.body,
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
-                    scope.launch {
-                        app.messaging.deleteAll()
-                        app.resetAnalyticsId()
-                        nav.navigate(Routes.CONTACTS) { popUpTo(Routes.CONTACTS) { inclusive = true } }
+                    deleting = true
+                    // App scope: the reset must not be cut off when this screen goes away.
+                    app.scope.launch {
+                        val result = app.messaging.deleteAll()
+                        scope.launch {
+                            deleting = false
+                            deleteError = result.text()
+                            if (deleteError == null) {
+                                app.resetAnalyticsId()
+                                nav.navigate(Routes.CONTACTS) { popUpTo(Routes.CONTACTS) { inclusive = true } }
+                            }
+                        }
                     }
                 }) { Text("Löschen", style = TextStyle(fontFamily = Grotesk, fontWeight = FontWeight(700), color = Og.danger)) }
             },
@@ -241,11 +388,11 @@ fun SettingsScreen(nav: NavHostController) {
 }
 
 @Composable
-private fun SwitchRow(title: String, help: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, help: String?, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     // The whole row toggles, so TalkBack reads title, help and state as one switch.
     Row(
-        Modifier.fillMaxWidth().heightIn(min = if (help != null) 68.dp else 60.dp)
-            .toggleable(checked, role = Role.Switch, onValueChange = onChange)
+        Modifier.fillMaxWidth().heightIn(min = if (help != null) 68.dp else 60.dp).alpha(if (enabled) 1f else 0.4f)
+            .toggleable(checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -259,7 +406,7 @@ private fun SwitchRow(title: String, help: String?, checked: Boolean, onChange: 
 }
 
 @Composable
-private fun LinkRow(icon: OgIcon, title: String, text: String, onClick: () -> Unit) {
+internal fun LinkRow(icon: OgIcon, title: String, text: String, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

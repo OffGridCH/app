@@ -1,6 +1,8 @@
 package ch.offgrid.android.ui.screens
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -127,6 +129,7 @@ fun GroupChatScreen(nav: NavHostController, groupId: Long) {
     val antenna by app.antenna.state.collectAsStateWithLifecycle()
     val now = rememberNow()
     var draft by rememberSaveable { mutableStateOf("") }
+    var detailsFor by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(messages.size) { app.messaging.markGroupRead(groupId) }
     // A deleted group, or a stale id after process death, leads back instead of an empty screen.
     LeaveWhenGone(group == Lookup.Gone, nav)
@@ -137,37 +140,41 @@ fun GroupChatScreen(nav: NavHostController, groupId: Long) {
     }
     val count = members.count { it.groupId == groupId } + 1
 
-    Page {
-        ChatHeader(
-            title = g.name,
-            meta = "Gruppe · $count Mitglieder",
-            onBack = { nav.back() },
-            avatar = { OgAvatar(groupPattern(g), 40.dp, AvatarVariant.Square) },
-        )
-        if (!antenna.ready) DisconnectedBanner { nav.navigate(Routes.CONNECT) }
-        MessageList(messages, now, Modifier.weight(1f), empty = "Noch keine Nachrichten. Schreib die erste.") { row ->
-            val m = row.message
-            MessageBubble(
-                out = m.direction == "out",
-                status = m.status,
-                text = m.text,
-                meta = metaFor(m, antenna.ready),
-                groupStart = row.groupStart,
-                continued = row.continued,
-                senderName = if (row.showSender) m.senderName else null,
-                onRetry = { app.messaging.retry(m.id) },
+    Box(Modifier.fillMaxSize()) {
+        Page {
+            ChatHeader(
+                title = g.name,
+                meta = "Gruppe · $count Mitglieder",
+                onBack = { nav.back() },
+                avatar = { OgAvatar(groupPattern(g), 40.dp, AvatarVariant.Square) },
+            )
+            if (!antenna.ready) DisconnectedBanner { nav.navigate(Routes.CONNECT) }
+            MessageList(messages, now, Modifier.weight(1f), empty = "Noch keine Nachrichten. Schreib die erste.") { row ->
+                val m = row.message
+                MessageBubble(
+                    out = m.direction == "out",
+                    status = m.status,
+                    text = m.text,
+                    meta = metaFor(m, antenna.ready),
+                    groupStart = row.groupStart,
+                    continued = row.continued,
+                    senderName = if (row.showSender) m.senderName else null,
+                    onRetry = { app.messaging.retry(m.id) },
+                    onLongPress = { detailsFor = m.id },
+                )
+            }
+            ChatComposer(
+                draft = draft,
+                onDraft = { draft = it },
+                target = g.name,
+                antenna = antenna,
+                onSend = {
+                    app.messaging.sendGroupText(g.id, draft)
+                    draft = ""
+                },
+                onLocation = null,
             )
         }
-        ChatComposer(
-            draft = draft,
-            onDraft = { draft = it },
-            target = g.name,
-            antenna = antenna,
-            onSend = {
-                app.messaging.sendGroupText(g.id, draft)
-                draft = ""
-            },
-            onLocation = null,
-        )
+        MessageSheet(detailsFor?.let { id -> messages.firstOrNull { it.id == id } }, recipient = null, onClose = { detailsFor = null })
     }
 }

@@ -22,6 +22,16 @@ data class SimFlash(
     val bwKhz: Double = 125.0,
     val txPowerDbm: Int = 14,
     val lockTimeoutS: Int = 15,
+    /** Lab image `lab.set {text_codec}`, persisted like the lab settings in NVS. */
+    val textCodec: String = "raw",
+    /** Lab image `lab.set {ignore_nodes}`: NodeIDs whose directly heard packets are dropped. */
+    val ignoreNodes: List<String> = emptyList(),
+    /** `mesh.set` fields (link spec 8), persisted like `og_cfg`. */
+    val hopDefault: Int = 3,
+    val relayEnabled: Boolean = true,
+    val relayWhenLocked: Boolean = false,
+    val retries: Int = 3,
+    val cadEnabled: Boolean = true,
 )
 
 @Serializable
