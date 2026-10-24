@@ -13,7 +13,7 @@ text codec. Everything firmware-side lives in the lab firmware branch
 | Ran when plugged in | A local OLED demo build: `feature/oled-driver` at `a23ff1b` plus uncommitted demo values, Arduino core 3.x / ESP-IDF 5.5.5. It drew the boot animation and a dashboard and printed nothing on the UART. | A team build with the OLED screens of `integration/oled` (strings "Start pairing in the app", "Hold PRG for 3 s to erase"), Arduino core 2.x / ESP-IDF 4.4.7, team config store in NVS. It printed the ROM boot log and did not answer `sys.hello` on the CP2102 UART. |
 | Backup | `board1-full-backup.bin`, sha256 `recorded outside this repository` | `board2-full-backup.bin`, sha256 `recorded outside this repository` |
 | Backup location | the lab host plus a second copy, outside this repository | the same |
-| Runs now | Lab image `0.2.0-lab.1` (`eaf4606`), NVS erased to factory state, handed to Artur | the same, handed to Nils |
+| Runs now | Lab image `0.2.0-lab.2` (`e154992`), paired with board 2, OGZ1, handed to Artur | the same, paired with board 1, handed to Nils |
 
 Both backups are full 8 MB reads made before anything was written; the lab host also keeps `app0.bin`, `app1.bin`
 and `nvs.bin` cut out of each. To restore a board exactly as it came:
@@ -58,6 +58,8 @@ reboots the board.
 | 10 | Retry timeout | Protocol 12.2: `(2 × hops + 2) × (airtime + jitter) × 2^retry` | Simulated | | Real at SF9 with 3 hops: 8.5, 17, 34 and 68 s, so `failed` arrives after about 2 minutes; 0 hops about 32 s. The spec's example of about 6 s assumes far less jitter. |
 | 11 | Lock while sending | Board locks after 15 s without heartbeat | Fails pending messages with reason `locked` | | The app keeps its heartbeat running; it must also do so in the background while messages are pending. |
 | 12 | Protocol update `d8cc28d` | Shared data/ACK counters, reservations persisted before use, authentication before relay dedupe, own packets in the dedupe cache | Spec only | | Implemented in the lab engine. |
+| 14 | Pairing salt lifetime | Both boards derive the contact keys from both QR salts; "do not refresh between being scanned and scanning back" | `pair.begin` draws a new salt on every call and `pair.complete` discards it | `Pairing.begin()` calls `pair.begin` whenever the pairing screen opens, also after scanning the peer and before the peer scans back | Field test 2026-10-24: the boards paired with matching fingerprints, every packet arrived (RSSI −15 dBm) and failed its tag, so nothing was delivered. Lab `0.2.0-lab.2` (`e154992`) keeps the salt for the 5-minute window; reproduced before and passing after with `two_board_check.py --app-flow`. The team firmware still has it. |
+| 15 | Re-pairing a known key | `replace: true` re-pairs an existing contact | `E_CONTACT_EXISTS` without `replace` | Shows "contact exists" and keeps the old keys | A side that kept stale keys must delete the contact or re-pair with `replace`; the app does not offer that yet. |
 | 13 | `RealAntennaTest` with OGZ1 | | | | A build with `OFFGRID_TEXT_CODEC=ogz1` switches the board to OGZ1 in `antennaManagerReachesReady`, so `pairBobFromTheSpecAndSendText` no longer gets `E_TOO_LONG` for its long text. Expected; 6/6 with `raw`. |
 
 ## What works against the real boards
@@ -73,7 +75,11 @@ reboots the board.
 - `RealAntennaTest` (the app's own `LinkClient`, framing, `Pairing`, `AntennaManager`): 6/6 against the
   team image `ed9fd57` and the lab image with `raw`; 5/6 with the phone build's OGZ1 setting (finding 13).
 - Emulator UI against board 1 through the bridge: connect, contact sync, a text shown as «gesendet».
-- A phone over USB: handed to Artur and Nils with the APK; not observed by the agent.
+- A phone over USB: handed to Artur and Nils with the APK; not observed by the agent. Their first
+  two-board test failed on finding 14.
+- Two boards over the air (`lab/tools/two_board_check.py`, both on the lab host with `0.2.0-lab.2`): pairing in the
+  phones' order, text both ways, location and reaction, each received and delivered with ACK, RSSI −14 to
+  −17 dBm, SNR 10.5 to 11.5 dB at about 1 m, no tag failures, 17/17. The pairing survives a reset.
 
 ```
 # bridge on the lab host, tunnel from the development machine
