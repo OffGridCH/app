@@ -14,6 +14,15 @@
   damit die App auch ohne GPS läuft. Das Plugin `@capacitor/geolocation` ist eingebunden.
 - Das Senden und Empfangen von Standorten ändert sich nicht: das lief schon mit T23 über die Host-API (`msg.send` mit `type: "geo"`).
 - Noch ohne Oberfläche: die Standort-Screens folgen mit T18, der Live-Standort mit T19.
+## T06 – Natives USB-Serial-Plugin, UsbSerialTransport und Keystore-Plugin
+*2026-10-24*
+
+- Auf Android spricht die App die Antenne jetzt über das native Capacitor-Plugin `UsbSerial` (Java) an: 115200 Baud, 8N1, kein Flow Control, DTR und RTS sofort auf low.
+- Das Plugin sucht die Geräte über `UsbSerialProber` (inklusive `CdcAcmSerialDriver`), fragt die USB-Berechtigung an und meldet Daten, Abziehen und Lesefehler als Ereignisse. Die Reject-Codes übersetzt der Transport in `permission-denied`, `open-failed` und `no-device`.
+- Der Platzhalter `UnavailableSerialTransport` ist entfallen: Auf Android liefert `UsbSerialTransport`, im Browser weiterhin das simulierte Gerät. Die empfangenen Bytes dekodiert der Transport mit einem `TextDecoder` im Stream-Modus, damit Mehrbyte-Zeichen über Paketgrenzen hinweg ganz bleiben.
+- Das native Keystore-Plugin `OffgridKeystore` legt den HMAC-Schlüssel `offgrid_unlock` nicht exportierbar im Android Keystore an und rechnet nur den HMAC; X25519, HKDF und AES-GCM bleiben in TypeScript.
+- Nach einem `resume` der App verbindet sich die Antenne erneut, wenn sie `disconnected` ist. Der Manifest verlangt USB-Host.
+- Neu getestet: `UsbSerialTransport` gegen ein gemocktes Plugin (Fehlercodes, UTF-8 über Chunk-Grenzen, `detached`).
 
 ## T09 – Screens Verbinden und Name, Onboarding-Guard
 *2026-10-24*

@@ -1,11 +1,14 @@
-import { ApplicationConfig, Provider } from '@angular/core';
+import { ApplicationConfig, Provider, inject, provideAppInitializer } from '@angular/core';
 import { RouteReuseStrategy, provideRouter, withComponentInputBinding } from '@angular/router';
+import { App } from '@capacitor/app';
 import { IonicRouteStrategy, provideIonicAngular } from '@ionic/angular';
 
 import { routes } from './app.routes';
+import { AntennaPort } from './core/antenna/antenna-port';
 import { MockSerialTransport } from './core/antenna/mock-serial-transport';
 import { SerialTransport } from './core/antenna/serial-transport';
-import { UnavailableSerialTransport } from './core/antenna/unavailable-transport';
+import { USB_SERIAL_PLUGIN, UsbSerial } from './core/antenna/usb-serial.plugin';
+import { UsbSerialTransport } from './core/antenna/usb-serial.transport';
 import { ContactRepository, SqliteContactRepository } from './core/data/contact.repository';
 import { CoordinateRepository, SqliteCoordinateRepository } from './core/data/coordinate.repository';
 import { DatabaseService, SqliteDatabaseService } from './core/data/database.service';
@@ -39,15 +42,16 @@ export const dataProviders: Provider[] = [
  * Plattform-Weiche für die Antenne und das Entsperr-Geheimnis.
  *
  * Im Browser (und auf Android mit `localStorage og.mock = '1'`, zum Vorführen ohne Hardware) läuft das simulierte
- * Gerät mit einem Schlüssel im Arbeitsspeicher. Nativ spricht die App über das USB-Serial-Plugin (T06;
- * bis dahin ein Platzhalter) und holt das Token aus dem Android Keystore.
+ * Gerät mit einem Schlüssel im Arbeitsspeicher. Nativ spricht die App über das USB-Serial-Plugin und holt das Token
+ * aus dem Android Keystore.
  */
 function useMockAntenna(): boolean {
   return !isNative() || localStorage.getItem('og.mock') === '1';
 }
 
 export const antennaProviders: Provider[] = [
-  { provide: SerialTransport, useExisting: useMockAntenna() ? MockSerialTransport : UnavailableSerialTransport },
+  { provide: USB_SERIAL_PLUGIN, useValue: UsbSerial },
+  { provide: SerialTransport, useExisting: useMockAntenna() ? MockSerialTransport : UsbSerialTransport },
   { provide: KeystoreService, useExisting: useMockAntenna() ? BrowserKeystoreService : AndroidKeystoreService },
 ];
 
@@ -56,6 +60,14 @@ export const appConfig: ApplicationConfig = {
     { provide: RouteReuseStrategy, useClass: IonicRouteStrategy },
     provideIonicAngular({ mode: 'md' }),
     provideRouter(routes, withComponentInputBinding()),
+    provideAppInitializer(async () => {
+      const antenna = inject(AntennaPort);
+      await App.addListener('resume', () => {
+        if (antenna.state() === 'disconnected') {
+          void antenna.connect();
+        }
+      });
+    }),
     ...dataProviders,
     ...antennaProviders,
   ],

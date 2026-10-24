@@ -21,6 +21,60 @@ JSON Lines über USB-Serial: 115200 Baud, 8N1, DTR/RTS low. Eine Zeile ist ein J
 - `sys.hello` wird alle **500 ms** wiederholt, bis eine Antwort kommt; danach alle **5 s** `sys.ping`.
 - Bytes als Base64, `t` ist die Betriebszeit der Antenne in ms (**sie hat keine Uhr**), `contact_id` 1 bis 32, `ctr` 0 bis 16777215.
 
+## Natives Plugin `UsbSerial`
+
+Damit die App auf Android über die Leitung spricht, braucht es ein natives Plugin. Es heisst `UsbSerial` und liegt in
+`android/app/src/main/java/ch/offgrid/app/UsbSerialPlugin.java` (`@CapacitorPlugin(name = "UsbSerial")`). `MainActivity` registriert es mit
+`registerPlugin(UsbSerialPlugin.class)` **vor** `super.onCreate(...)`. Die TypeScript-Seite ist `src/app/core/antenna/usb-serial.plugin.ts`
+(`registerPlugin<UsbSerialPlugin>('UsbSerial')`).
+
+| Methode | Rückgabe | Bedeutung |
+|---|---|---|
+| `listDevices()` | `{ devices: UsbSerialDevice[] }` | USB-Geräte, für die ein Serial-Treiber gefunden wurde. Je Gerät `deviceId`, `vendorId`, `productId` und `name`. |
+| `connect({ deviceId, baudRate })` | – | Berechtigung anfragen, Port öffnen, Serial-Manager starten. |
+| `write({ data })` | – | den Text als UTF-8-Bytes schreiben. |
+| `disconnect()` | – | Port schliessen und eine wartende Berechtigungsanfrage ablehnen. |
+
+| Ereignis | Nutzlast | Bedeutung |
+|---|---|---|
+| `data` | `{ data: string }` | empfangene Bytes, Base64-kodiert. |
+| `detached` | – | das Gerät wurde abgezogen. |
+| `error` | `{ message: string }` | Lesefehler auf der Leitung. |
+
+**Parameter:** 115200 Baud, 8 Datenbits, 1 Stoppbit, keine Parität, kein Flow Control. **DTR und RTS stehen sofort nach dem Öffnen auf low** – sonst
+startet der ESP32 durch das Öffnen neu.
+
+**Berechtigung:** `UsbManager.requestPermission` mit einem `PendingIntent` auf die Action `ch.offgrid.app.USB_PERMISSION` (ab Android 12 mit
+`FLAG_MUTABLE`). Ein `BroadcastReceiver` hört auf diese Action und auf `UsbManager.ACTION_USB_DEVICE_DETACHED`; er ist mit
+`ContextCompat.RECEIVER_NOT_EXPORTED` registriert und wird in `handleOnDestroy()` abgemeldet.
+
+**Treiber:** `UsbSerialProber.getDefaultProber()`, zusätzlich `CdcAcmSerialDriver` für ESP32-S3 mit nativem USB. Die Bibliothek
+`com.github.mik3y:usb-serial-for-android:3.9.0` kommt von JitPack: `android/build.gradle` ergänzt `maven { url 'https://jitpack.io' }`,
+`android/app/build.gradle` die Abhängigkeit.
+
+**Reject-Codes** des Plugins und ihre Entsprechung in der App (`TransportError`):
+
+| Plugin-Code | App-Code | Wann |
+|---|---|---|
+| `PERMISSION_DENIED` | `permission-denied` | die Berechtigung wurde verweigert |
+| `OPEN_FAILED` | `open-failed` | der Port liess sich nicht öffnen |
+| `NO_DRIVER` | `no-device` | kein passender Treiber für das Gerät |
+
+Ein unbekannter Fehler wird wie `OPEN_FAILED` behandelt. Findet `listDevices()` kein Gerät, meldet der Transport `no-device` und ruft `connect` nicht auf.
+
+## Natives Plugin `OffgridKeystore`
+
+Das zweite native Plugin betreut das Entsperr-Geheimnis. Es heisst `OffgridKeystore`
+(`android/app/src/main/java/ch/offgrid/app/OffgridKeystorePlugin.java`) und hat genau eine Methode:
+
+| Methode | Eingabe | Ausgabe |
+|---|---|---|
+| `hmac({ data })` | Base64-Bytes | `{ mac: string }`, Base64 mit 32 Bytes |
+
+Der Schlüssel liegt im **Android Keystore** unter dem Alias `offgrid_unlock`, mit Zweck `PURPOSE_SIGN` und Digest SHA-256. Er ist **nicht
+exportierbar**: JavaScript sieht nur den HMAC, nie den Rohschlüssel. Das Plugin kann nichts weiter – X25519, HKDF und AES-256-GCM laufen in
+TypeScript.
+
 ## Befehle, die die App benutzt
 
 | Gruppe | Befehl | Zweck |
@@ -70,7 +124,4 @@ Welcher Befehl in welchem Zustand der Antenne erlaubt ist, steht im Skill `offgr
 | Pairing läuft ab | 300 s |
 | `wrapped_token` | 60 Bytes |
 
-!!! info "Geplant"
-
-    Das native USB-Serial-Plugin (`UsbSerial`) und das native Keystore-Plugin (`OffgridKeystore`) folgen mit T06. Im Browser läuft das Mock-Gerät,
-    siehe [Antenne](../funktionen/antenne.md).
+Im Browser läuft anstatt der nativen Plugins das Mock-Gerät, siehe [Antenne](../funktionen/antenne.md).

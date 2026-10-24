@@ -35,7 +35,15 @@ Datei: `src/app/core/antenna/serial-client.ts`. Eine Klasse (kein Service). Spri
 ## SerialTransport
 
 Datei: `src/app/core/antenna/serial-transport.ts`. Abstrakte Klasse und DI-Token: die Leitung zur Antenne (Text hinein, Text heraus).
-`MockSerialTransport` hängt das simulierte Gerät `MockDevice` an; `UnavailableSerialTransport` ist der Platzhalter auf Android bis T06.
+`MockSerialTransport` hängt das simulierte Gerät `MockDevice` an; `UsbSerialTransport` spricht auf Android über das native USB-Plugin `UsbSerial`.
+
+### UsbSerialTransport
+
+Datei: `src/app/core/antenna/usb-serial.transport.ts`. Der Transport auf Android: Er sucht über das native Plugin `UsbSerial` das erste USB-Gerät mit
+passendem Serial-Treiber, öffnet es mit 115200 Baud und 8N1 und dekodiert die ankommenden Base64-Daten mit einem `TextDecoder` im Stream-Modus, damit
+Mehrbyte-Zeichen über Paketgrenzen hinweg ganz bleiben. Die Reject-Codes des Plugins übersetzt er in `TransportError`:
+`PERMISSION_DENIED` → `permission-denied`, `OPEN_FAILED` → `open-failed`, `NO_DRIVER` → `no-device`. Die Ereignisse `detached` und `error` melden die
+Verbindung als geschlossen. Details in [Antenne](../funktionen/antenne.md).
 
 ## KeystoreService
 
@@ -47,7 +55,7 @@ Datei: `src/app/core/keystore/keystore.service.ts`. Abstrakte Klasse und DI-Toke
 | `createUnlockEnvelope(session, deviceId)` | `Promise<{ appEphPub, wrappedToken }>` | Neuer Einmal-Schlüssel und das eingepackte Token (60 Bytes) für `sec.provision` und `sec.unlock`. |
 
 `BrowserKeystoreService` hält einen zufälligen Schlüssel im Arbeitsspeicher; `AndroidKeystoreService` rechnet den HMAC über das native
-Plugin `OffgridKeystore` (T06). X25519 steckt in `x25519.ts`, HKDF und AES-GCM in `unlock-wrap.ts` (WebCrypto).
+Plugin `OffgridKeystore` (T06, Java-Klasse `OffgridKeystorePlugin`). X25519 steckt in `x25519.ts`, HKDF und AES-GCM in `unlock-wrap.ts` (WebCrypto).
 
 ## MessagingService
 
@@ -256,7 +264,7 @@ Entsperr-Schlüssel als `antennaProviders`. `useExisting` bindet das abstrakte T
 | `MessageRepository` | `MemoryMessageRepository` | `SqliteMessageRepository` |
 | `CoordinateRepository` | `MemoryCoordinateRepository` | `SqliteCoordinateRepository` |
 | `SettingsRepository` | `MemorySettingsRepository` | `SqliteSettingsRepository` |
-| `SerialTransport` | `MockSerialTransport` | `UnavailableSerialTransport` (bis T06) |
+| `SerialTransport` | `MockSerialTransport` | `UsbSerialTransport` (T06) |
 | `KeystoreService` | `BrowserKeystoreService` | `AndroidKeystoreService` |
 
 ## Hilfsmodule (keine Services)
@@ -283,6 +291,7 @@ Die Formate und die Signalstärke sind in [Nachrichten](../funktionen/nachrichte
 | `AppComponent` | `AppStartService` |
 | `AppStartService` | `DatabaseService`, `SettingsService`, `AntennaPort`, `MessagingService`, `HandshakeService` und im Browser `MemoryDatabaseService` |
 | `AntennaPort` | `SerialTransport`, `KeystoreService`, `SerialClient` |
+| `UsbSerialTransport` | `UsbSerial` (natives Plugin) über das DI-Token `USB_SERIAL_PLUGIN` |
 | `MessagingService` | `AntennaPort`, `ContactRepository`, `MessageRepository`, `CoordinateRepository`, `HandshakeService`, `DataChangedService` |
 | `HandshakeService` | `AntennaPort`, `ContactRepository`, `DataChangedService` |
 | `SettingsService` | `SettingsRepository` |
