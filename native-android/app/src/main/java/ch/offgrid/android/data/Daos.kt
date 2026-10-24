@@ -75,8 +75,13 @@ interface MessageDao {
     @Query("SELECT COUNT(*) FROM messages")
     fun observeCount(): Flow<Int>
 
-    @Query("SELECT * FROM messages WHERE msgRef = :ref AND status IN (1, 2) ORDER BY id DESC LIMIT 1")
-    suspend fun byMsgRef(ref: Int): MessageEntity?
+    /** The open message the antenna knows as [ref] in the current link [session] (statuses 1, 2 and 5). */
+    @Query("SELECT * FROM messages WHERE msgRef = :ref AND refSession = :session AND status IN (1, 2, 5) ORDER BY id DESC LIMIT 1")
+    suspend fun byMsgRef(ref: Int, session: String): MessageEntity?
+
+    /** Outgoing messages the antenna had and that have no final state yet. */
+    @Query("SELECT * FROM messages WHERE direction = 'out' AND msgRef IS NOT NULL AND status IN (1, 2, 5) ORDER BY id")
+    suspend fun openOutgoing(): List<MessageEntity>
 
     @Query("SELECT * FROM messages WHERE status = 0 AND direction = 'out' ORDER BY sentAt, id")
     suspend fun localQueue(): List<MessageEntity>
@@ -102,15 +107,11 @@ interface MessageDao {
     @Query("UPDATE messages SET readAt = :at WHERE groupId = :groupId AND direction = 'in' AND readAt IS NULL")
     suspend fun markGroupRead(groupId: Long, at: Long)
 
-    /** Link spec 7.5: after a device reboot every unfinished message is gone from its queue. */
-    @Query("UPDATE messages SET status = 4, failReason = 'reboot', msgRef = NULL WHERE status = 1")
-    suspend fun failDeviceQueued()
-
-    @Query("UPDATE messages SET msgRef = NULL WHERE msgRef IS NOT NULL")
-    suspend fun clearRefs()
-
     @Query("DELETE FROM messages WHERE contactId = :contactId")
     suspend fun deleteForContact(contactId: Long)
+
+    @Query("DELETE FROM messages WHERE groupId = :groupId")
+    suspend fun deleteForGroup(groupId: Long)
 
     @Query("SELECT * FROM messages")
     suspend fun all(): List<MessageEntity>
@@ -124,17 +125,57 @@ interface GroupDao {
     @Query("SELECT * FROM groups WHERE id = :id")
     fun observe(id: Long): Flow<GroupEntity?>
 
+    @Query("SELECT * FROM groups WHERE id = :id")
+    suspend fun byId(id: Long): GroupEntity?
+
     @Query("SELECT * FROM groups WHERE deviceId = :deviceId AND deviceGroupId = :groupId")
     suspend fun byDeviceGroup(deviceId: String, groupId: Int): GroupEntity?
 
     @Query("SELECT * FROM group_members")
     fun observeMembers(): Flow<List<GroupMemberEntity>>
 
+    @Query("SELECT * FROM group_members WHERE groupId = :groupId ORDER BY member")
+    suspend fun membersOf(groupId: Long): List<GroupMemberEntity>
+
     @Insert
     suspend fun insert(group: GroupEntity): Long
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertMembers(members: List<GroupMemberEntity>)
+    @Update
+    suspend fun update(group: GroupEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putMembers(members: List<GroupMemberEntity>)
+
+    @Update
+    suspend fun updateMember(member: GroupMemberEntity)
+
+    @Query("DELETE FROM group_members WHERE groupId = :groupId")
+    suspend fun deleteMembers(groupId: Long)
+
+    @Query("DELETE FROM groups WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    /** Replaces the member list of a group in one step, so a reader never sees a half-written list. */
+    @Transaction
+    suspend fun replaceMembers(groupId: Long, members: List<GroupMemberEntity>) {
+        deleteMembers(groupId)
+        putMembers(members)
+    }
+
+    /** The member whose open `group.sync` the antenna knows as [ref] in the current link [session]. */
+    @Query("SELECT * FROM group_members WHERE syncRef = :ref AND syncSession = :session AND keyState = 'pending'")
+    suspend fun bySyncRef(ref: Int, session: String): GroupMemberEntity?
+
+    /** Syncs the antenna accepted that have no final state yet, of the groups held on [deviceId]. */
+    @Query(
+        """SELECT m.* FROM group_members m JOIN groups g ON g.id = m.groupId
+           WHERE m.keyState = 'pending' AND m.syncRef IS NOT NULL AND g.deviceId = :deviceId ORDER BY m.groupId, m.member""",
+    )
+    suspend fun openSyncs(deviceId: String): List<GroupMemberEntity>
+
+    /** Syncs that still have to be handed to the antenna, oldest group first. */
+    @Query("SELECT * FROM group_members WHERE keyState = 'queued' ORDER BY groupId, member")
+    suspend fun queuedSyncs(): List<GroupMemberEntity>
 
     @Query("SELECT * FROM groups")
     suspend fun all(): List<GroupEntity>
@@ -210,7 +251,7 @@ interface MaintenanceDao {
 
 @Database(
     entities = [ContactEntity::class, MessageEntity::class, GroupEntity::class, GroupMemberEntity::class, SettingEntity::class],
-    version = 1,
+    version = 4,
     exportSchema = true,
 )
 abstract class OffGridDatabase : RoomDatabase() {

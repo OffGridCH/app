@@ -56,11 +56,41 @@ class MessageLimitsTest {
     }
 
     @Test
+    fun ogz1LeavesTextsThatFitRawUncompressed() {
+        // Lab.3 compresses only texts over 83 bytes, so a team board can read everything up to that (OGZ1 would be 14).
+        val text = "Bin gleich da, wartet beim Eingang auf mich."
+        assertEquals(44, MessageLimits.onAirTextBytes(text, MessageLimits.CODEC_OGZ1, 160))
+    }
+
+    @Test
     fun namesAreOneTo24Bytes() {
         assertTrue(MessageLimits.isValidName("Anna Meier"))
         assertTrue(MessageLimits.isValidName("a".repeat(24)))
         assertFalse(MessageLimits.isValidName("a".repeat(25)))
         assertFalse(MessageLimits.isValidName("ü".repeat(13)))
         assertFalse(MessageLimits.isValidName("  "))
+    }
+
+    @Test
+    fun longTextsAreSplitIntoRawPiecesAtSpaces() {
+        val text = "Wir sind bei der Hütte oben, das Wetter wird schlechter. Kommt bitte nicht mehr hoch, " +
+            "wir treffen uns um 16:30 beim Parkplatz."
+        val parts = MessageLimits.split(text, AntennaState())
+        assertEquals(2, parts.size)
+        assertTrue(parts.all { MessageLimits.utf8Bytes(it) <= 83 })
+        assertTrue(parts[0].endsWith("nicht mehr"))
+        assertEquals(text, parts.joinToString(" "))
+        // A lab image with OGZ1 fits it into one packet, so it is not split.
+        assertEquals(listOf(text), MessageLimits.split(text, AntennaState(textCodec = MessageLimits.CODEC_OGZ1, maxTextInputBytes = 160)))
+        assertEquals(listOf("Hallo"), MessageLimits.split("  Hallo ", AntennaState()))
+        assertTrue(MessageLimits.split("   ", AntennaState()).isEmpty())
+    }
+
+    @Test
+    fun aWordLongerThanAPacketIsCutWithoutBreakingCodePoints() {
+        val parts = MessageLimits.splitRaw("ü".repeat(50) + "😀".repeat(30), 83)
+        assertTrue(parts.all { MessageLimits.utf8Bytes(it) <= 83 })
+        assertEquals("ü".repeat(50) + "😀".repeat(30), parts.joinToString(""))
+        assertEquals(3, parts.size)
     }
 }

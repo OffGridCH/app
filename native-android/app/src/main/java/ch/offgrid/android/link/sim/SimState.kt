@@ -22,6 +22,16 @@ data class SimFlash(
     val bwKhz: Double = 125.0,
     val txPowerDbm: Int = 14,
     val lockTimeoutS: Int = 15,
+    /** Lab image `lab.set {text_codec}`, persisted like the lab settings in NVS. */
+    val textCodec: String = "raw",
+    /** Lab image `lab.set {ignore_nodes}`: NodeIDs whose directly heard packets are dropped. */
+    val ignoreNodes: List<String> = emptyList(),
+    /** `mesh.set` fields (link spec 8), persisted like `og_cfg`. */
+    val hopDefault: Int = 3,
+    val relayEnabled: Boolean = true,
+    val relayWhenLocked: Boolean = false,
+    val retries: Int = 3,
+    val cadEnabled: Boolean = true,
 )
 
 @Serializable
@@ -38,9 +48,24 @@ data class SimContact(
     val lastSnr: Double? = null,
 )
 
-/** Proposed link 1.1 extension, see README "Gruppen". */
+/** A member of a simulated group; [contactId] is null for a member the board holds no contact for. */
 @Serializable
-data class SimGroup(val groupId: Int, val name: String, val members: List<Int>)
+data class SimGroupMember(val member: Int, val nodeId: String, val contactId: Int? = null)
+
+/** A group slot of the board (link spec 6, "Groups"). [ownMember] is 0 on the owner. */
+@Serializable
+data class SimGroup(
+    val groupId: Int,
+    val gid: String,
+    val name: String,
+    val epoch: Int,
+    val owner: Boolean,
+    val ownMember: Int,
+    val members: List<SimGroupMember>,
+    /** Contact slot of the owner on a joined group. */
+    val ownerContactId: Int? = null,
+    val txCtr: Int = 0,
+)
 
 /**
  * A simulated person with their own OffGrid node somewhere in radio range. Used to demo the whole

@@ -49,7 +49,7 @@ reboots the board.
 | 1 | Reactions | `msg.send` with `type: "reaction"` and a `target` object | `ed9fd57` rejects every reaction with `E_INVALID_ARG`: `args["target"].is<JsonObject>()` on a const ArduinoJson view is always false; it must be `is<JsonObjectConst>()` | Pairing sends a reaction as its ping, so every successful pairing was reported as failed | App: a failed ping no longer fails a stored pairing. Firmware: fixed in the lab fork only. |
 | 2 | First line after connect | The host may send right after opening | Answers the first `sys.hello` at once | `LineFramer` dropped the first line after opening, so every connect waited for the 500 ms retry | Fixed: a first line is kept when it parses as a complete JSON object. |
 | 3 | Radio | Messages travel over LoRa | No team image sends chat over the radio. The default env simulates delivery (`mock: true`); `radio_diag` exposes `radio.*` and rejects `msg.*` | Shows simulated delivery as real | The lab image sends and receives for real. |
-| 4 | Authentication | X25519 + HKDF + AES-GCM token wrap | `authentication: "bypassed-envelope-shape-only"` | Performs the real handshake | Works; the board does not verify it yet (team and lab). |
+| 4 | Authentication | X25519 + HKDF + AES-GCM token wrap | `feature/mesh-direct` verifies it (`Security.cpp`); older images: `authentication: "bypassed-envelope-shape-only"` | Performs the real handshake | Byte layout checked against `Security::unwrap` with independent vectors (see "App against lab.3"); not yet run against a board with lab.3. |
 | 5 | Persistence | Identity, contacts and provisioning survive a reboot | Only the config store is in NVS | Assumes they persist | The lab image stores identity, provisioning, name, codec and contacts in NVS; verified with an EN reset on both boards. |
 | 6 | Text budget | `limits.max_text_bytes`, 83 UTF-8 bytes | 83 | Uses `sys.hello` | Matches. With OGZ1 a TEXT of up to 160 input bytes fits (see below). |
 | 7 | Boot time | App retries `sys.hello` for about 8 s | `a23ff1b` played a blocking 6.6 s boot animation in `setup()` | | Upstream `ceb6843` (#6) now draws the animation from `tick()` and only blocks 100 ms in `init()`. The lab image also starts the panel from `tick()`; `sys.hello` answers in the same 220 ms during the animation as after it, and 1.2 s after a reset. |
@@ -165,8 +165,43 @@ that both boards switch to OGZ1.
 8. Unplug and replug one board: contact and unlock survive; send again.
 9. Optional, with a third board in between: relaying, visible as a higher `hops` in `msg.status`.
 
-If `Nicht gesendet` appears after about 2 minutes: check the distance, that both scanned each other's
-code, and that both phones run the same APK.
+With lab.3, a message without ACK after its retries (about 2 minutes) shows a clock and «Wartet auf
+<Name>»; the board sends it again when it hears the other board or every 60 s, and only after 30 minutes
+does it read «Nicht zugestellt». Then check the distance, that both scanned each other's code, and that
+both phones run the same APK.
+
+## App against lab.3 (2026-10-24, simulator and source only)
+
+App 0.1.0-lab3 was adapted to the lab image 0.2.0-lab.3 (host contract of 2026-10-24) and the team
+stack `feature/mesh-direct` at `c152810`. No board was available for this; everything below was checked
+against the firmware source, independent vectors and the simulator, which now follows the contract.
+
+- **Token wrap:** HKDF salt = session nonce (16 B), info = label || device_id (6 B, byte i = hex pair i of
+  `device_id`), AES-256-GCM with a 12-byte IV, AAD = device_id, envelope iv || ciphertext || tag (60 B):
+  identical to `Security::unwrap`. `tools/wrap_vectors.py` computes unlock and reset envelopes with Python
+  `cryptography` from the firmware side; `TokenWrapFirmwareVectorTest` checks the app against them and that
+  an unlock envelope never verifies under the reset label.
+- **Errors:** `E_UNLOCK_FAILED`, `E_RATE_LIMITED` (after 3 failures, 2 s doubling up to 60 s, checked
+  before the envelope), `E_NO_SESSION` (every attempt consumes the session) and `E_INTERNAL` end the
+  connection with their own German text; `sec.state` reasons (`heartbeat_timeout`, `lock`, `error`,
+  `factory_reset`) are shown on the connect screen while the board is locked.
+- **Factory reset:** «Alle Daten löschen» sends `sys.factory_reset {confirm: "ERASE", method: "app"}` with
+  the token wrapped under `og-reset-wrap-v1`, waits for `{pending: true}` and the restart (`sys.boot` on the
+  CP2102 UART, else `sys.hello` retries), then provisions the board again. Local data is only deleted after
+  the board confirmed. Older images that answer `E_BUSY` (button reset) get a message instead.
+- **Reflashed board:** an unprovisioned board with a known `device_id` is provisioned again, a backup
+  transfer token for it is dropped, and contacts it no longer lists become «Neu koppeln».
+- **Lost messages (contract item 5):** see the README, "Delivery state survives reconnects". `waiting`
+  shows «Wartet auf <Name>»; after a reconnect the app settles its open messages with `msg.pending` and
+  `recent`; a message the board no longer knows reads «Nicht zugestellt» with «Erneut senden».
+- **Commands checked against `Commands.cpp`:** RSSI is a float in `msg.received` and contact views (the app
+  read it as an integer and lost fractional values); `E_BUSY` from `msg.send` is an exhausted counter, no
+  longer a passing state; `contact.rename` and `contact.delete` are not sent for contacts without a slot.
+  The debug menu's `mock.receive` exists only on the team mock; lab.3 has `lab.inject` instead.
+
+Still to check on two lab.3 boards: provisioning and unlock from the phone, a wrong phone and the rate
+limit, «Alle Daten löschen» with the restart, a reflashed board, «Wartet auf» and its later ✓✓, and a
+reconnect while a message is waiting.
 
 ## Link-side changes in the app
 

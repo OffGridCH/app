@@ -1,5 +1,20 @@
 import java.util.Properties
 
+/**
+ * Release signing from Gradle properties (`-POFFGRID_RELEASE_STORE_FILE=…`, or `~/.gradle/gradle.properties`) or
+ * environment variables of the same names. No key lives in this repository. Without any of them the release APK
+ * is built unsigned (`app-release-unsigned.apk`); it is never signed with the debug key.
+ */
+val releaseSigningNames = listOf(
+    "OFFGRID_RELEASE_STORE_FILE", "OFFGRID_RELEASE_STORE_PASSWORD", "OFFGRID_RELEASE_KEY_ALIAS", "OFFGRID_RELEASE_KEY_PASSWORD",
+)
+val releaseSigning: Map<String, String> = releaseSigningNames.mapNotNull { name ->
+    (providers.gradleProperty(name).orNull ?: providers.environmentVariable(name).orNull)?.takeIf { it.isNotBlank() }?.let { name to it }
+}.toMap()
+if (releaseSigning.isNotEmpty() && releaseSigning.size < releaseSigningNames.size) {
+    throw GradleException("Release signing is incomplete, missing: ${(releaseSigningNames - releaseSigning.keys).joinToString()}")
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -16,8 +31,9 @@ android {
         applicationId = "ch.offgrid.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // 3: database version 3 (delivery details), Nils' 0.3.0 contract and the lab.3 settings.
+        versionCode = 3
+        versionName = "0.2.0"
 
         // PostHog project key from the untracked local.properties (`POSTHOG_KEY=phc_...`). Empty means
         // analytics is a no-op, which is the default for every checkout.
@@ -35,12 +51,26 @@ android {
         buildConfigField("String", "TEXT_CODEC", "\"$textCodec\"")
     }
 
+    signingConfigs {
+        if (releaseSigning.isNotEmpty()) {
+            create("release") {
+                val store = file(releaseSigning.getValue("OFFGRID_RELEASE_STORE_FILE"))
+                if (!store.isFile) throw GradleException("OFFGRID_RELEASE_STORE_FILE does not exist: $store")
+                storeFile = store
+                storePassword = releaseSigning.getValue("OFFGRID_RELEASE_STORE_PASSWORD")
+                keyAlias = releaseSigning.getValue("OFFGRID_RELEASE_KEY_ALIAS")
+                keyPassword = releaseSigning.getValue("OFFGRID_RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Debug-only bridges: no TCP link to a dev machine and no forced TEXT codec in a release.
             buildConfigField("String", "TCP_LINK", "\"\"")
-            // Release-style APK for demos, signed with the SDK debug key so it installs without a
-            // keystore. A real release key is an open decision; no key was created.
-            signingConfig = signingConfigs.getByName("debug")
+            buildConfigField("String", "TEXT_CODEC", "\"\"")
+            // Unsigned when the release key is not configured (see releaseSigning above), never the debug key.
+            signingConfig = if (releaseSigning.isNotEmpty()) signingConfigs.getByName("release") else null
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -98,5 +128,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)
+    // Runs the Room migration SQL on a plain SQLite database; Room's MigrationTestHelper needs a device.
+    testImplementation(libs.sqlite.jdbc)
     testImplementation(libs.kotlinx.coroutines.test)
 }

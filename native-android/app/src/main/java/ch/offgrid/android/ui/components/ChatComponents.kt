@@ -123,7 +123,10 @@ fun DayDivider(label: String) {
     }
 }
 
-/** Meta line under outgoing bubbles: time, status word and small signal bars, or the retry row. */
+/**
+ * Meta line under outgoing bubbles: time, status word and small signal bars, a clock while the antenna
+ * waits for the contact, or the failure word from [meta] with the retry button.
+ */
 @Composable
 private fun OutMeta(status: Int, meta: String, onRetry: () -> Unit) {
     AnimatedContent(
@@ -134,7 +137,7 @@ private fun OutMeta(status: Int, meta: String, onRetry: () -> Unit) {
     ) { failed ->
         if (failed) {
             Row(Modifier.padding(end = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Nicht gesendet", style = OgType.meta.copy(color = Og.danger))
+                Text(meta, style = OgType.meta.copy(color = Og.danger))
                 Box(
                     Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(10.dp)).background(Og.surface)
                         .border(1.dp, Og.border, RoundedCornerShape(10.dp))
@@ -149,8 +152,14 @@ private fun OutMeta(status: Int, meta: String, onRetry: () -> Unit) {
                 else -> 0
             }
             Row(Modifier.padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(meta, style = OgType.meta)
-                SignalBars(level, small = true)
+                if (status == MessageStatus.WAITING) {
+                    // No check mark: the antenna sent it but has no ACK yet and tries again when the contact is heard.
+                    OgIconView(OgIcon.Clock, Og.text3)
+                    Text(meta, style = OgType.meta)
+                } else {
+                    Text(meta, style = OgType.meta)
+                    SignalBars(level, small = true)
+                }
             }
         }
     }
@@ -211,6 +220,7 @@ fun MessageBubble(
     reaction: String? = null,
     onRetry: () -> Unit = {},
     onLongPress: (() -> Unit)? = null,
+    longPressLabel: String = "Details",
 ) {
     Column(Modifier.fillMaxWidth().padding(top = if (groupStart) 8.dp else 0.dp), horizontalAlignment = if (out) Alignment.End else Alignment.Start) {
         Column(
@@ -229,7 +239,7 @@ fun MessageBubble(
             Box(
                 Modifier
                     .then(if (out) Modifier.outBubble(status, shape) else Modifier.clip(shape).background(Og.surface).border(1.dp, Og.border, shape))
-                    .then(if (onLongPress != null) Modifier.longPressAction("Reagieren", onLongPress) else Modifier)
+                    .then(if (onLongPress != null) Modifier.longPressAction(longPressLabel, onLongPress) else Modifier)
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(
@@ -350,8 +360,11 @@ fun Composer(
     maxBytes: Int,
     onSend: () -> Unit,
     onLocation: (() -> Unit)?,
+    parts: Int = 1,
+    maxParts: Int = 1,
 ) {
-    val over = usedBytes > maxBytes
+    // A text longer than one radio message is split by the app into up to maxParts messages.
+    val over = parts > maxParts || (maxParts == 1 && usedBytes > maxBytes)
     val canSend = text.isNotBlank() && !over
     // The design keeps the send button at full colour while the field is empty; only an
     // over-long text dims it.
@@ -399,7 +412,11 @@ fun Composer(
                     },
                 )
                 Text(
-                    "$usedBytes / $maxBytes Zeichen pro Funkspruch",
+                    when {
+                        parts > maxParts -> "Zu lang: höchstens $maxParts Funksprüche"
+                        parts > 1 -> "Wird als $parts Funksprüche gesendet"
+                        else -> "$usedBytes / $maxBytes Zeichen pro Funkspruch"
+                    },
                     style = OgType.meta.copy(color = counterColor),
                     modifier = Modifier.padding(start = 4.dp).onSizeChanged { counterHeight = it.height },
                 )

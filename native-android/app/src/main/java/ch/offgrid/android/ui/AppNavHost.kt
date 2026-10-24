@@ -28,12 +28,14 @@ import ch.offgrid.android.analytics.Screen
 import ch.offgrid.android.domain.Conversation
 import ch.offgrid.android.domain.Settings
 import ch.offgrid.android.ui.screens.AddContactScreen
+import ch.offgrid.android.ui.screens.AdvancedScreen
 import ch.offgrid.android.ui.screens.ChatScreen
 import ch.offgrid.android.ui.screens.ConnectScreen
 import ch.offgrid.android.ui.screens.ContactAddedScreen
 import ch.offgrid.android.ui.screens.ContactsScreen
 import ch.offgrid.android.ui.screens.ExportScreen
 import ch.offgrid.android.ui.screens.GroupChatScreen
+import ch.offgrid.android.ui.screens.GroupMembersScreen
 import ch.offgrid.android.ui.screens.ImportScreen
 import ch.offgrid.android.ui.screens.LocationScreen
 import ch.offgrid.android.ui.screens.NameScreen
@@ -56,14 +58,17 @@ object Routes {
     const val SETTINGS = "einstellungen"
     const val EXPORT = "einstellungen/export"
     const val IMPORT = "einstellungen/import"
+    const val ADVANCED = "einstellungen/erweitert"
     const val NEW_GROUP = "gruppe/neu"
     const val GROUP = "gruppe/{groupId}"
+    const val GROUP_MEMBERS = "gruppe/{groupId}/mitglieder"
 
     fun add(scan: Boolean = false) = "kontakte/neu?tab=${if (scan) "scan" else "mine"}"
     fun added(id: Long) = "kontakte/neu/fertig/$id"
     fun chat(id: Long) = "chat/$id"
     fun location(contactId: Long, messageId: Long) = "chat/$contactId/standort/$messageId"
     fun group(id: Long) = "gruppe/$id"
+    fun groupMembers(id: Long) = "gruppe/$id/mitglieder"
 }
 
 /** Shared-axis step between screens: 30 dp slide plus fade, reversed on back. */
@@ -136,9 +141,13 @@ fun AppNavHost(openRequest: MutableStateFlow<Conversation?>) {
         composable(Routes.SETTINGS) { SettingsScreen(nav) }
         composable(Routes.EXPORT) { ExportScreen(nav) }
         composable(Routes.IMPORT) { ImportScreen(nav) }
+        composable(Routes.ADVANCED) { AdvancedScreen(nav) }
         composable(Routes.NEW_GROUP) { NewGroupScreen(nav) }
         composable(Routes.GROUP, arguments = listOf(navArgument("groupId") { type = NavType.LongType })) {
             GroupChatScreen(nav, it.arguments!!.getLong("groupId"))
+        }
+        composable(Routes.GROUP_MEMBERS, arguments = listOf(navArgument("groupId") { type = NavType.LongType })) {
+            GroupMembersScreen(nav, it.arguments!!.getLong("groupId"))
         }
     }
 }

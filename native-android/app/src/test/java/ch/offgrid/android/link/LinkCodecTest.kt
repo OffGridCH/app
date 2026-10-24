@@ -39,6 +39,18 @@ class LinkCodecTest {
     }
 
     @Test
+    fun readsTheFirmwaresFloatRssi() {
+        // msg.received and contact views carry RSSI and SNR as floats (Commands.cpp, Contacts::View).
+        val event = LinkCodec.decodeIncoming("{\"evt\":\"msg.received\",\"t\":5,\"data\":{\"rssi\":-91.6,\"snr\":7.25,\"last_rssi\":-85}}")
+            as Incoming.Event
+        assertNull(event.data.int("rssi"))
+        assertEquals(-92, event.data.dbm("rssi"))
+        assertEquals(-85, event.data.dbm("last_rssi"))
+        assertEquals(7.25, event.data.double("snr")!!, 0.0)
+        assertNull(event.data.dbm("missing"))
+    }
+
+    @Test
     fun ignoresGarbage() {
         assertNull(LinkCodec.decodeIncoming("{not json"))
         assertNull(LinkCodec.decodeIncoming("{\"foo\":1}"))

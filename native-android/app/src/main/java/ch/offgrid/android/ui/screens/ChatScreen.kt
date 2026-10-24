@@ -5,7 +5,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -33,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -52,8 +50,9 @@ import ch.offgrid.android.domain.Conversation
 import ch.offgrid.android.domain.Formats
 import ch.offgrid.android.domain.Geo
 import ch.offgrid.android.domain.GeoFix
+import ch.offgrid.android.domain.MessageDetails
 import ch.offgrid.android.domain.MessageLimits
-import ch.offgrid.android.domain.REACTIONS
+import ch.offgrid.android.domain.Messaging
 import ch.offgrid.android.ui.LocalApp
 import ch.offgrid.android.ui.Routes
 import ch.offgrid.android.ui.back
@@ -89,7 +88,7 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
     val now = rememberNow()
     var draft by rememberSaveable { mutableStateOf("") }
     var locationSheet by rememberSaveable { mutableStateOf(false) }
-    var reactTo by remember { mutableStateOf<MessageEntity?>(null) }
+    var detailsFor by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(messages.size) { app.messaging.markRead(contactId) }
     ConversationOnScreen(Conversation.Direct(contactId))
     // Opened from a notification for a contact that was deleted since: nothing to show.
@@ -110,6 +109,13 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
                 },
             )
             if (!ready) DisconnectedBanner { nav.navigate(Routes.CONNECT) }
+            if (c.state == Messaging.UNPAIRED) {
+                OgBanner(
+                    "Neu koppeln",
+                    "Die Antenne kennt ${c.firstName ?: c.displayName} nicht mehr. Scannt eure Codes erneut, dann könnt ihr wieder schreiben.",
+                    "Koppeln",
+                ) { nav.navigate(Routes.add()) }
+            }
             MessageList(messages, now, Modifier.weight(1f), empty = "Noch keine Nachrichten. Schreib die erste.") { row ->
                 val m = row.message
                 if (m.kind == "geo") {
@@ -119,12 +125,13 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
                         out = m.direction == "out",
                         status = m.status,
                         text = m.text,
-                        meta = metaFor(m, ready),
+                        meta = metaFor(m, ready, c.firstName ?: c.displayName),
                         groupStart = row.groupStart,
                         continued = row.continued,
                         reaction = m.peerReaction,
                         onRetry = { app.messaging.retry(m.id) },
-                        onLongPress = if (m.direction == "in" && m.ctr != null) ({ reactTo = m }) else null,
+                        onLongPress = { detailsFor = m.id },
+                        longPressLabel = if (m.direction == "in" && m.ctr != null) "Reagieren und Details" else "Details",
                     )
                 }
             }
@@ -146,25 +153,12 @@ fun ChatScreen(nav: NavHostController, contactId: Long) {
             app.messaging.sendLocation(c.id, fix)
             locationSheet = false
         }
-        // Keep the last target while the sheet slides out.
-        var lastReactTo by remember { mutableStateOf<MessageEntity?>(null) }
-        reactTo?.let { lastReactTo = it }
-        OgSheet(reactTo != null, "Reaktion", onClose = { reactTo = null }) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                REACTIONS.forEach { emoji ->
-                    val chosen = lastReactTo?.peerReaction == emoji
-                    Box(
-                        Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(if (chosen) Og.accentSoft else Og.surface2)
-                            .clickable(role = Role.Button, onClickLabel = if (chosen) "Reaktion entfernen" else "Reagieren") {
-                                lastReactTo?.let { app.messaging.react(it, if (chosen) null else emoji) }
-                                reactTo = null
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) { Text(emoji, fontSize = 22.sp) }
-                }
-            }
-            OgButton("Abbrechen", { reactTo = null }, variant = ButtonVariant.Secondary)
-        }
+        MessageSheet(
+            message = detailsFor?.let { id -> messages.firstOrNull { it.id == id } },
+            recipient = c.firstName ?: c.displayName,
+            onClose = { detailsFor = null },
+            onReact = { m, emoji -> app.messaging.react(m, emoji) },
+        )
     }
 }
 
@@ -231,17 +225,33 @@ fun MessageList(
     }
 }
 
-/** Meta line: in → time; out → "14:03 · zugestellt", "wartet auf Funk …" or "in Warteschlange". */
-fun metaFor(m: MessageEntity, ready: Boolean): String {
+/**
+ * Meta line: in → time; out → "14:03 · zugestellt" (", während offline" when only the reconciliation
+ * found the delivery), "14:03 · weitergeleitet", "Wartet auf Anna", "wartet auf Funk …",
+ * "in Warteschlange", or the failure word shown next to "Erneut senden".
+ */
+fun metaFor(m: MessageEntity, ready: Boolean, recipient: String? = null): String {
     val time = Formats.time(m.sentAt)
     if (m.direction == "in") return time
     return when (m.status) {
-        MessageStatus.DELIVERED -> "$time · zugestellt"
-        MessageStatus.SENT -> "$time · gesendet"
+        MessageStatus.DELIVERED -> if (m.deliveredOffline) "$time · zugestellt, während offline" else "$time · zugestellt"
+        MessageStatus.SENT -> when (m.deviceState) {
+            "relayed" -> "$time · weitergeleitet"
+            "retrying" -> "$time · wird wiederholt"
+            else -> "$time · gesendet"
+        }
+        MessageStatus.WAITING -> "Wartet auf ${recipient ?: "Empfänger"}"
         MessageStatus.LOCAL_QUEUED, MessageStatus.DEVICE_QUEUED -> if (ready) "wartet auf Funk …" else "in Warteschlange"
+        MessageStatus.FAILED -> failureText(m.failReason)
         else -> time
     }
 }
+
+/**
+ * "Nicht gesendet" when the antenna refused the message (an `E_…` code from `msg.send`, or no contact
+ * slot); "Nicht zugestellt" when the antenna had it and gave up or lost it (`timeout`, `locked`, `lost` …).
+ */
+fun failureText(reason: String?): String = if (MessageDetails.failedBeforeSending(reason)) "Nicht gesendet" else "Nicht zugestellt"
 
 @Composable
 private fun GeoBubble(row: MessageRow.Msg, c: ContactEntity, myFix: GeoFix?, now: Long, ready: Boolean, onOpen: () -> Unit, onRetry: () -> Unit) {
@@ -258,7 +268,7 @@ private fun GeoBubble(row: MessageRow.Msg, c: ContactEntity, myFix: GeoFix?, now
         title = if (out) "Mein Standort" else "Standort von ${c.firstName ?: c.displayName}",
         coordinate = Geo.formatCoordinate(lat, lon),
         accuracy = m.accuracyM?.let(Geo::formatAccuracy),
-        meta = metaFor(m, ready),
+        meta = metaFor(m, ready, c.firstName ?: c.displayName),
         distance = if (fresh) Geo.formatDistance(Geo.distanceMeters(myFix!!.latitude, myFix.longitude, lat, lon)) else null,
         directionText = bearing?.let { "Richtung ${Geo.compassName(it)}" },
         bearing = bearing,
@@ -278,6 +288,8 @@ fun ChatComposer(
     antenna: AntennaState,
     onSend: () -> Unit,
     onLocation: (() -> Unit)?,
+    /** A group chat counts plain UTF-8 bytes against `max_group_text_bytes`; the lab codec does not apply to groups. */
+    groupMaxBytes: Int? = null,
 ) {
     val ready = antenna.ready
     Composer(
@@ -287,10 +299,13 @@ fun ChatComposer(
         label = "Nachricht an $target",
         sendLabel = if (ready) "Senden" else "In Warteschlange legen",
         // On air, not typed: a lab image with the OGZ1 codec fits more text into the same bytes.
-        usedBytes = MessageLimits.onAirTextBytes(draft, antenna.textCodec, antenna.maxTextInputBytes),
-        maxBytes = antenna.maxTextBytes,
+        usedBytes = if (groupMaxBytes != null) MessageLimits.utf8Bytes(draft)
+        else MessageLimits.onAirTextBytes(draft, antenna.textCodec, antenna.maxTextInputBytes),
+        maxBytes = groupMaxBytes ?: antenna.maxTextBytes,
         onSend = onSend,
         onLocation = onLocation,
+        parts = if (groupMaxBytes != null) MessageLimits.splitRaw(draft, groupMaxBytes).size else MessageLimits.split(draft, antenna).size,
+        maxParts = MessageLimits.MAX_PARTS,
     )
 }
 
