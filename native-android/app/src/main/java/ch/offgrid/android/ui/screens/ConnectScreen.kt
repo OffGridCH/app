@@ -72,6 +72,8 @@ fun ConnectScreen(onNext: (onboardingDone: Boolean) -> Unit) {
     // On phone-sized screens the note sits below the fold; bring it into view when it appears.
     LaunchedEffect(state.error) { if (state.error != null) scroll.animateScrollTo(scroll.maxValue) }
     val phase = state.phase
+    val radioDown = state.ready && state.radioRunning == false
+    val retryIn = rememberSecondsUntil(state.retryAt)
     val found = phase == AntennaPhase.DEVICE_FOUND || phase == AntennaPhase.CONNECTING || phase == AntennaPhase.READY
     Page {
         Column(Modifier.weight(1f).verticalScroll(scroll)) {
@@ -117,15 +119,23 @@ fun ConnectScreen(onNext: (onboardingDone: Boolean) -> Unit) {
                             AntennaPhase.CONNECTING, AntennaPhase.DEVICE_FOUND -> StepState.Active
                             else -> StepState.Todo
                         },
+                        meta = state.activity?.text() ?: if (phase == AntennaPhase.READY) state.deviceId else null,
                     ),
                     Step(
-                        "Funkmodul bereit",
-                        if (phase == AntennaPhase.READY) StepState.Done else StepState.Todo,
+                        if (radioDown) "Funkmodul nicht bereit" else "Funkmodul bereit",
+                        if (phase == AntennaPhase.READY && !radioDown) StepState.Done else StepState.Todo,
                         meta = if (phase == AntennaPhase.READY) state.fwVersion?.let { "FW $it" } else null,
                     ),
                 ),
             )
-            state.error?.let { OgNote(it.text()) }
+            state.lockReason?.takeIf { !state.ready }?.let { OgNote(lockReasonText(it)) }
+            state.error?.let { OgNote(it.text(state.errorCode, retryIn, state.vaultStatus)) }
+            if (radioDown) {
+                OgNote(
+                    "Die Antenne ist entsperrt, aber ihr Funkmodul läuft nicht" + (state.radioError?.let { " (Fehler $it)" } ?: "") +
+                        ". Nachrichten bleiben in der Warteschlange. Steck die Antenne neu ein.",
+                )
+            }
             Spacer(Modifier.height(16.dp))
         }
         Footer(top = 0.dp) {

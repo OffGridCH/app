@@ -125,6 +125,13 @@ fun AddContactScreen(nav: NavHostController, scanTab: Boolean) {
                     ScanTab(ui, simulated = linkKind == LinkKind.SIMULATED, onStart = vm::clearError, onCode = vm::scan)
                 }
                 ui.error?.let { OgNote(it.text()) }
+                if (ui.canReplace) {
+                    OgButton("Neu koppeln", vm::replace, Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp),
+                        variant = ButtonVariant.Secondary)
+                }
+                if (ui.codeRenewed && tab == "mine") {
+                    OgNote("Dein Code hat sich erneuert. Hat dein Gegenüber den alten schon gescannt, muss es diesen neu scannen.")
+                }
                 Spacer(Modifier.height(16.dp))
                 Spacer(Modifier.weight(1f))
                 if (tab == "mine") {

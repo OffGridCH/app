@@ -4,11 +4,21 @@ Snapshot for the 02:00 team sync on 2026-10-24. The branch builds and passes
 `./gradlew testDebugUnitTest lint assembleDebug assembleRelease` (lint: 0 errors). APKs:
 
 - Debug: `app/build/outputs/apk/debug/app-debug.apk`
-- Release-style, signed with the SDK debug key: `app/build/outputs/apk/release/app-release.apk`
+- Release 0.2.0 (versionCode 3): `app/build/outputs/apk/release/app-release.apk` when the release key is
+  configured (README, Build), else `app-release-unsigned.apk`; never signed with the debug key.
 
 Install with `adb install -r <apk>`; details in the [README](README.md). Everything runs against
 the simulated antenna on the emulator; a real Heltec is the hardware agent's lane on `main`,
 which is merged in (last merge: `1b19e72`, OGZ1 text codec).
+
+## Lab.3 adaptation (0.1.0-lab3)
+
+The app follows the lab image 0.2.0-lab.3 and the team stack `feature/mesh-direct`: real token checks
+with their own error texts, the authenticated factory reset behind «Alle Daten löschen», reflashed
+boards set up again with their contacts marked «Neu koppeln», and the lost-message fix (waiting state
+«Wartet auf <Name>», reconnect reconciliation with `msg.pending`, «Nicht zugestellt» instead of a
+permanent «gesendet»). Database version 2. Checked against the firmware source, independent vectors and
+the simulator only; see [`docs/hardware.md`](docs/hardware.md), "App against lab.3".
 
 ## Done
 
@@ -64,5 +74,5 @@ which is merged in (last merge: `1b19e72`, OGZ1 text codec).
    contact list header is not in `Kontakte.png`.
 4. **Composer placeholder.** `Chat.png` shows "Nachricht an Anna", `chat-standort.png`
    "Nachricht an Anna Meier". The app follows the screens skill (display name).
-5. **Release key.** The release-style APK is signed with the debug key; a store release needs a
-   real key.
+5. **Release key.** The build signs releases with a key from `OFFGRID_RELEASE_*` Gradle properties or
+   environment variables; the keystore itself is created and kept outside the repository.

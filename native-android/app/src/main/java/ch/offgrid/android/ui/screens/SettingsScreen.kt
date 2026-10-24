@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
@@ -62,6 +63,7 @@ import ch.offgrid.android.ui.components.OgButton
 import ch.offgrid.android.ui.components.OgCard
 import ch.offgrid.android.ui.components.OgIcon
 import ch.offgrid.android.ui.components.OgIconView
+import ch.offgrid.android.ui.components.OgNote
 import ch.offgrid.android.ui.components.OgSwitch
 import ch.offgrid.android.ui.components.OgTextField
 import ch.offgrid.android.ui.components.OgTopBar
@@ -92,6 +94,8 @@ fun SettingsScreen(nav: NavHostController) {
     var name by rememberSaveable { mutableStateOf<String?>(null) }
     var nameError by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(settings[Settings.DISPLAY_NAME]) { if (name == null) name = settings[Settings.DISPLAY_NAME] }
     val pattern = remember(settings[Settings.OWN_PUBLIC_KEY], installId) {
         KeyPattern.fromSeed(settings[Settings.OWN_PUBLIC_KEY] ?: installId ?: "")
@@ -186,6 +190,24 @@ fun SettingsScreen(nav: NavHostController) {
                 }
             }
 
+            SectionLabel("Erweitert")
+            OgCard {
+                // Lab boards always show it; for the team firmware it is behind a switch, most people never need it.
+                if (!antenna.labRadio) {
+                    SwitchRow("Erweiterte Einstellungen", "Firmware, Funk, Mesh und Statistik der Antenne.",
+                        settings[Settings.SHOW_ADVANCED] == "true") { on ->
+                        scope.launch { app.settings.put(Settings.SHOW_ADVANCED, on.toString()) }
+                    }
+                }
+                if (antenna.labRadio || settings[Settings.SHOW_ADVANCED] == "true") {
+                    if (!antenna.labRadio) CardDivider()
+                    LinkRow(OgIcon.Antenna, if (antenna.labRadio) "Erweitert / Lab" else "Erweitert",
+                        "Firmware, Funk, Mesh${if (antenna.labRadio) ", Ignorierliste, Codec" else ""} und Funkstatistik.") {
+                        nav.navigate(Routes.ADVANCED)
+                    }
+                }
+            }
+
             SectionLabel("Handywechsel")
             OgCard {
                 LinkRow(OgIcon.Upload, "Daten exportieren", "Kontakte, Schlüssel und Nachrichten als Datei, mit Passwort geschützt.") {
@@ -199,8 +221,10 @@ fun SettingsScreen(nav: NavHostController) {
             OgCard {
                 InfoRow("Kontakte", contacts.size.toString())
                 InfoRow("Nachrichten", messageCount.toString())
-                OgButton("Alle Daten löschen", { confirmDelete = true }, variant = ButtonVariant.DangerText)
+                OgButton(if (deleting) "Wird gelöscht …" else "Alle Daten löschen", { deleteError = null; confirmDelete = true },
+                    variant = ButtonVariant.DangerText, enabled = !deleting)
             }
+            deleteError?.let { OgNote(it) }
             Text(
                 "OffGrid ${BuildConfig.VERSION_NAME}",
                 style = OgType.meta,
@@ -217,17 +241,31 @@ fun SettingsScreen(nav: NavHostController) {
             shape = RoundedCornerShape(Og.rCard),
             text = {
                 Text(
-                    "Alle Kontakte und Nachrichten auf diesem Handy löschen? Das lässt sich nicht rückgängig machen.",
+                    if (antenna.ready) {
+                        "Alle Kontakte und Nachrichten löschen und die Antenne auf Werkseinstellungen zurücksetzen? " +
+                            "Danach müsst ihr euch neu koppeln. Das lässt sich nicht rückgängig machen."
+                    } else {
+                        "Alle Kontakte und Nachrichten auf diesem Handy löschen? Die Antenne ist nicht verbunden und " +
+                            "behält ihre Kontakte; verbinde sie zuerst, um sie mitzulöschen. Das lässt sich nicht rückgängig machen."
+                    },
                     style = OgType.body,
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
-                    scope.launch {
-                        app.messaging.deleteAll()
-                        app.resetAnalyticsId()
-                        nav.navigate(Routes.CONTACTS) { popUpTo(Routes.CONTACTS) { inclusive = true } }
+                    deleting = true
+                    // App scope: the reset must not be cut off when this screen goes away.
+                    app.scope.launch {
+                        val result = app.messaging.deleteAll()
+                        scope.launch {
+                            deleting = false
+                            deleteError = result.text()
+                            if (deleteError == null) {
+                                app.resetAnalyticsId()
+                                nav.navigate(Routes.CONTACTS) { popUpTo(Routes.CONTACTS) { inclusive = true } }
+                            }
+                        }
                     }
                 }) { Text("Löschen", style = TextStyle(fontFamily = Grotesk, fontWeight = FontWeight(700), color = Og.danger)) }
             },
@@ -241,11 +279,11 @@ fun SettingsScreen(nav: NavHostController) {
 }
 
 @Composable
-private fun SwitchRow(title: String, help: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, help: String?, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     // The whole row toggles, so TalkBack reads title, help and state as one switch.
     Row(
-        Modifier.fillMaxWidth().heightIn(min = if (help != null) 68.dp else 60.dp)
-            .toggleable(checked, role = Role.Switch, onValueChange = onChange)
+        Modifier.fillMaxWidth().heightIn(min = if (help != null) 68.dp else 60.dp).alpha(if (enabled) 1f else 0.4f)
+            .toggleable(checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -259,7 +297,7 @@ private fun SwitchRow(title: String, help: String?, checked: Boolean, onChange: 
 }
 
 @Composable
-private fun LinkRow(icon: OgIcon, title: String, text: String, onClick: () -> Unit) {
+internal fun LinkRow(icon: OgIcon, title: String, text: String, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
