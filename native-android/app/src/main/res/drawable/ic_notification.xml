@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status bar icon: the logo bubble with the key pattern cut out (only alpha counts here). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <group android:translateX="-22" android:translateY="-22">
+        <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M39.6,26.4 H68.4 A14.4,14.4 0 0 1 82.8,40.8 V56.8 A14.4,14.4 0 0 1 68.4,71.2 H39.6 A14.4,14.4 0 0 1 25.2,56.8 V40.8 A14.4,14.4 0 0 1 39.6,26.4 ZM64 32.4h6.4v6.4h-6.4zM55.2 41.2h6.4v6.4h-6.4zM64 41.2h6.4v6.4h-6.4zM46.4 50h6.4v6.4h-6.4zM55.2 50h6.4v6.4h-6.4zM64 50h6.4v6.4h-6.4zM37.6 58.8h6.4v6.4h-6.4zM46.4 58.8h6.4v6.4h-6.4zM55.2 58.8h6.4v6.4h-6.4zM64 58.8h6.4v6.4h-6.4z" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M33.2,64.8 L30.0,81.6 L50.8,69.6 Z" />
+    </group>
+</vector>
