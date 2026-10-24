@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, untracked } from '@angular/core';
+import { Injectable, type Signal, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 
 import { AntennaPort } from '../antenna/antenna-port';
@@ -11,10 +11,12 @@ import { MessageRepository } from '../data/message.repository';
 import { nowIso } from '../data/sqlite-mapping';
 import { HandshakeService } from '../handshake/handshake.service';
 import { log } from '../log';
+import type { ContactListItem } from '../models/contact';
 import type { DeliveryState, JsonObject, MessageStatusEvent, ReactionTarget, ReceivedMessage } from '../models/device';
 import { MessageStatus, type GeoFix, type Message, type MessageKind } from '../models/message';
 import { maxContentBytes, splitText } from './limits';
 import { isReactionEmoji } from './reactions';
+import { signalLevel } from './signal';
 
 /** Eine eingehende Reaktion. Sie wird nicht gespeichert, sondern nur gemeldet. */
 export interface ReactionEvent {
@@ -50,6 +52,27 @@ function statusOf(state: DeliveryState): MessageStatus {
 }
 
 /**
+ * Sortiert die Kontaktliste: die Kontakte mit Nachricht kommen zuerst (neueste Nachricht vorne),
+ * die Kontakte ohne Nachricht stehen nach ihrer Platznummer dahinter.
+ */
+function sortContactList(items: ContactListItem[]): ContactListItem[] {
+  return [...items].sort((a, b) => {
+    const first = a.lastMessage?.sentAt ?? null;
+    const second = b.lastMessage?.sentAt ?? null;
+    if (first !== null && second !== null) {
+      if (first !== second) {
+        return first < second ? 1 : -1;
+      }
+    } else if (first !== null) {
+      return -1;
+    } else if (second !== null) {
+      return 1;
+    }
+    return a.contact.contactId - b.contact.contactId;
+  });
+}
+
+/**
  * Senden und Empfangen von Nachrichten über die Host-API des Geräts.
  *
  * Die App verschlüsselt nichts und kennt keine Funkpakete: Sie schickt Klartext mit `msg.send` und bekommt
@@ -61,7 +84,7 @@ function statusOf(state: DeliveryState): MessageStatus {
 @Injectable({ providedIn: 'root' })
 export class MessagingService {
   private readonly antenna = inject(AntennaPort);
-  private readonly contacts = inject(ContactRepository);
+  private readonly contactRepository = inject(ContactRepository);
   private readonly messages = inject(MessageRepository);
   private readonly coordinates = inject(CoordinateRepository);
   private readonly handshake = inject(HandshakeService);
@@ -71,8 +94,31 @@ export class MessagingService {
   private readonly unmatched = new Map<number, MessageStatusEvent[]>();
   private chain: Promise<void> = Promise.resolve();
 
+  /** Die Kontaktliste mit letzter Nachricht, Ungelesenen und Signal-Level. */
+  private readonly contactListSignal = signal<ContactListItem[]>([]);
+  /** Die ungelesenen Nachrichten je Kontakt (aus der Kontaktliste). */
+  private readonly unreadCounts = computed(() => {
+    const counts = new Map<number, number>();
+    for (const item of this.contactListSignal()) {
+      counts.set(item.contact.contactId, item.unread);
+    }
+    return counts;
+  });
+  /** Die Signale der ungelesenen Nachrichten je Kontakt (werden nur einmal angelegt). */
+  private readonly unreadSignalCache = new Map<number, Signal<number>>();
+  /** Nummer des laufenden Reloads: nur das neueste Ergebnis wird übernommen. */
+  private reloadToken = 0;
+
   /** Längster Text, den das Gerät in einer Nachricht annimmt (`limits.max_text_bytes`, meist 83). */
   readonly maxContentBytes = computed(() => maxContentBytes(this.antenna.limits().maxTextBytes));
+
+  /**
+   * Die Kontakte mit letzter Nachricht, Anzahl der ungelesenen Nachrichten und Signal-Level.
+   *
+   * Sortiert nach der letzten Nachricht (neueste zuerst); Kontakte ohne Nachricht stehen nach ihrer
+   * Platznummer dahinter (Skill `offgrid-screens` §3).
+   */
+  readonly contacts: Signal<ContactListItem[]> = this.contactListSignal.asReadonly();
 
   /** Eingehende Reaktionen. */
   readonly reactions: Observable<ReactionEvent> = this.reactionSubject.asObservable();
@@ -98,6 +144,26 @@ export class MessagingService {
         untracked(() => void this.run(() => this.flush()));
       }
     });
+    // Die Kontaktliste hängt an den Daten: bei jeder Änderung wird sie neu geladen.
+    effect(() => {
+      this.dataChanged.version();
+      untracked(() => void this.reloadContacts());
+    });
+  }
+
+  /**
+   * Anzahl der ungelesenen Nachrichten eines Kontakts.
+   *
+   * Das Signal bleibt bestehen, wenn sich die Kontaktliste ändert: es liefert dann den neuen Wert.
+   */
+  unreadCount(contactId: number): Signal<number> {
+    const cached = this.unreadSignalCache.get(contactId);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const unread = computed(() => this.unreadCounts().get(contactId) ?? 0);
+    this.unreadSignalCache.set(contactId, unread);
+    return unread;
   }
 
   /**
@@ -110,7 +176,7 @@ export class MessagingService {
       return Promise.resolve();
     }
     return this.run(async () => {
-      if (!(await this.contacts.byId(contactId))) {
+      if (!(await this.contactRepository.byId(contactId))) {
         log.warn('Nachricht an unbekannten Kontakt', contactId);
         return;
       }
@@ -124,7 +190,7 @@ export class MessagingService {
   /** Sendet einen Standort als Nachricht (`type: "geo"`). */
   sendLocation(contactId: number, fix: GeoFix): Promise<void> {
     return this.run(async () => {
-      if (!(await this.contacts.byId(contactId))) {
+      if (!(await this.contactRepository.byId(contactId))) {
         log.warn('Standort an unbekannten Kontakt', contactId);
         return;
       }
@@ -213,6 +279,51 @@ export class MessagingService {
   async markRead(contactId: number): Promise<void> {
     await this.messages.markRead(contactId, nowIso());
     this.dataChanged.notify();
+  }
+
+  /**
+   * Lädt die Kontaktliste neu: Kontakte, letzte Nachricht, ungelesene Nachrichten und Signal-Level.
+   *
+   * Das Signal-Level kommt aus dem RSSI des Kontakts und dem Zeitpunkt der letzten eingehenden Nachricht
+   * (Skill `offgrid-screens` §0): ein Signal älter als 15 Minuten zählt nicht mehr.
+   */
+  private async reloadContacts(): Promise<void> {
+    const token = ++this.reloadToken;
+    try {
+      const contacts = await this.contactRepository.all();
+      const last = await this.messages.lastPerContact();
+      const unread = await this.messages.unreadPerContact();
+      const now = new Date();
+      const items: ContactListItem[] = [];
+      for (const contact of contacts) {
+        const seenAt = await this.lastIncomingAt(contact.contactId);
+        items.push({
+          contact,
+          lastMessage: last.get(contact.contactId) ?? null,
+          unread: unread.get(contact.contactId) ?? 0,
+          signalLevel: contact.state === 'pending' ? 0 : signalLevel(contact.lastRssi, seenAt, now),
+        });
+      }
+      if (token !== this.reloadToken) {
+        // Ein neueres Reload läuft bereits: dieses Ergebnis ist veraltet.
+        return;
+      }
+      this.contactListSignal.set(sortContactList(items));
+    } catch (error) {
+      log.warn('Kontaktliste konnte nicht geladen werden', error);
+    }
+  }
+
+  /** Zeitpunkt der letzten eingehenden Nachricht eines Kontakts (`null`, wenn es keine gibt). */
+  private async lastIncomingAt(contactId: number): Promise<string | null> {
+    const messages = await this.messages.forContact(contactId);
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const message = messages[index];
+      if (message.direction === 'in') {
+        return message.sentAt;
+      }
+    }
+    return null;
   }
 
   private run(task: () => Promise<void>): Promise<void> {
@@ -366,7 +477,7 @@ export class MessagingService {
       return;
     }
     const contact =
-      (await this.contacts.byId(received.from)) ?? (await this.handshake.refreshContact(received.from));
+      (await this.contactRepository.byId(received.from)) ?? (await this.handshake.refreshContact(received.from));
     if (!contact) {
       log.warn('Nachricht von unbekanntem Kontakt', received.from);
       return;
@@ -408,7 +519,7 @@ export class MessagingService {
         updatedAt: null,
       });
     }
-    await this.contacts.updateLink(contact.contactId, received.rssi, received.snr);
+    await this.contactRepository.updateLink(contact.contactId, received.rssi, received.snr);
     this.dataChanged.notify();
   }
 }

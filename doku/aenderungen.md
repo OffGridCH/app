@@ -35,6 +35,17 @@
 - Mit `localStorage og.noseed = '1'` startet die Browser-Demo ohne Demo-Daten und mit einem frischen Mock-Gerät.
 - Neue Tests prüfen Guard, Verbindungszustände, Navigation, Bytegrenzierung, Geräteeinrichtung und die sichtbaren Fehlertexte beider Screens.
 
+## T10 – Screen Kontakte
+*2026-10-24*
+
+- Neu: Der Screen „Kontakte“ (`/kontakte`) listet die Kontakte mit letzter Nachricht, Vorschau, Zeit, ungelesenen Nachrichten und Signalbalken. Jede Zeile ist ein Link in den Chat.
+- Neu: Die Antennen-Statuszeile zeigt „Antenne verbunden“ mit der Frequenz des Geräts oder „Antenne getrennt“ mit „· Tippen zum Verbinden“. Die Frequenz liest die App beim Gerät ab (`radio.get`), nicht aus einem festen Wert.
+- Neu: Ausstehende Kontakte (der Schlüssel fehlt noch) stehen als eigene, nicht klickbare Zeile mit „Schlüssel ausstehend“ hinter den Kontakten.
+- Neu: Der Leerzustand mit „Noch keine Kontakte“, der Erklärung zum QR-Handshake und dem Button „Ersten Kontakt hinzufügen“.
+- Neu im `MessagingService`: das Signal `contacts` (je Kontakt die letzte Nachricht, die Anzahl der ungelesenen Nachrichten und das Signal-Level, sortiert nach letzter Nachricht) und `unreadCount(contactId)`. Die Liste lädt bei jeder Datenänderung neu.
+- Das Signal-Level einer Kontaktzeile kommt aus der Feldstärke und dem Alter der letzten eingehenden Nachricht: Älter als 15 Minuten zählt als „Ausser Reichweite“.
+- Neue Tests prüfen Reihenfolge, Signalbalken, Vorschauen, Badge, die Statuszeile, den Leerzustand und das Hochschieben eines Kontakts bei einer neuen Nachricht.
+
 ## T02 – UI-Basis 2: Zustandskomponenten
 *2026-10-24*
 
