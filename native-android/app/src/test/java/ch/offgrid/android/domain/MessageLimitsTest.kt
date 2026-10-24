@@ -56,6 +56,13 @@ class MessageLimitsTest {
     }
 
     @Test
+    fun ogz1LeavesTextsThatFitRawUncompressed() {
+        // Lab.3 compresses only texts over 83 bytes, so a team board can read everything up to that (OGZ1 would be 14).
+        val text = "Bin gleich da, wartet beim Eingang auf mich."
+        assertEquals(44, MessageLimits.onAirTextBytes(text, MessageLimits.CODEC_OGZ1, 160))
+    }
+
+    @Test
     fun namesAreOneTo24Bytes() {
         assertTrue(MessageLimits.isValidName("Anna Meier"))
         assertTrue(MessageLimits.isValidName("a".repeat(24)))

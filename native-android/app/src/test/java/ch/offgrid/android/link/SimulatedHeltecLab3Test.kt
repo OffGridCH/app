@@ -17,8 +17,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -89,7 +91,7 @@ class SimulatedHeltecLab3Test {
         val h = c.call("sys.hello", hello)
         assertEquals(true, h.bool("lab_radio"))
         assertEquals("raw", h.str("text_codec"))
-        assertEquals("0.2.0-lab.3-sim", h.obj("fw")!!.str("version"))
+        assertEquals("0.3.0-lab.3-sim", h.obj("fw")!!.str("version"))
         val slot = c.pair("Anna")
         val first = c.send(slot).int("msg_ref")!!
         assertTrue(first in 1..(1 shl 30))
@@ -211,6 +213,87 @@ class SimulatedHeltecLab3Test {
         assertTrue(MessageLimits.onAirTextBytes(text, MessageLimits.CODEC_OGZ1, 160) <= 83)
         val sent = c.call("msg.send", buildJsonObject { put("to", slot); put("type", "text"); put("text", text) })
         assertTrue(sent.int("bytes_on_air")!! < 17 + text.toByteArray().size)
+        assertEquals(true, sent.bool("compressed"))
+        // Texts that fit raw stay raw, so a team board can read them.
+        assertEquals(false, c.send(slot, "Kurz").bool("compressed"))
+        c.close()
+    }
+
+    @Test
+    fun pairBeginKeepsItsSaltForTheWindow() = runBlocking {
+        val c = connect().provisioned()
+        val first = c.call("pair.begin")
+        val again = c.call("pair.begin")
+        assertEquals(first.str("qr"), again.str("qr"))
+        assertTrue(again.int("expires_s")!! <= 300)
+        val qr = device.addVirtualPeer("Anna", -80)
+        c.call("pair.complete", buildJsonObject { put("qr", qr) })
+        // The lab image keeps the salt after a completion; cancel wipes it.
+        assertEquals(first.str("qr"), c.call("pair.begin").str("qr"))
+        c.call("pair.cancel")
+        assertNotEquals(first.str("qr"), c.call("pair.begin").str("qr"))
+        c.close()
+    }
+
+    @Test
+    fun labSetValidatesAndPersistsTheIgnoreList() = runBlocking {
+        val c = connect().provisioned()
+        val own = c.call("lab.get")
+        assertEquals(c.call("id.get").str("node_id"), own.str("node_id"))
+        assertEquals("0.3.0-lab.3-sim", own.str("fw"))
+        assertTrue((own["ignore_nodes"] as JsonArray).isEmpty())
+        val set = c.call("lab.set", buildJsonObject { putJsonArray("ignore_nodes") { add(JsonPrimitive("033b")); add(JsonPrimitive("E841")) } })
+        assertEquals(listOf("033B", "E841"), (set["ignore_nodes"] as JsonArray).map { (it as JsonPrimitive).content })
+        assertEquals("E_INVALID_ARG", c.errorOf("lab.set", buildJsonObject { putJsonArray("ignore_nodes") { add(JsonPrimitive("33B")) } }))
+        assertEquals("E_INVALID_ARG", c.errorOf("lab.set", buildJsonObject {
+            putJsonArray("ignore_nodes") { repeat(9) { add(JsonPrimitive("%04X".format(it))) } }
+        }))
+        assertEquals(2, (c.call("lab.get")["ignore_nodes"] as JsonArray).size)
+        c.call("sec.lock")
+        assertEquals("E_LOCKED", c.errorOf("lab.get"))
+        c.close()
+    }
+
+    @Test
+    fun anIgnoredNodeIsOutOfReach() = runBlocking {
+        val c = connect().provisioned()
+        val slot = c.pair("Anna")
+        val node = c.call("contact.get", buildJsonObject { put("contact_id", slot) }).obj("contact")!!.str("node_id")!!
+        c.call("lab.set", buildJsonObject { putJsonArray("ignore_nodes") { add(JsonPrimitive(node)) } })
+        val ref = c.send(slot).int("msg_ref")!!
+        assertEquals("no_ack", c.awaitStatus(ref, "waiting").str("reason"))
+        c.call("lab.set", buildJsonObject { putJsonArray("ignore_nodes") {} })
+        device.peerSays(slot, "Hallo")
+        c.awaitStatus(ref, "delivered")
+        c.close()
+    }
+
+    @Test
+    fun meshSettingsWorkInEveryStateForReadingAndUnlockedForWriting() = runBlocking {
+        val c = connect().provisioned()
+        assertEquals(3, c.call("mesh.get").int("hop_default"))
+        val set = c.call("mesh.set", buildJsonObject { put("hop_default", 5); put("relay_when_locked", true) })
+        assertEquals(5, set.int("hop_default"))
+        assertEquals(true, set.bool("relay_when_locked"))
+        assertEquals("E_INVALID_ARG", c.errorOf("mesh.set", buildJsonObject { put("hop_default", 8) }))
+        assertEquals(5, c.call("msg.send", buildJsonObject { put("to", c.pair("Anna")); put("type", "text"); put("text", "x") }).int("hops"))
+        c.call("sec.lock")
+        assertEquals(5, c.call("mesh.get").int("hop_default"))
+        assertEquals(true, c.call("sys.status").obj("radio")!!.bool("relay_only"))
+        assertEquals("E_LOCKED", c.errorOf("mesh.set", buildJsonObject { put("hop_default", 1) }))
+        c.close()
+    }
+
+    @Test
+    fun radioStatsCountAndReset() = runBlocking {
+        val c = connect().provisioned()
+        val slot = c.pair("Anna")
+        c.awaitStatus(c.send(slot).int("msg_ref")!!, "delivered")
+        val stats = c.call("radio.stats", buildJsonObject { put("reset", true) })
+        assertTrue(stats.int("tx_packets")!! >= 1)
+        assertEquals(1, stats.int("acks_received"))
+        assertEquals(10, stats.int("tx_duty_cycle_max_percent"))
+        assertEquals(0, c.call("radio.stats").int("tx_packets"))
         c.close()
     }
 }

@@ -26,15 +26,16 @@ object MessageLimits {
     const val CODEC_OGZ1 = "ogz1"
 
     /**
-     * Bytes [text] takes in the TEXT body on air, to compare with `AntennaState.maxTextBytes`. With `ogz1`
-     * the antenna sends the OGZ1 encoding whenever it is shorter (protocol 8.1, inner flag bit 2), so the
-     * same 83 bytes hold about twice the text. Above [maxInputBytes] the antenna refuses the text, and the
-     * raw size is returned so the count shows it as too long.
+     * Bytes [text] takes in the TEXT body on air, to compare with `AntennaState.maxTextBytes`. With `ogz1` the
+     * lab image 0.3.0-lab.3 sends texts that fit raw unchanged, so a board on the team firmware (which rejects
+     * compressed bodies) can still read them, and compresses only longer ones (protocol 8.1, inner flag bit 2);
+     * then the same 83 bytes hold about twice the text. Above [maxInputBytes] the antenna refuses the text, and
+     * the raw size is returned so the count shows it as too long.
      */
     fun onAirTextBytes(text: String, codec: String, maxInputBytes: Int): Int {
         val raw = text.toByteArray(Charsets.UTF_8)
-        if (codec != CODEC_OGZ1 || raw.size > maxInputBytes || raw.size < 2) return raw.size
-        return OgzCodec.compress(raw, capacity = raw.size - 1)?.size ?: raw.size
+        if (codec != CODEC_OGZ1 || raw.size <= DEFAULT_MAX_TEXT_BYTES || raw.size > maxInputBytes) return raw.size
+        return OgzCodec.compress(raw, capacity = DEFAULT_MAX_TEXT_BYTES)?.size ?: raw.size
     }
 
     /** [canSend] for the connected antenna, including its TEXT codec. */
