@@ -178,8 +178,8 @@ next try.
 ## Firmware status
 
 [`docs/hardware.md`](docs/hardware.md) is the current record of the app against a real Heltec
-V3: what the team firmware does, where it differs from the link spec, the private lab radio
-image and what only a second board can show. It is kept by the agent working on the link layer.
+V3: what the team firmware does, where it differs from the link spec, the lab radio
+image (`lab_radio`) and what only a second board can show. It is kept by the agent working on the link layer.
 
 ## Missing for a real antenna
 

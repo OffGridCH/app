@@ -1,8 +1,8 @@
 # Hardware findings: the app against a real Heltec V3
 
 State of 2026-10-24, 02:50. Written by the agent that worked on the link layer, the lab firmware and the
-text codec. Everything firmware-side lives in the lab firmware branch
-(branch `lab`); nothing was pushed to the OffGrid organisation.
+text codec. The firmware side is the env `lab_radio`, proposed separately as a pull request to
+`OffGridCH/firmware`; commit IDs below refer to the lab branch it was developed on.
 
 ## The boards
 
@@ -89,7 +89,7 @@ OFFGRID_TCP_LINK=127.0.0.1:7755 ./gradlew testDebugUnitTest --tests '*RealAntenn
 
 Without `OFFGRID_TCP_LINK` these tests are skipped, so CI and other machines are unaffected.
 
-## Lab radio image (private)
+## Lab radio image (`lab_radio`)
 
 The lab image keeps the team's host layer and Link API and replaces the simulated delivery with protocol
 v1 on the SX1262: per-contact keys from X25519 and HKDF, AES-128-CCM with 8-byte tags, 24-bit counters
