@@ -11,6 +11,7 @@ import ch.offgrid.android.link.Incoming
 import ch.offgrid.android.link.LinkClosedException
 import ch.offgrid.android.link.LinkCommandException
 import ch.offgrid.android.link.LinkTimeoutException
+import ch.offgrid.android.link.dbm
 import ch.offgrid.android.link.double
 import ch.offgrid.android.link.int
 import ch.offgrid.android.link.isNull
@@ -178,7 +179,10 @@ class Messaging(
             true
         } catch (e: LinkCommandException) {
             when (e.error.code) {
-                "E_LOCKED", "E_QUEUE_FULL", "E_BUSY" -> false
+                // Passing states: the antenna locked, or its 8 slots are taken (waiting messages hold theirs
+                // up to 30 minutes). The message stays queued; a final msg.status or the next connect flushes again.
+                // E_BUSY means the counter is exhausted (Commands.cpp: "re-pair"), so it fails like other refusals.
+                "E_LOCKED", "E_QUEUE_FULL" -> false
                 else -> {
                     db.messages().update(m.copy(status = MessageStatus.FAILED, failReason = e.error.code))
                     true
@@ -234,15 +238,19 @@ class Messaging(
         val name = displayName.trim()
         db.contacts().update(c.copy(displayName = name, firstName = firstName?.trim()?.ifEmpty { null },
             lastName = lastName?.trim()?.ifEmpty { null }))
-        runCatching {
-            antenna.call("contact.rename", buildJsonObject { put("contact_id", c.deviceContactId); put("name", name) })
+        if (c.deviceContactId != NO_SLOT) {
+            runCatching {
+                antenna.call("contact.rename", buildJsonObject { put("contact_id", c.deviceContactId); put("name", name) })
+            }
         }
     }
 
     suspend fun deleteContact(id: Long) {
         val c = db.contacts().byId(id) ?: return
-        runCatching {
-            antenna.call("contact.delete", buildJsonObject { put("contact_id", c.deviceContactId); put("confirm", true) })
+        if (c.deviceContactId != NO_SLOT) {
+            runCatching {
+                antenna.call("contact.delete", buildJsonObject { put("contact_id", c.deviceContactId); put("confirm", true) })
+            }
         }
         db.messages().deleteForContact(id)
         db.contacts().delete(id)
@@ -365,7 +373,7 @@ class Messaging(
             displayName = if (keepName && existing != null) existing.displayName else json.str("name") ?: base.displayName,
             fingerprint = json.str("fingerprint") ?: base.fingerprint,
             state = json.str("state") ?: base.state,
-            lastRssi = json.int("last_rssi") ?: base.lastRssi,
+            lastRssi = json.dbm("last_rssi") ?: base.lastRssi,
             lastSnr = json.double("last_snr") ?: base.lastSnr,
         )
         return if (existing == null) db.contacts().insert(updated) else updated.id.also { db.contacts().update(updated) }
@@ -400,11 +408,13 @@ class Messaging(
         if (updated.status == MessageStatus.DELIVERED) {
             updated.contactId?.let { db.contacts().byId(it) }?.let { db.contacts().update(it.copy(lastSeenAt = now())) }
         }
+        // A final state frees a slot in the antenna's queue; messages that met E_QUEUE_FULL can go now.
+        if (updated.msgRef == null) scope.launch { flushQueue() }
     }
 
     private suspend fun onReceived(d: JsonObject) {
         val c = contactForSlot(d.int("from")) ?: return
-        val rssi = d.int("rssi")
+        val rssi = d.dbm("rssi")
         db.contacts().update(c.copy(lastRssi = rssi ?: c.lastRssi, lastSnr = d.double("snr") ?: c.lastSnr, lastSeenAt = now()))
         val groupSlot = d.int("group")
         val group = groupSlot?.let { gs -> currentDevice?.let { db.groups().byDeviceGroup(it, gs) } }
