@@ -14,6 +14,7 @@
   damit die App auch ohne GPS läuft. Das Plugin `@capacitor/geolocation` ist eingebunden.
 - Das Senden und Empfangen von Standorten ändert sich nicht: das lief schon mit T23 über die Host-API (`msg.send` mit `type: "geo"`).
 - Noch ohne Oberfläche: die Standort-Screens folgen mit T18, der Live-Standort mit T19.
+
 ## T06 – Natives USB-Serial-Plugin, UsbSerialTransport und Keystore-Plugin
 *2026-10-24*
 
